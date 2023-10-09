@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <assert.h>
 
@@ -96,58 +97,63 @@ TokenizedFile readFile(FILE *fd) {
     p.lines[p.qtdLines++] = createTokenizedLine();
     TokenizedLine *lastLine = p.lines + 0;
 
+    //used for commenting/discarting everything when sees '$' or '$('
+    u_int8_t toComment = 0;
+    u_int8_t blockToComment = 0;
+
     char c = getc(fd);
     while(c != EOF) {
 
-        switch(c) {
-            case '\n':
-                //new line
-                if(!sizeWord) { fileCol = -1; fileLine++; break; } //empty line
+        if(c == ' ' || c == '\n') {
+            if(!sizeWord) { //len of the current word is 0
+                if(c == '\n') {
+                    fileCol = -1;
+                    fileLine++;
+                }
+                goto end; //discarting empty words
+            }
+            numWord++; //unique id for each word of the file
+            //maybe realloc current line to append the new token
+            maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
+            lastLine->tk[lastLine->qtdElements++] = createToken(word, sizeWord, fileLine, fileCol-sizeWord);
 
-                //adding last word before new line
-                maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
-                lastLine->tk[lastLine->qtdElements++] = createToken(word, sizeWord, fileLine, fileCol-sizeWord);
-                fileCol = -1; //reseting col at the end of line, -1 because it will increase at the end of while.
+            if(c == '\n') {
+                fileCol = -1;
                 fileLine++;
-
-                /* printf("%s ", word); */
-                /* printf("%ld ", lastLine->capElements); */
-                /* printf("%ld\n", lastLine->qtdElements); */
                 maybeRealloc((void **)&(p.lines), (int *)&(p.capLines), p.qtdLines, sizeof(TokenizedLine));
                 p.lines[p.qtdLines] = createTokenizedLine();
 
                 lastLine = p.lines + p.qtdLines;
                 p.qtdLines++;
-                goto cleanWord;
+                //if it's a only line comment, comments are disabled
+                toComment = blockToComment ? 1 : 0;
+            }
 
-                break;
-            case ' ':
-                if(!sizeWord) break; //empty line
-                numWord++;
-
-                //insert new token (that is stored in `word`)
-                maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
-                lastLine->tk[lastLine->qtdElements++] = createToken(word, sizeWord, fileLine, fileCol-sizeWord);
-                /* printf("%s ", word); */
-                /* printf("%ld ", lastLine->capElements); */
-                /* printf("%ld\n", lastLine->qtdElements); */
-
-                cleanWord:
-                    word[sizeWord] = 0;
-                    memset(word, 0, sizeWord);
-                    sizeWord = 0;
-                break;
-            /* case '(': */
-            /*     break; */
-            /* case ')': */
-            /*     break; */
-            default:
-                //insert new char at the last token of the last line
-                maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-                word[sizeWord++] = c;
-                break;
+            word[sizeWord] = 0;
+            memset(word, 0, sizeWord);
+            sizeWord = 0;
+        }
+        else if(c == '$') { //comments
+            toComment = 1;
+            printf("%c\n", c);
+            c = getc(fd); //to comment blocks the next character must be a '('
+            printf("%c\n", c);
+            if( c == '(' ) blockToComment = 1;
+            printf("%d %d\n", fileLine, blockToComment);
+        }
+        else if(c == '(' || c == ')') {
+            printf("%d %d\n", fileLine, blockToComment);
+            if(blockToComment && c == ')') { //exiting comments blocks
+                toComment = 0;
+                blockToComment = 0;
+            }
+        }
+        else if(!toComment){
+            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+            word[sizeWord++] = c;
         }
 
+        end:
         fileCol++;
         c = getc(fd);
     }
