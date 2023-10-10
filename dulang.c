@@ -22,8 +22,8 @@ int main(int argc, char **argv) {
     }
 
     const char *file = argv[1];
-    int len = strlen(file);
-    if(strlen(file) < DULANG_EXT_SIZE || strcmp(file+(len-DULANG_EXT_SIZE), ".dulan")) {
+    int len = lenStr(file);
+    if(lenStr(file) < DULANG_EXT_SIZE || strcmp(file+(len-DULANG_EXT_SIZE), ".dulan")) {
         //file + (len-DULANG_EXT_SIZE) points to where the extension should initiate
         fprintf(stderr, "Error! Expected a Dulang file!\n");
         exit(1);
@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
     TokenizedFile tokFile = readFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
     printTokenizedFile(tokFile);
+    destroyTokenizdFile(tokFile);
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");
@@ -74,7 +75,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    len = strlen(fileToCreate)+20;
+    len = lenStr(fileToCreate)+20;
     char command[len];
     sprintf(command, "nasm -felf64 %s", fileToCreate);
     if(system(command) == CMD_ERROR) {
