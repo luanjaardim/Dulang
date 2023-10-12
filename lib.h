@@ -25,9 +25,13 @@ void printTokenizedFile(TokenizedFile p);
 #ifndef LIB_IMPL_H
 #define LIB_IMPL_H
 
-void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
+#define NUM_BUILTIN_WORDS 21
 
-const char* builtinWords[] = {
+void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
+size_t lenStr(const char *const str);
+int cmpStr(const char *const str1, const char *const str2);
+
+const char* builtinWords[NUM_BUILTIN_WORDS] = {
   "=",
   "==",
   "!=",
@@ -55,7 +59,7 @@ typedef enum {
     WORD_TK, //any name created by the user(that does not matches any of the builtin types)
     INT_TK,  //any number (not floating point)
     STR_TK,  //string (surrounded by `"`)
-    BLT_TK,   //builtin tokens (+, -, *, /, fn, int, =, or, and, ==, ...)
+    BUILTIN_TK,   //builtin tokens (+, -, *, /, fn, int, =, or, and, ==, ...)
     COUNT_TYPES
 } TokenType;
 
@@ -79,6 +83,22 @@ Token createToken(char *text, size_t len, size_t id, TokenType type, int l, int 
     return tmp;
 }
 
+TokenType typeOfToken(const char *const word, int len) {
+
+  //validation of str
+
+  int i;
+  for(i = 0; i < len; i++) //number validation
+    if(word[i] > 57 || word[i] < 48) break;
+  if(len == i) return INT_TK;
+
+  for(i = 0; i < NUM_BUILTIN_WORDS; i++) {
+    if(cmpStr(word, builtinWords[i])) return BUILTIN_TK;
+  }
+
+  return WORD_TK;
+}
+
 typedef struct TokenizedLine {
     size_t qtdElements, capElements;
     Token *tk;
@@ -94,6 +114,7 @@ TokenizedLine createTokenizedLine() {
 
 typedef struct TokenizedFile {
     size_t qtdLines, capLines;
+    size_t currLine, currElem; //used for navigation
     TokenizedLine *lines;
 } TokenizedFile;
 
@@ -101,8 +122,76 @@ TokenizedFile createTokenizedFile() {
     return (TokenizedFile) {
       .qtdLines = 0,
       .capLines = 5,
+      .currLine = 0,
+      .currElem = 0,
       .lines = (TokenizedLine *) malloc(sizeof(TokenizedLine) * 5)
     };
+}
+
+/*
+ * This function can be used to save the curr state of the TokenizedFile
+ * this way you can two or more cursors to walk over the Tokens
+ * They will share the same memmory alocated for Tokenize the file, you
+ * must not free a clone if you already freed the original one, or the opposite
+*/
+TokenizedFile cloneTokenizedFile(const TokenizedFile tf) {
+  return (TokenizedFile) {
+    .qtdLines = tf.qtdLines,
+    .capLines = tf.capLines,
+    .currLine = tf.currLine,
+    .currElem = tf.currElem,
+    .lines = tf.lines,
+  };
+}
+
+/*
+ * This function is used to get the current Token
+*/
+const Token *currTokenizedFile(TokenizedFile tf) {
+  return tf.lines[tf.currLine].tk + tf.currElem;
+}
+
+/*
+ * This function is used to get the next Token of the file advancing TokenizedFile
+ * Will return NULL at the end of all Tokens
+*/
+const Token *nextTokenizedFile(TokenizedFile *tf) {
+  if(tf->lines[tf->currLine].qtdElements == ++tf->currElem) {
+    tf->currElem = 0;
+    tf->currLine++;
+    //if there are no more lines to iterate over or the line is empty, then return NULL
+    if(tf->qtdLines == tf->currLine || tf->lines[tf->currLine].qtdElements == 0)
+      return NULL;
+  }
+  return currTokenizedFile(*tf);
+}
+
+/*
+ * This function is used to get the next Token of the file without advancing TokenizedFile
+*/
+const Token *peekTokenizedFile(TokenizedFile tf) {
+  TokenizedFile tmp = cloneTokenizedFile(tf);
+  return nextTokenizedFile(&tmp);
+}
+
+/*
+ * This function is used to get the previous Token of the file returning TokenizedFile
+ * Will return NULL at the begin of all Tokens
+*/
+const Token *returnTokenizedFile(TokenizedFile *tf) {
+  if(!tf->currElem) {
+    if(!tf->currLine)
+      return NULL;
+    tf->currLine--;
+    tf->currElem = tf->lines[tf->currLine].qtdElements;
+  }
+  tf->currElem--;
+  return currTokenizedFile(*tf);
+}
+
+const Token *peekBackTokenizedFile(TokenizedFile tf) {
+  TokenizedFile tmp = cloneTokenizedFile(tf);
+  return returnTokenizedFile(&tmp);
 }
 
 void printTokenizedFile(TokenizedFile p) {
@@ -151,13 +240,14 @@ TokenizedFile readFile(FILE *fd) {
 
             numWord++; //unique id for each word of the file
 
-            //
-            // Check for token type of the word
-            //
-
             //maybe realloc current line to append the new token
             maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
-            lastLine->tk[lastLine->qtdElements++] = createToken(word, sizeWord, numWord, WORD_TK,fileLine, fileCol-sizeWord);
+            lastLine->tk[lastLine->qtdElements++] = createToken(word,
+                                                                sizeWord,
+                                                                numWord,
+                                                                typeOfToken(word, sizeWord),
+                                                                fileLine,
+                                                                fileCol-sizeWord);
 
             if(c == '\n') {
                 fileCol = -1;
@@ -175,6 +265,9 @@ TokenizedFile readFile(FILE *fd) {
             memset(word, 0, sizeWord);
             sizeWord = 0;
         }
+        /* else if(c == '"') { */ //strings
+
+        /* } */
         else if(c == '$') { //comments
             toComment = 1;
             c = getc(fd); //to comment blocks the next character must be a '('
@@ -228,6 +321,15 @@ size_t lenStr(const char *const str) {
   size_t i = 0;
   while(str[i++] != 0);
   return i-1;
+}
+
+int cmpStr(const char *const str1, const char *const str2) {
+  size_t i = 0;
+  while(str1[i] == str2[i]) {
+    if(str1[i++] == 0)
+      return 1; //true
+  }
+  return 0; //false
 }
 
 #endif // LIB_IMPL_H

@@ -43,7 +43,6 @@ int main(int argc, char **argv) {
     TokenizedFile tokFile = readFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
     printTokenizedFile(tokFile);
-    destroyTokenizdFile(tokFile);
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");
@@ -75,6 +74,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+   /*
+    * Free mem
+    */
+    destroyTokenizdFile(tokFile);
+
+    //Compiling the nasm file
     len = lenStr(fileToCreate)+20;
     char command[len];
     sprintf(command, "nasm -felf64 %s", fileToCreate);
@@ -83,6 +88,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    //Linking .o file, to create the executable
     memset(command, 0, len);
     sprintf(command, "ld %s.o -o %s", fileName, fileName);
     if(system(command) == CMD_ERROR) {
