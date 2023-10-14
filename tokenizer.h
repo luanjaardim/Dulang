@@ -10,26 +10,33 @@
 #include <assert.h>
 
 #define NUM_BUILTIN_WORDS 22
+#define LOW_PRECEDENCE 5
 
 typedef enum {
     WORD_TK, //any name created by the user(that does not matches any of the builtin types)
     INT_TK,  //any number (not floating point)
     STR_TK,  //string (surrounded by `"`)
-    BUILTIN_PREC_TK, //builtin tokens with precedence ( /, * and % )
     BUILTIN_TK,   //builtin tokens (+, -, fn, int, =, or, and, ==, ...)
     COUNT_TYPES
 } TokenType;
+
+typedef struct {
+    TokenType type;
+    int precedence;
+} TkTypeAndPrecedence ;
 
 typedef struct Token {
     size_t id, qtdChars;
     char *text;
     int l, c; //line and column
-    TokenType type;
+    TkTypeAndPrecedence typeAndPrecedence;
 } Token;
+
 typedef struct TokenizedLine {
     size_t qtdElements, capElements;
     Token *tk;
 } TokenizedLine;
+
 typedef struct TokenizedFile {
     size_t qtdLines, capLines;
     size_t currLine, currElem; //used for navigation

@@ -2,63 +2,66 @@
 #define TOK_IMPL_
 
 #include "tokenizer.h"
-#include <stdio.h>
 
-const char* builtinWords[NUM_BUILTIN_WORDS] = {
-  "/",
-  "*",
-  "%", //the first three builtin words are binary operators with precedence
-  "=",
-  "==",
-  "!=",
-  "+",
-  "-",
-  "var",
-  "not",
-  "or",
-  "and",
-  ">=",
-  "<=",
-  "band",
-  "bor",
-  "fn",
-  "if",
-  "else",
-  "while",
-  "for",
-  "struct",
+struct SymbPrecedence {
+  const char *symbol;
+  int precedence;
 };
 
-Token createToken(char *text, size_t len, size_t id, TokenType type, int l, int c) {
+struct SymbPrecedence builtinWords[NUM_BUILTIN_WORDS] = {
+  {"/", 0},
+  {"*", 0},
+  {"%", 0}, //the first three builtin words are binary operators with precedence
+  {"var", 1},
+  {"not", 1}, //precedence 1 to unary operations
+  {"==", 2},
+  {"!=", 2},
+  {"+", 2},
+  {"-", 2},
+  {"or", 2},
+  {"and", 2},
+  {">=", 2},
+  {"<=", 2},
+  {"band", 2},
+  {"bor", 2},
+  {"=", LOW_PRECEDENCE - 1},
+  {"fn", LOW_PRECEDENCE - 1},
+  {"if", LOW_PRECEDENCE - 1},
+  {"else", LOW_PRECEDENCE - 1},
+  {"while", LOW_PRECEDENCE - 1},
+  {"for", LOW_PRECEDENCE - 1},
+  {"struct", LOW_PRECEDENCE - 1},
+};
+
+Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAndPrec, int l, int c) {
     Token tmp = {
       .id = id,
       .qtdChars = len,
       .text = (char *) malloc(sizeof(char) * len),
       .l = l,
       .c = c,
-      .type = type
+      .typeAndPrecedence = typeAndPrec,
     };
     memcpy(tmp.text, text, len);
     return tmp;
 }
 
-TokenType typeOfToken(const char *const word, int len) {
+TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
 
   //validation of str
 
   int i;
   for(i = 0; i < len; i++) //number validation
     if(word[i] > 57 || word[i] < 48) break;
-  if(len == i) return INT_TK;
+  if(len == i) return (TkTypeAndPrecedence) {INT_TK, LOW_PRECEDENCE};
 
   for(i = 0; i < NUM_BUILTIN_WORDS; i++) {
-    if(cmpStr(word, builtinWords[i])) {
-      if(i < 3) return BUILTIN_PREC_TK;
-      return BUILTIN_TK;
+    if(cmpStr(word, builtinWords[i].symbol)) {
+      return (TkTypeAndPrecedence){ BUILTIN_TK, builtinWords[i].precedence };
     }
   }
 
-  return WORD_TK;
+  return (TkTypeAndPrecedence) {WORD_TK, LOW_PRECEDENCE};
 }
 
 TokenizedLine createTokenizedLine() {
@@ -151,9 +154,13 @@ const Token *peekBackTokenizedFile(TokenizedFile tf) {
 
 /*
  * Try to advance the line, 0 if cannot, 1 if can
+ * If it cannot advance the line it will update the currElem to the last element of the line
 */
 int advanceLineTokenizdFile(TokenizedFile *tf) {
-  if(tf->currLine == tf->qtdLines - 1) return 0;
+  if(tf->currLine == tf->qtdLines - 1) {
+    tf->currElem = tf->lines[tf->currLine].qtdElements - 1;
+    return 0;
+  }
   tf->currLine++;
   tf->currElem = 0;
   return 1;
@@ -173,11 +180,11 @@ size_t endOfCurrBlock(TokenizedFile tf) {
 }
 
 void printTokenizedFile(TokenizedFile p) {
-    const char *humanReadableType[COUNT_TYPES] = {"Word", "Integer Number", "String", "Builtin Word With Precedence", "Builtin Word"};
+    const char *humanReadableType[COUNT_TYPES] = {"Word", "Integer Number", "String", "Builtin Word"};
     for(size_t i = 0; i < p.qtdLines; i++) {
         for(size_t j = 0; j < p.lines[i].qtdElements; j++) {
-            printf("[id: %d line: %d, col: %d, item: %s, type: %s]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
-                  humanReadableType[p.lines[i].tk[j].type]);
+            printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
+                  humanReadableType[p.lines[i].tk[j].typeAndPrecedence.type], p.lines[i].tk[j].typeAndPrecedence.precedence);
         }
         printf("\n");
     }
