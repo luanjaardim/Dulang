@@ -6,6 +6,7 @@
 #include <assert.h>
 
 #include "lib.h"
+#include "parser.h"
 
 #define DULANG_EXT_SIZE 6
 #define ASM_EXT_SIZE 6
@@ -42,6 +43,8 @@ int main(int argc, char **argv) {
     TokenizedFile tokFile = readToTokenizedFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
     printTokenizedFile(tokFile);
+    Expression *expr = parseExprBlock(tokFile);
+    printExprBlock(expr, 0);
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");
@@ -77,6 +80,7 @@ int main(int argc, char **argv) {
     * Free mem
     */
     destroyTokenizdFile(tokFile);
+    destroyExprBlock(expr);
 
     //Compiling the nasm file
     len = lenStr(fileToCreate)+20;
