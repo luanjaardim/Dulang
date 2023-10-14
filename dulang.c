@@ -5,8 +5,8 @@
 #include <unistd.h>
 #include <assert.h>
 
-#define LIB_H_
 #include "lib.h"
+#include "parser.h"
 
 #define DULANG_EXT_SIZE 6
 #define ASM_EXT_SIZE 6
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    TokenizedFile tokFile = readFile(f);
+    TokenizedFile tokFile = readToTokenizedFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
     printTokenizedFile(tokFile);
 
