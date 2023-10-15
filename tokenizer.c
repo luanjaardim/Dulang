@@ -158,10 +158,13 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
 */
 size_t endOfCurrBlock(TokenizedFile tf) {
   int identationBlock = currTokenizedFile(tf)->c;
+  int firstLine = currTokenizedFile(tf)->l;
   int firstId = currTokenizedFile(tf)->id;
   do {
     if(!advanceLineTokenizdFile(&tf)) break;
   } while(identationBlock < currTokenizedFile(tf)->c);
+  if(identationBlock == currTokenizedFile(tf)->c && firstLine != currTokenizedFile(tf)->l)
+    returnTokenizedFile(&tf);
 
   return currTokenizedFile(tf)->id - firstId;
 }

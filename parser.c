@@ -22,7 +22,7 @@ Expression *createExprBlock(TokenizedFile tf) {
   Expression *tail = head, *tmp;
   size_t last = endOfCurrBlock(tf);
   /* printf("%ld\n", last); */
-  while(--last){
+  while(last--){
     nextTokenizedFile(&tf);
     tmp = createExpression(currTokenizedFile(tf));
     node_set_double_link_at(tail, tmp, RIGHT_LINK, LEFT_LINK);
