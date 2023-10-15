@@ -9,15 +9,37 @@
 #include <unistd.h>
 #include <assert.h>
 
-#define NUM_BUILTIN_WORDS 22
+/* #define NUM_BUILTIN_WORDS 22 */
 #define LOW_PRECEDENCE 5
 
 typedef enum {
     WORD_TK, //any name created by the user(that does not matches any of the builtin types)
     INT_TK,  //any number (not floating point)
     STR_TK,  //string (surrounded by `"`)
-    BUILTIN_TK,   //builtin tokens (+, -, fn, int, =, or, and, ==, ...)
-    COUNT_TYPES
+    NUM_DIV, //after this every identifier represents a builtin word
+    NUM_MUL,
+    NUM_MOD,
+    LOG_NOT,
+    CMP_EQ,
+    CMP_DIF,
+    NUM_ADD,
+    NUM_SUB,
+    LOG_OR,
+    LOG_AND,
+    CMP_GE, //greater or equal
+    CMP_LE,
+    CMP_GT, //greater than
+    CMP_LT,
+    BIT_AND,
+    BIT_OR,
+    BIT_NOT,
+    ASSIGN,
+    FUNC,
+    IF,
+    ELSE,
+    WHILE,
+    FOR,
+    COUNT_OF_TK_TYPES
 } TokenType;
 
 typedef struct {
@@ -46,7 +68,6 @@ typedef struct TokenizedFile {
 void printTokenizedFile(TokenizedFile p);
 TokenizedFile readToTokenizedFile(FILE *fd);
 void destroyTokenizdFile(TokenizedFile tp);
-TokenizedFile cloneTokenizedFile(const TokenizedFile tf);
 const Token *currTokenizedFile(TokenizedFile tf);
 const Token *nextTokenizedFile(TokenizedFile *tf);
 const Token *peekTokenizedFile(TokenizedFile tf);
@@ -58,5 +79,7 @@ size_t endOfCurrBlock(TokenizedFile tf);
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);
 int cmpStr(const char *const str1, const char *const str2);
+
+#define min(a, b) (a) < (b) ? (a) : (b)
 
 #endif // TOK_H_

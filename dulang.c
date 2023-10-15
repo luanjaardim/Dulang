@@ -42,9 +42,9 @@ int main(int argc, char **argv) {
 
     TokenizedFile tokFile = readToTokenizedFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
-    printTokenizedFile(tokFile);
+    /* printTokenizedFile(tokFile); */
     Expression *expr = parseExprBlock(tokFile);
-    printExprBlock(expr, 0);
+    printLinkExprs(expr, 0);
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");

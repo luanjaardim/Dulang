@@ -31,7 +31,7 @@ typedef struct {
 
 Expression *parseExprBlock(TokenizedFile tf);
 Expression *createExprBlock(TokenizedFile tf);
-void printExprBlock(Expression *expr, int layer);
+void printLinkExprs(Expression *expr, int layer);
 void destroyExprBlock(Expression *expr);
 
 #endif // PARSER_H_

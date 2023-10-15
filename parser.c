@@ -22,7 +22,7 @@ Expression *createExprBlock(TokenizedFile tf) {
   Expression *tail = head, *tmp;
   size_t last = endOfCurrBlock(tf);
   /* printf("%ld\n", last); */
-  while(last--){
+  while(--last){
     nextTokenizedFile(&tf);
     tmp = createExpression(currTokenizedFile(tf));
     node_set_double_link_at(tail, tmp, RIGHT_LINK, LEFT_LINK);
@@ -44,8 +44,7 @@ Expression *parseExprBlock(TokenizedFile tf) {
 
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
 
-    const Token *tmpToken;
-    printf("%d ---------------\n", i);
+    const Token *tmpToken, *leftToken, *rightToken;
     while(node_get_neighbour(tmpExpr, RIGHT_LINK)) {
       //if fn expect a name, check if the name already exists, else add it to the map of functions
       //then expect ':' or '|', if ':' is found expect args types and names, if '|' there are no args
@@ -59,30 +58,36 @@ Expression *parseExprBlock(TokenizedFile tf) {
       tmpToken = expr_node_get_value(tmpExpr);
 
       if(i == tmpToken->typeAndPrecedence.precedence) {
-        printf("entrou %d %s\n", i, tmpToken->text);
+        left = node_get_neighbour(tmpExpr, LEFT_LINK);
+        right = node_get_neighbour(tmpExpr, RIGHT_LINK);
+
+        if(left) leftToken = expr_node_get_value(left);
+        else leftToken = NULL;
+        if(right) rightToken = expr_node_get_value(right);
+        else rightToken = NULL;
+
         switch(tmpToken->typeAndPrecedence.precedence) {
           case 0:
-              left = node_get_neighbour(tmpExpr, LEFT_LINK);
-              right = node_get_neighbour(tmpExpr, RIGHT_LINK);
-
-              if(expr_node_get_value(left)->typeAndPrecedence.type != INT_TK ||
-                 expr_node_get_value(right)->typeAndPrecedence.type != INT_TK) {
-                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
-                exit(1);//error, wrong operation with builtin_prec_tk
+            if(leftToken && rightToken) {
+              if(leftToken->typeAndPrecedence.precedence > 0 && rightToken->typeAndPrecedence.precedence > 0) {
+                fprintf(stderr, "%s has invalid args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
               }
+            }
+            else {
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+            }
 
             goto getLeftAndRightNeighbours;
             break;
               /* if()  //should handle inviable cases */
           case 2:
             //case for '*' '/' '%'
-              left = node_get_neighbour(tmpExpr, LEFT_LINK);
-              right = node_get_neighbour(tmpExpr, RIGHT_LINK);
-
               if(expr_node_get_value(left)->typeAndPrecedence.precedence > 2 ||
                  expr_node_get_value(right)->typeAndPrecedence.precedence >= 2) {
                 fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
-                exit(1);//error, wrong operation with builtin_prec_tk
+                exit(1);
               }
 
             goto getLeftAndRightNeighbours;
@@ -93,13 +98,26 @@ Expression *parseExprBlock(TokenizedFile tf) {
           case 3:
             break;
           case 4:
-            if(!memcmp(tmpToken->text, "=", tmpToken->qtdChars)) {
-              left = node_get_neighbour(tmpExpr, LEFT_LINK);
-              right = node_get_neighbour(tmpExpr, RIGHT_LINK);
+            switch(tmpToken->typeAndPrecedence.type) {
+
+              case ASSIGN:
 
               goto getLeftAndRightNeighbours;
-            } else if(!memcmp(tmpToken->text, "fn", tmpToken->qtdChars)) {
-              printf("found a function\n");
+                break;
+              case FUNC:
+
+              if(expr_node_get_value(right)->typeAndPrecedence.type != WORD_TK) {
+                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+              }
+
+              node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+              node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+              node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
+                break;
+              default:
+
+              break;
             }
             break;
 
@@ -112,7 +130,6 @@ Expression *parseExprBlock(TokenizedFile tf) {
               node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
         }
       }
-      else printf("não entrou %d %s\n", i, expr_node_get_value(tmpExpr)->text);
       while(node_get_neighbour(tmpExpr, PARENT_LINK)) tmpExpr = node_get_neighbour(tmpExpr, PARENT_LINK);
 
       tmpExpr = node_get_neighbour(tmpExpr, RIGHT_LINK);
@@ -120,40 +137,27 @@ Expression *parseExprBlock(TokenizedFile tf) {
         break;
     }
   }
+  //return the expression that is at the highest level
   while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
   return expr;
 }
 
-void printExprBlock(Expression *expr, int layer) {
+/* ParsedFile parseTokenizedFile(TokenizedFile tf) { */
+
+/*   return (ParsedFile){0}; */
+/* } */
+
+void printLinkExprs(Expression *expr, int layer) {
+  if(!expr) return;
 
   printf("layer: %d, text: %s, number of neighbours %u\n", layer, expr_node_get_value(expr)->text, node_get_num_neighbours(expr));
   for(unsigned i = CHILD(1); i < node_get_num_neighbours(expr); i++) {
     /* printf("%s\n", expr_node_get_value(node_get_neighbour(expr, i))->text); */
-    printExprBlock(node_get_neighbour(expr, i), layer+1);
+    printLinkExprs(node_get_neighbour(expr, i), layer+1);
   }
+  printLinkExprs(node_get_neighbour(expr, RIGHT_LINK), layer);
 }
 
 void destroyExprBlock(Expression *expr) {
   node_delete_recursive(expr, NULL);
 }
-
-/* ParsedFile parseTokenizedFile(TokenizedFile tf) { */
-/*   while(1) { */
-/*     const Token *currToken = currTokenizedFile(tf); */
-/*     if(!memcmp(currToken->text, "fn", currToken->qtdChars)) { */
-/*       //add to the map of known functions */
-/*     } else if(!memcmp(currToken->text, "=", currToken->qtdChars)) { */
-/*       //add to the map of known variables if not declared, if already declared change it's value */
-/*     } else if(!memcmp(currToken->text, "=", currToken->qtdChars)) { */
-
-/*     } */
-
-
-/*     if(!nextTokenizedFile(&tf)) break; */
-/*   } */
-/*   return (ParsedFile) {0}; */
-/* } */
-
-/* void destroyParsedFile(ParsedFile pf) { */
-/*   //TODO */
-/* } */

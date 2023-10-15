@@ -5,32 +5,35 @@
 
 struct SymbPrecedence {
   const char *symbol;
-  int precedence;
+  int tokenType, precedence;
 };
 
-struct SymbPrecedence builtinWords[NUM_BUILTIN_WORDS] = {
-  {"/", 0},
-  {"*", 0},
-  {"%", 0}, //the first three builtin words are binary operators with precedence
-  {"var", 1},
-  {"not", 1}, //precedence 1 to unary operations
-  {"==", 2},
-  {"!=", 2},
-  {"+", 2},
-  {"-", 2},
-  {"or", 2},
-  {"and", 2},
-  {">=", 2},
-  {"<=", 2},
-  {"band", 2},
-  {"bor", 2},
-  {"=", LOW_PRECEDENCE - 1},
-  {"fn", LOW_PRECEDENCE - 1},
-  {"if", LOW_PRECEDENCE - 1},
-  {"else", LOW_PRECEDENCE - 1},
-  {"while", LOW_PRECEDENCE - 1},
-  {"for", LOW_PRECEDENCE - 1},
-  {"struct", LOW_PRECEDENCE - 1},
+struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
+  {"/", NUM_DIV, 0},
+  {"*", NUM_MUL, 0},
+  {"%", NUM_MOD, 0}, //the first three builtin words are binary operators with precedence
+  /* {"var", 1}, */
+  {"not", LOG_NOT, 1}, //precedence 1 to unary operations
+  {"==", CMP_EQ, 2},
+  {"!=", CMP_DIF, 2},
+  {"+", NUM_ADD, 2},
+  {"-", NUM_SUB, 2},
+  {"or", LOG_OR, 2},
+  {"and", LOG_AND, 2},
+  {">=", CMP_GE, 2},
+  {"<=", CMP_LE, 2},
+  {">", CMP_GT, 2},
+  {"<", CMP_LT, 2},
+  {"band", BIT_AND, 2},
+  {"bor", BIT_OR, 2},
+  {"bnot", BIT_NOT, 2},
+  {"=", ASSIGN, LOW_PRECEDENCE - 1},
+  {"fn", FUNC, LOW_PRECEDENCE - 1},
+  {"if", IF, LOW_PRECEDENCE - 1},
+  {"else", ELSE, LOW_PRECEDENCE - 1},
+  {"while", WHILE, LOW_PRECEDENCE - 1},
+  {"for", FOR, LOW_PRECEDENCE - 1},
+  /* {"struct", LOW_PRECEDENCE - 1}, */
 };
 
 Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAndPrec, int l, int c) {
@@ -56,10 +59,9 @@ TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
     if(word[i] > 57 || word[i] < 48) break;
   if(len == i) return (TkTypeAndPrecedence) {INT_TK, -1};
 
-  for(i = 0; i < NUM_BUILTIN_WORDS; i++) {
-    if(cmpStr(word, builtinWords[i].symbol)) {
-      return (TkTypeAndPrecedence){ BUILTIN_TK, builtinWords[i].precedence };
-    }
+  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
+    if(cmpStr(word, builtinWords[i].symbol))
+      return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
 
   return (TkTypeAndPrecedence) {WORD_TK, LOW_PRECEDENCE};
@@ -81,22 +83,6 @@ TokenizedFile createTokenizedFile() {
       .currElem = 0,
       .lines = (TokenizedLine *) malloc(sizeof(TokenizedLine) * 5)
     };
-}
-
-/*
- * This function can be used to save the curr state of the TokenizedFile
- * this way you can two or more cursors to walk over the Tokens
- * They will share the same memmory alocated for Tokenize the file, you
- * must not free a clone if you already freed the original one, or the opposite
-*/
-TokenizedFile cloneTokenizedFile(const TokenizedFile tf) {
-  return (TokenizedFile) {
-    .qtdLines = tf.qtdLines,
-    .capLines = tf.capLines,
-    .currLine = tf.currLine,
-    .currElem = tf.currElem,
-    .lines = tf.lines,
-  };
 }
 
 /*
@@ -125,7 +111,7 @@ const Token *nextTokenizedFile(TokenizedFile *tf) {
  * This function is used to get the next Token of the file without advancing TokenizedFile
 */
 const Token *peekTokenizedFile(TokenizedFile tf) {
-  TokenizedFile tmp = cloneTokenizedFile(tf);
+  TokenizedFile tmp = tf;
   return nextTokenizedFile(&tmp);
 }
 
@@ -149,7 +135,7 @@ const Token *returnTokenizedFile(TokenizedFile *tf) {
  * Will return NULL at the begin of all Tokens
 */
 const Token *peekBackTokenizedFile(TokenizedFile tf) {
-  TokenizedFile tmp = cloneTokenizedFile(tf);
+  TokenizedFile tmp = tf;
   return returnTokenizedFile(&tmp);
 }
 
@@ -181,11 +167,13 @@ size_t endOfCurrBlock(TokenizedFile tf) {
 }
 
 void printTokenizedFile(TokenizedFile p) {
-    const char *humanReadableType[COUNT_TYPES] = {"Word", "Integer Number", "String", "Builtin Word"};
+    const char *humanReadableType[4] = {"Word", "Integer Number", "String", "Builtin Word"};
     for(size_t i = 0; i < p.qtdLines; i++) {
         for(size_t j = 0; j < p.lines[i].qtdElements; j++) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
-                  humanReadableType[p.lines[i].tk[j].typeAndPrecedence.type], p.lines[i].tk[j].typeAndPrecedence.precedence);
+                  humanReadableType[0],
+                  p.lines[i].tk[j].typeAndPrecedence.precedence);
+//min(p.lines[i].tk[j].typeAndPrecedence.type, NUM_DIV)
         }
         printf("\n");
     }
