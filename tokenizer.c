@@ -47,13 +47,14 @@ Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAnd
 }
 
 TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
+  //compile time known values, str or int, has negative predecence: -1
 
   //validation of str
 
   int i;
   for(i = 0; i < len; i++) //number validation
     if(word[i] > 57 || word[i] < 48) break;
-  if(len == i) return (TkTypeAndPrecedence) {INT_TK, LOW_PRECEDENCE};
+  if(len == i) return (TkTypeAndPrecedence) {INT_TK, -1};
 
   for(i = 0; i < NUM_BUILTIN_WORDS; i++) {
     if(cmpStr(word, builtinWords[i].symbol)) {

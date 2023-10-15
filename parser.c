@@ -62,27 +62,30 @@ Expression *parseExprBlock(TokenizedFile tf) {
         printf("entrou %d %s\n", i, tmpToken->text);
         switch(tmpToken->typeAndPrecedence.precedence) {
           case 0:
+              left = node_get_neighbour(tmpExpr, LEFT_LINK);
+              right = node_get_neighbour(tmpExpr, RIGHT_LINK);
+
+              if(expr_node_get_value(left)->typeAndPrecedence.type != INT_TK ||
+                 expr_node_get_value(right)->typeAndPrecedence.type != INT_TK) {
+                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);//error, wrong operation with builtin_prec_tk
+              }
+
+            goto getLeftAndRightNeighbours;
+            break;
+              /* if()  //should handle inviable cases */
           case 2:
             //case for '*' '/' '%'
-            left = node_get_neighbour(tmpExpr, LEFT_LINK);
-            right = node_get_neighbour(tmpExpr, RIGHT_LINK);
-            if(!(left && right)) {
-              printf("Both nulls\n");
-              break;
-            }
+              left = node_get_neighbour(tmpExpr, LEFT_LINK);
+              right = node_get_neighbour(tmpExpr, RIGHT_LINK);
 
-            /* if(expr_node_get_value(left)->typeAndPrecedence.type != INT_TK || */
-            /*   expr_node_get_value(left)->typeAndPrecedence.type != INT_TK) { */
-            /*   fprintf(stderr, "Operation has invalid operands: %d, %d\n", tmpToken->l, tmpToken->c); */
-            /*   exit(1);//error, wrong operation with builtin_prec_tk */
-            /* } */
-            node_swap_neighbours(tmpExpr, left, LEFT_LINK, LEFT_LINK);
-            node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
-            node_remove_link_at(left, RIGHT_LINK); node_remove_link_at(left, LEFT_LINK);
-            node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
-            node_set_double_link_at(tmpExpr, left, CHILD(1), PARENT_LINK);
-            node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
+              if(expr_node_get_value(left)->typeAndPrecedence.precedence > 2 ||
+                 expr_node_get_value(right)->typeAndPrecedence.precedence >= 2) {
+                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);//error, wrong operation with builtin_prec_tk
+              }
 
+            goto getLeftAndRightNeighbours;
             break;
           case 1:
             //unary operations, take just one arg after it
@@ -91,11 +94,22 @@ Expression *parseExprBlock(TokenizedFile tf) {
             break;
           case 4:
             if(!memcmp(tmpToken->text, "=", tmpToken->qtdChars)) {
-              printf("found a equal\n");
+              left = node_get_neighbour(tmpExpr, LEFT_LINK);
+              right = node_get_neighbour(tmpExpr, RIGHT_LINK);
+
+              goto getLeftAndRightNeighbours;
             } else if(!memcmp(tmpToken->text, "fn", tmpToken->qtdChars)) {
               printf("found a function\n");
             }
             break;
+
+            getLeftAndRightNeighbours:
+              node_swap_neighbours(tmpExpr, left, LEFT_LINK, LEFT_LINK);
+              node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+              node_remove_link_at(left, RIGHT_LINK); node_remove_link_at(left, LEFT_LINK);
+              node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+              node_set_double_link_at(tmpExpr, left, CHILD(1), PARENT_LINK);
+              node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
         }
       }
       else printf("não entrou %d %s\n", i, expr_node_get_value(tmpExpr)->text);
