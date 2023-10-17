@@ -9,11 +9,11 @@
 #include <unistd.h>
 #include <assert.h>
 
-/* #define NUM_BUILTIN_WORDS 22 */
-#define LOW_PRECEDENCE 5
+#define HIGH_PRECEDENCE 5
 
 typedef enum {
-    WORD_TK, //any name created by the user(that does not matches any of the builtin types)
+    FN_NAME_TK, //any name created by the user(that does not matches any of the builtin types) for functions
+    VAR_NAME_TK, //any name created by the user(that does not matches any of the builtin types) for vars
     INT_TK,  //any number (not floating point)
     STR_TK,  //string (surrounded by `"`)
     NUM_DIV, //after this every identifier represents a builtin word
@@ -68,13 +68,18 @@ typedef struct TokenizedFile {
 void printTokenizedFile(TokenizedFile p);
 TokenizedFile readToTokenizedFile(FILE *fd);
 void destroyTokenizdFile(TokenizedFile tp);
-const Token *currTokenizedFile(TokenizedFile tf);
-const Token *nextTokenizedFile(TokenizedFile *tf);
-const Token *peekTokenizedFile(TokenizedFile tf);
-const Token *returnTokenizedFile(TokenizedFile *tf);
-const Token *peekBackTokenizedFile(TokenizedFile tf);
+TokenizedFile cloneTokenizedFile(const TokenizedFile tf);
+Token *currToken(TokenizedFile tf);
+Token *nextToken(TokenizedFile *tf);
+Token *peekToken(TokenizedFile tf);
+Token *returnToken(TokenizedFile *tf);
+Token *peekBackToken(TokenizedFile tf);
 int advanceLineTokenizdFile(TokenizedFile *tf);
-size_t endOfCurrBlock(TokenizedFile tf);
+
+struct endOfBlock {
+  size_t lastId, lastLine;
+};
+struct endOfBlock endOfCurrBlock(TokenizedFile tf);
 
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);

@@ -2,6 +2,7 @@
 #define TOK_IMPL_
 
 #include "tokenizer.h"
+#include <stddef.h>
 
 struct SymbPrecedence {
   const char *symbol;
@@ -27,13 +28,13 @@ struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is
   {"band", BIT_AND, 2},
   {"bor", BIT_OR, 2},
   {"bnot", BIT_NOT, 2},
-  {"=", ASSIGN, LOW_PRECEDENCE - 1},
-  {"fn", FUNC, LOW_PRECEDENCE - 1},
-  {"if", IF, LOW_PRECEDENCE - 1},
-  {"else", ELSE, LOW_PRECEDENCE - 1},
-  {"while", WHILE, LOW_PRECEDENCE - 1},
-  {"for", FOR, LOW_PRECEDENCE - 1},
-  /* {"struct", LOW_PRECEDENCE - 1}, */
+  {"=", ASSIGN, HIGH_PRECEDENCE - 1},
+  {"fn", FUNC, HIGH_PRECEDENCE - 1},
+  {"if", IF, HIGH_PRECEDENCE - 1},
+  {"else", ELSE, HIGH_PRECEDENCE - 1},
+  {"while", WHILE, HIGH_PRECEDENCE - 1},
+  {"for", FOR, HIGH_PRECEDENCE - 1},
+  /* {"struct", HIGH_PRECEDENCE - 1}, */
 };
 
 Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAndPrec, int l, int c) {
@@ -64,7 +65,7 @@ TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
       return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
 
-  return (TkTypeAndPrecedence) {WORD_TK, LOW_PRECEDENCE};
+  return (TkTypeAndPrecedence) {VAR_NAME_TK, HIGH_PRECEDENCE};
 }
 
 TokenizedLine createTokenizedLine() {
@@ -86,9 +87,32 @@ TokenizedFile createTokenizedFile() {
 }
 
 /*
+ * This function can be used to save the curr state of the TokenizedFile
+ * this way you can two or more cursors to walk over the Tokens
+ * They will share the same memmory alocated for Tokenize the file, you
+ * must not free a clone if you already freed the original one, or the opposite
+*/
+TokenizedFile cloneTokenizedFile(const TokenizedFile tf) {
+  return (TokenizedFile) {
+    .qtdLines = tf.qtdLines,
+    .capLines = tf.capLines,
+    .currLine = tf.currLine,
+    .currElem = tf.currElem,
+    .lines = tf.lines,
+  };
+}
+
+/*
  * This function is used to get the current Token
 */
-const Token *currTokenizedFile(TokenizedFile tf) {
+Token *currToken(TokenizedFile tf) {
+  return tf.lines[tf.currLine].tk + tf.currElem;
+}
+
+/*
+ * This function is used to get a mutable reference to the current Token
+*/
+Token *currMutToken(TokenizedFile tf) {
   return tf.lines[tf.currLine].tk + tf.currElem;
 }
 
@@ -96,7 +120,7 @@ const Token *currTokenizedFile(TokenizedFile tf) {
  * This function is used to get the next Token of the file advancing TokenizedFile
  * Will return NULL at the end of all Tokens
 */
-const Token *nextTokenizedFile(TokenizedFile *tf) {
+Token *nextToken(TokenizedFile *tf) {
   if(tf->lines[tf->currLine].qtdElements == ++tf->currElem) {
     tf->currElem = 0;
     tf->currLine++;
@@ -104,22 +128,22 @@ const Token *nextTokenizedFile(TokenizedFile *tf) {
     if(tf->qtdLines == tf->currLine || tf->lines[tf->currLine].qtdElements == 0)
       return NULL;
   }
-  return currTokenizedFile(*tf);
+  return currToken(*tf);
 }
 
 /*
  * This function is used to get the next Token of the file without advancing TokenizedFile
 */
-const Token *peekTokenizedFile(TokenizedFile tf) {
+Token *peekToken(TokenizedFile tf) {
   TokenizedFile tmp = tf;
-  return nextTokenizedFile(&tmp);
+  return nextToken(&tmp);
 }
 
 /*
  * This function is used to get the previous Token of the file returning TokenizedFile
  * Will return NULL at the begin of all Tokens
 */
-const Token *returnTokenizedFile(TokenizedFile *tf) {
+Token *returnToken(TokenizedFile *tf) {
   if(!tf->currElem) {
     if(!tf->currLine)
       return NULL;
@@ -127,16 +151,16 @@ const Token *returnTokenizedFile(TokenizedFile *tf) {
     tf->currElem = tf->lines[tf->currLine].qtdElements;
   }
   tf->currElem--;
-  return currTokenizedFile(*tf);
+  return currToken(*tf);
 }
 
 /*
  * This function is used to get the previous Token of the file without returning TokenizedFile
  * Will return NULL at the begin of all Tokens
 */
-const Token *peekBackTokenizedFile(TokenizedFile tf) {
+Token *peekBackTokenizedFile(TokenizedFile tf) {
   TokenizedFile tmp = tf;
-  return returnTokenizedFile(&tmp);
+  return returnToken(&tmp);
 }
 
 /*
@@ -154,19 +178,18 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
 }
 
 /*
- * This number of words after the current one
+ * Return the id of the last word of the block
 */
-size_t endOfCurrBlock(TokenizedFile tf) {
-  int identationBlock = currTokenizedFile(tf)->c;
-  int firstLine = currTokenizedFile(tf)->l;
-  int firstId = currTokenizedFile(tf)->id;
+struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
+  int identationBlock = currToken(tf)->c;
+  int firstLine = currToken(tf)->l;
   do {
     if(!advanceLineTokenizdFile(&tf)) break;
-  } while(identationBlock < currTokenizedFile(tf)->c);
-  if(identationBlock == currTokenizedFile(tf)->c && firstLine != currTokenizedFile(tf)->l)
-    returnTokenizedFile(&tf);
+  } while(identationBlock < currToken(tf)->c);
+  if(currToken(tf)->c <= identationBlock && firstLine != currToken(tf)->l)
+    returnToken(&tf);
 
-  return currTokenizedFile(tf)->id - firstId;
+  return (struct endOfBlock){ currToken(tf)->id, currToken(tf)->l };
 }
 
 void printTokenizedFile(TokenizedFile p) {

@@ -21,6 +21,15 @@
 typedef Node Expression;
 
 typedef struct {
+  Token *tk;
+  unsigned char toParse; //variable that knows if some expression is already parsed
+} TokenToParse;
+
+typedef struct {
+  Expression *head, *tail;
+} ExprBlock;
+
+typedef struct {
   Expression *exprs;
 } Functions;
 
@@ -29,8 +38,8 @@ typedef struct {
   Functions *funcs;
 } ParsedFile;
 
-Expression *parseExprBlock(TokenizedFile tf);
-Expression *createExprBlock(TokenizedFile tf);
+Expression *parseExprBlock(ExprBlock block);
+ExprBlock createExprBlock(TokenizedFile *tf);
 void printLinkExprs(Expression *expr, int layer);
 void destroyExprBlock(Expression *expr);
 

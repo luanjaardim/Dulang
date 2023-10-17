@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     TokenizedFile tokFile = readToTokenizedFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
     /* printTokenizedFile(tokFile); */
-    Expression *expr = parseExprBlock(tokFile);
+    Expression *expr = parseExprBlock(createExprBlock(&tokFile));
     printLinkExprs(expr, 0);
 
     if(fclose(f)) {
