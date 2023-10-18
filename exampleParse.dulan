@@ -1,0 +1,9 @@
+fn main
+    sla = 2 * 3 + 5 /
+        10 - 5
+    sla2 = 3 + (3 - 5)
+    sla4 = 9 * 9 / 81
+    iai = 1 % ( 1
+        - 2 )
+
+$will operate over what is inside parenthesis first

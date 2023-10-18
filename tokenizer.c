@@ -34,6 +34,8 @@ struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is
   {"else", ELSE, HIGH_PRECEDENCE - 1},
   {"while", WHILE, HIGH_PRECEDENCE - 1},
   {"for", FOR, HIGH_PRECEDENCE - 1},
+  {"(", PAR_OPEN, HIGH_PRECEDENCE - 1}, //this precedence will maybe change
+  {")", PAR_CLOSE, HIGH_PRECEDENCE - 1}, //this precedence will maybe change
   /* {"struct", HIGH_PRECEDENCE - 1}, */
 };
 
@@ -205,6 +207,25 @@ void printTokenizedFile(TokenizedFile p) {
     }
 }
 
+void cleanWord(char *word, int *sizeWord) {
+    word[*sizeWord] = 0;
+    memset(word, 0, *sizeWord);
+    *sizeWord = 0;
+}
+
+void addWordAsToken(TokenizedLine *lastLine, char *word, int sizeWord, int *numWord, int fileLine, int fileCol) {
+    (*numWord)++; //unique id for each word of the file
+
+    //maybe realloc current line to append the new token
+    maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
+    lastLine->tk[lastLine->qtdElements++] = createToken(word,
+                                                        sizeWord,
+                                                        *numWord,
+                                                        typeOfToken(word, sizeWord),
+                                                        fileLine,
+                                                        fileCol-sizeWord);
+}
+
 TokenizedFile readToTokenizedFile(FILE *fd) {
     int fileLine = 0, fileCol = 0, numWord = 0; //file informations
     int sizeWord = 0, capWord = 10; //word informations
@@ -238,16 +259,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 goto end; //discarting empty words
             }
 
-            numWord++; //unique id for each word of the file
-
-            //maybe realloc current line to append the new token
-            maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
-            lastLine->tk[lastLine->qtdElements++] = createToken(word,
-                                                                sizeWord,
-                                                                numWord,
-                                                                typeOfToken(word, sizeWord),
-                                                                fileLine,
-                                                                fileCol-sizeWord);
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
 
             if(c == '\n') {
                 fileCol = -1;
@@ -261,9 +273,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 toComment = blockToComment ? 1 : 0;
             }
 
-            word[sizeWord] = 0;
-            memset(word, 0, sizeWord);
-            sizeWord = 0;
+            cleanWord(word, &sizeWord);
         }
         /* else if(c == '"') { */ //strings
 
@@ -271,12 +281,24 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         else if(c == '$') { //comments
             toComment = 1;
             c = getc(fd); //to comment blocks the next character must be a '('
+            fileCol++;
             if( c == '(' ) blockToComment = 1;
         }
         else if(c == '(' || c == ')') {
             if(blockToComment && c == ')') { //exiting comments blocks
                 toComment = 0;
                 blockToComment = 0;
+            }
+            else {
+              if(sizeWord)
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+
+              //add a size one word with just '(' or ')'
+              sizeWord = 1;
+              maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+              word[0] = c;
+              addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+              cleanWord(word, &sizeWord);
             }
         }
         else if(!toComment){
@@ -290,7 +312,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
     }
 
     free(word);
-    if(!p.lines[p.qtdLines-1].qtdElements)
+    if(!p.lines[p.qtdLines-1].qtdElements) //empty last line
       free(p.lines[--p.qtdLines].tk);
 
     return p;

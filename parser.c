@@ -6,12 +6,27 @@
 INIT_NODE_TYPE(expr, TokenToParse)
 
 Expression *createExpression(Token *tk) {
-  TokenToParse tmpToken = {tk, 1};
+  TokenToParse tmpToken = {tk, 1 };
   Expression *tmp = expr_node_create(tmpToken);
   node_set_link(tmp, NULL); //parent
   node_set_link(tmp, NULL); //left
   node_set_link(tmp, NULL); //right
   return tmp;
+}
+
+ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
+  ExprBlock currBlock = { createExpression(currToken(*tf)), NULL };
+  currBlock.tail = currBlock.head;
+  Expression *tmp = NULL;
+  nextToken(tf);
+  while(currToken(*tf)->typeAndPrecedence.type != endType) {
+    tmp = createExpression(currToken(*tf));
+    node_set_double_link_at(currBlock.tail, tmp, RIGHT_LINK, LEFT_LINK);
+    currBlock.tail = tmp;
+    nextToken(tf);
+  }
+  /* printLinkExprs(currBlock.head, 0); */
+  return currBlock;
 }
 
 /*
@@ -25,22 +40,35 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   size_t lastId = endOfCurrBlock(*tf).lastId;
   while(1){
     nextToken(tf);
-    /* printf("line: %d, word: %s, ", currToken(*tf)->l, currToken(*tf)->text); */
-    /* printf("endOfLine: %ld, currLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine, tf->currLine); */
-    //if the block has a inner block, make a recurse call to it
-    if(tf->currElem == 0 && (int)endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine != currToken(*tf)->l) {
-      /* printf("here: %s\n", currToken(*tf)->text); */
-      /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
-      ExprBlock tmpBlock = createExprBlock(tf);
-      /* printLinkExprs(tmpBlock.head, 0); */
-      tmp = parseExprBlock(tmpBlock);
+    if(currToken(*tf)->typeAndPrecedence.type == PAR_OPEN) {
+      nextToken(tf);
+      tmp = parseExprBlock(createExprBlockTill(tf, PAR_CLOSE));
     }
-    else
-      tmp = createExpression(currToken(*tf));
+    else {
+
+      /* printf("line: %d, word: %s, ", currToken(*tf)->l, currToken(*tf)->text); */
+      /* printf("endOfLine: %ld, currLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine, tf->currLine); */
+
+      //if the block has a inner block, make a recurse call to it
+      if(tf->currElem == 0 && (int)endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine != currToken(*tf)->l) {
+        /* printf("here: %s\n", currToken(*tf)->text); */
+        /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
+        ExprBlock tmpBlock = createExprBlock(tf);
+        /* printLinkExprs(tmpBlock.head, 0); */
+        tmp = parseExprBlock(tmpBlock);
+      }
+      else
+        tmp = createExpression(currToken(*tf));
+
+    }
 
     node_set_double_link_at(currBlock.tail, tmp, RIGHT_LINK, LEFT_LINK);
     /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
     if(currToken(*tf)->id == lastId) break;
+    else if(currToken(*tf)->id > lastId) {
+      fprintf(stderr, "You can't do that thing you did");
+      exit(1);
+    }
     currBlock.tail = tmp;
   }
   /* printf("here\n"); */
@@ -62,7 +90,9 @@ Expression *parseExprBlock(ExprBlock block) {
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
     /* printf("%s\n", expr_node_get_value(expr)->text); */
 
+    TokenToParse leftTk, rightTk;
     Token *tmpToken, *leftToken, *rightToken;
+    unsigned char leftIsParsed, rightIsParsed;
     while(node_get_neighbour(tmpExpr, RIGHT_LINK)) {
       //if fn expect a name, check if the name already exists, else add it to the map of functions
       //then expect ':' or '|', if ':' is found expect args types and names, if '|' there are no args
@@ -79,13 +109,26 @@ Expression *parseExprBlock(ExprBlock block) {
         left = node_get_neighbour(tmpExpr, LEFT_LINK);
         right = node_get_neighbour(tmpExpr, RIGHT_LINK);
 
-        if(left) leftToken = expr_node_get_value(left).tk;
-        else leftToken = NULL;
-        if(right) rightToken = expr_node_get_value(right).tk;
-        else rightToken = NULL;
+        if(left) {
+          leftTk = expr_node_get_value(left);
+          leftToken = leftTk.tk; leftIsParsed = !leftTk.toParse;
+        }
+        else {
+          leftToken = NULL;
+          leftIsParsed = -1;
+        }
+        if(right) {
+          rightTk = expr_node_get_value(right);
+          rightToken = rightTk.tk; rightIsParsed = !rightTk.toParse;
+        }
+        else {
+          rightToken = NULL;
+          rightIsParsed = -1;
+        }
 
         switch(tmpToken->typeAndPrecedence.precedence) {
           case 0:
+            //case for '*' '/' '%'
             if(leftToken && rightToken) {
               if(leftToken->typeAndPrecedence.precedence > 0 && rightToken->typeAndPrecedence.precedence > 0) {
                 fprintf(stderr, "%s has invalid args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
@@ -103,9 +146,8 @@ Expression *parseExprBlock(ExprBlock block) {
             //unary operations, take just one arg after it
             break;
           case 2:
-            //case for '*' '/' '%'
-              if(expr_node_get_value(left).tk->typeAndPrecedence.precedence > 2 ||
-                 expr_node_get_value(right).tk->typeAndPrecedence.precedence >= 2) {
+              if((leftToken->typeAndPrecedence.precedence > 2 && !leftIsParsed) ||
+                 (rightToken->typeAndPrecedence.precedence >= 2 && !rightIsParsed)) {
                 fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
               }
@@ -160,6 +202,7 @@ Expression *parseExprBlock(ExprBlock block) {
   //return the expression that is at the highest level
   while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
   expr_node_set_value(expr, (TokenToParse){expr_node_get_value(expr).tk, 0});
+  /* printLinkExprs(expr, 0); */
   return expr;
 }
 

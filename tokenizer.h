@@ -39,6 +39,8 @@ typedef enum {
     ELSE,
     WHILE,
     FOR,
+    PAR_OPEN,
+    PAR_CLOSE,
     COUNT_OF_TK_TYPES
 } TokenType;
 
