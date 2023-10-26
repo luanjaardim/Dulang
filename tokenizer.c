@@ -214,6 +214,7 @@ void cleanWord(char *word, int *sizeWord) {
 }
 
 void addWordAsToken(TokenizedLine *lastLine, char *word, int sizeWord, int *numWord, int fileLine, int fileCol) {
+    if(!sizeWord) return;
     (*numWord)++; //unique id for each word of the file
 
     //maybe realloc current line to append the new token
@@ -274,11 +275,9 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         /* } */
         else if(c == '$') { //comments
             //adding the word before the comment
-            if(sizeWord) {
-              maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-              addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-              cleanWord(word, &sizeWord);
-            }
+            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            cleanWord(word, &sizeWord);
 
             c = getc(fd);
             fileCol++;
@@ -290,8 +289,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
             if(c == '\n') continue;
         }
         else if(c == '(' || c == ')') {
-            if(sizeWord)
-              addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
 
             //add a size one word with just '(' or ')'
             sizeWord = 1;
@@ -301,7 +299,37 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         }
         else{
             maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-            word[sizeWord++] = c;
+            switch (c) {
+              case '=':
+              case '>':
+              case '<':
+              case '!':
+              case '+':
+              case '-':
+              case '*':
+              case '/':
+              case '%':
+              /* case '|': */
+              /* case ':': */
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                word[0] = c;
+                c = getc(fd);
+                fileCol++;
+                if(c == '=') {
+                  sizeWord = 2;
+                  word[1] = c;
+                  addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
+                  cleanWord(word, &sizeWord);
+                  break;
+                }
+                sizeWord = 1;
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                cleanWord(word, &sizeWord);
+                continue;
+
+              default:
+                word[sizeWord++] = c;
+            }
         }
 
         end:
