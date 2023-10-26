@@ -275,7 +275,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         /* } */
         else if(c == '$') { //comments
             //adding the word before the comment
-            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
             addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
             cleanWord(word, &sizeWord);
 
@@ -318,10 +317,12 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 if(c == '=') {
                   sizeWord = 2;
                   word[1] = c;
+                  word[2] = 0;
                   addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
                   cleanWord(word, &sizeWord);
                   break;
                 }
+                word[1] = 0;
                 sizeWord = 1;
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
                 cleanWord(word, &sizeWord);
