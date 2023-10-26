@@ -235,10 +235,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
     p.lines[p.qtdLines++] = createTokenizedLine();
     TokenizedLine *lastLine = p.lines + 0;
 
-    //used for commenting/discarting everything when sees '$' or '$('
-    u_int8_t toComment = 0;
-    u_int8_t blockToComment = 0;
-
     char c = getc(fd);
     while(c != EOF) {
 
@@ -269,8 +265,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
 
                 lastLine = p.lines + p.qtdLines;
                 p.qtdLines++;
-                //if it's a only line comment, comments are disabled
-                toComment = blockToComment ? 1 : 0;
             }
 
             cleanWord(word, &sizeWord);
@@ -279,29 +273,33 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
 
         /* } */
         else if(c == '$') { //comments
-            toComment = 1;
-            c = getc(fd); //to comment blocks the next character must be a '('
-            fileCol++;
-            if( c == '(' ) blockToComment = 1;
-        }
-        else if(c == '(' || c == ')') {
-            if(blockToComment && c == ')') { //exiting comments blocks
-                toComment = 0;
-                blockToComment = 0;
-            }
-            else {
-              if(sizeWord)
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-
-              //add a size one word with just '(' or ')'
-              sizeWord = 1;
+            //adding the word before the comment
+            if(sizeWord) {
               maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-              word[0] = c;
               addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
               cleanWord(word, &sizeWord);
             }
+
+            c = getc(fd);
+            fileCol++;
+            char end = c == '(' ? ')' : '\n';
+            while(c != end && c != EOF) {
+                c = getc(fd);
+                fileCol++;
+            }
+            if(c == '\n') continue;
         }
-        else if(!toComment){
+        else if(c == '(' || c == ')') {
+            if(sizeWord)
+              addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+
+            //add a size one word with just '(' or ')'
+            sizeWord = 1;
+            word[0] = c;
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
+            cleanWord(word, &sizeWord);
+        }
+        else{
             maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
             word[sizeWord++] = c;
         }
