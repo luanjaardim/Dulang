@@ -10,33 +10,33 @@ struct SymbPrecedence {
 };
 
 struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
-  {"/", NUM_DIV, 0},
-  {"*", NUM_MUL, 0},
-  {"%", NUM_MOD, 0}, //the first three builtin words are binary operators with precedence
+  {"/", NUM_DIV, BUILTIN_LOW_PREC},
+  {"*", NUM_MUL, BUILTIN_LOW_PREC},
+  {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
   /* {"var", 1}, */
-  {"not", LOG_NOT, 1}, //precedence 1 to unary operations
-  {"==", CMP_EQ, 2},
-  {"!=", CMP_DIF, 2},
-  {"+", NUM_ADD, 2},
-  {"-", NUM_SUB, 2},
-  {"or", LOG_OR, 2},
-  {"and", LOG_AND, 2},
-  {">=", CMP_GE, 2},
-  {"<=", CMP_LE, 2},
-  {">", CMP_GT, 2},
-  {"<", CMP_LT, 2},
-  {"band", BIT_AND, 2},
-  {"bor", BIT_OR, 2},
-  {"bnot", BIT_NOT, 2},
-  {"=", ASSIGN, HIGH_PRECEDENCE - 1},
-  {"fn", FUNC, HIGH_PRECEDENCE - 1},
-  {"if", IF, HIGH_PRECEDENCE - 1},
-  {"else", ELSE, HIGH_PRECEDENCE - 1},
-  {"while", WHILE, HIGH_PRECEDENCE - 1},
-  {"for", FOR, HIGH_PRECEDENCE - 1},
-  {"(", PAR_OPEN, HIGH_PRECEDENCE - 1}, //this precedence will maybe change
-  {")", PAR_CLOSE, HIGH_PRECEDENCE - 1}, //this precedence will maybe change
-  /* {"struct", HIGH_PRECEDENCE - 1}, */
+  {"not", LOG_NOT,  BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
+  {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
+  {"!=", CMP_DIF,   BUILTIN_MEDIUM_PREC},
+  {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
+  {"-", NUM_SUB,    BUILTIN_MEDIUM_PREC},
+  {"or", LOG_OR,    BUILTIN_MEDIUM_PREC},
+  {"and", LOG_AND,  BUILTIN_MEDIUM_PREC},
+  {">=", CMP_GE,    BUILTIN_MEDIUM_PREC},
+  {"<=", CMP_LE,    BUILTIN_MEDIUM_PREC},
+  {">", CMP_GT,     BUILTIN_MEDIUM_PREC},
+  {"<", CMP_LT,     BUILTIN_MEDIUM_PREC},
+  {"band", BIT_AND, BUILTIN_MEDIUM_PREC},
+  {"bor", BIT_OR,   BUILTIN_MEDIUM_PREC},
+  {"bnot", BIT_NOT, BUILTIN_MEDIUM_PREC},
+  {"=", ASSIGN,     BUILTIN_HIGH_PREC},
+  {"fn", FUNC,      BUILTIN_HIGH_PREC},
+  {"if", IF,        BUILTIN_HIGH_PREC},
+  {"else", ELSE,    BUILTIN_HIGH_PREC},
+  {"while", WHILE,  BUILTIN_HIGH_PREC},
+  {"for", FOR,      BUILTIN_HIGH_PREC},
+  {"(", PAR_OPEN,   BUILTIN_HIGH_PREC}, //this precedence will maybe change
+  {")", PAR_CLOSE,  BUILTIN_HIGH_PREC}, //this precedence will maybe change
+  /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
 Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAndPrec, int l, int c) {
@@ -60,14 +60,14 @@ TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
   int i;
   for(i = 0; i < len; i++) //number validation
     if(word[i] > 57 || word[i] < 48) break;
-  if(len == i) return (TkTypeAndPrecedence) {INT_TK, -1};
+  if(len == i) return (TkTypeAndPrecedence) {INT_TK, COMPTIME_KNOWN};
 
   for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
     if(cmpStr(word, builtinWords[i].symbol))
       return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
 
-  return (TkTypeAndPrecedence) {VAR_NAME_TK, HIGH_PRECEDENCE};
+  return (TkTypeAndPrecedence) {VAR_NAME_TK, USER_VARIABLES};
 }
 
 TokenizedLine createTokenizedLine() {

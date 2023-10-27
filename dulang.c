@@ -6,7 +6,6 @@
 #include <assert.h>
 
 #include "lib.h"
-#include "parser.h"
 
 #define DULANG_EXT_SIZE 6
 #define ASM_EXT_SIZE 6

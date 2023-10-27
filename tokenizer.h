@@ -9,8 +9,6 @@
 #include <unistd.h>
 #include <assert.h>
 
-#define HIGH_PRECEDENCE 5
-
 typedef enum {
     FN_NAME_TK, //any name created by the user(that does not matches any of the builtin types) for functions
     VAR_NAME_TK, //any name created by the user(that does not matches any of the builtin types) for vars
@@ -44,9 +42,19 @@ typedef enum {
     COUNT_OF_TK_TYPES
 } TokenType;
 
+typedef enum {
+  COMPTIME_KNOWN = -1,
+  USER_VARIABLES,
+  BUILTIN_LOW_PREC,
+  BUILTIN_SINGLE_OPERAND,
+  BUILTIN_MEDIUM_PREC,
+  USER_FUNCTIONS,
+  BUILTIN_HIGH_PREC,
+} Precedence;
+
 typedef struct {
     TokenType type;
-    int precedence;
+    Precedence precedence;
 } TkTypeAndPrecedence ;
 
 typedef struct Token {

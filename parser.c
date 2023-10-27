@@ -64,12 +64,12 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
 
     node_set_double_link_at(currBlock.tail, tmp, RIGHT_LINK, LEFT_LINK);
     /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
+    currBlock.tail = tmp;
     if(currToken(*tf)->id == lastId) break;
     else if(currToken(*tf)->id > lastId) {
       fprintf(stderr, "You can't do that thing you did");
       exit(1);
     }
-    currBlock.tail = tmp;
   }
   /* printf("here\n"); */
   /* printLinkExprs(currBlock.head, 0); */
@@ -83,12 +83,11 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
 */
 Expression *parseExprBlock(ExprBlock block) {
   Expression *expr = block.head;
-  for(int i = 0; i < HIGH_PRECEDENCE; i++) {
-
+  for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC; i++) {
     while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
 
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
-    /* printf("%s\n", expr_node_get_value(expr)->text); */
+    /* printf("%s\n", expr_node_get_value(expr).tk->text); */
 
     TokenToParse leftTk, rightTk;
     Token *tmpToken, *leftToken, *rightToken;
@@ -106,6 +105,7 @@ Expression *parseExprBlock(ExprBlock block) {
       tmpToken = expr_node_get_value(tmpExpr).tk;
 
       if(i == tmpToken->typeAndPrecedence.precedence && expr_node_get_value(tmpExpr).toParse) {
+        /* printf("entrou: %s prec: %d\n", tmpToken->text, tmpToken->typeAndPrecedence.precedence); */
         left = node_get_neighbour(tmpExpr, LEFT_LINK);
         right = node_get_neighbour(tmpExpr, RIGHT_LINK);
 
@@ -127,13 +127,20 @@ Expression *parseExprBlock(ExprBlock block) {
         }
 
         switch(tmpToken->typeAndPrecedence.precedence) {
-          case 0:
+          case COMPTIME_KNOWN:
+          case USER_VARIABLES:
+          case USER_FUNCTIONS:
+            /* printf("3:::: %s prec: %d\n", tmpToken->text, tmpToken->typeAndPrecedence.precedence); */
+            break;
+          case BUILTIN_LOW_PREC:
             //case for '*' '/' '%'
+            // it will only acept neighbours tokens that has the same or lower precedence, or if they
+            // are already parsed
             if(leftToken && rightToken) {
-              if(leftToken->typeAndPrecedence.precedence > 0 && rightToken->typeAndPrecedence.precedence > 0) {
-                fprintf(stderr, "%s has invalid args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
-                exit(1);
-              }
+              /* if(leftToken->typeAndPrecedence.precedence > 0 && rightToken->typeAndPrecedence.precedence > 0) { */
+              /*   fprintf(stderr, "%s has invalid args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c); */
+              /*   exit(1); */
+              /* } */
             }
             else {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
@@ -142,22 +149,25 @@ Expression *parseExprBlock(ExprBlock block) {
 
             goto getLeftAndRightNeighbours;
             break;
-          case 1:
+          case BUILTIN_SINGLE_OPERAND:
             //unary operations, take just one arg after it
             break;
-          case 2:
-              if((leftToken->typeAndPrecedence.precedence > 2 && !leftIsParsed) ||
-                 (rightToken->typeAndPrecedence.precedence >= 2 && !rightIsParsed)) {
-                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+          case BUILTIN_MEDIUM_PREC:
+            if(leftToken && rightToken) {
+              /* if((leftToken->typeAndPrecedence.precedence > 2 && !leftIsParsed) || */
+              /*    (rightToken->typeAndPrecedence.precedence >= 2 && !rightIsParsed)) { */
+              /*   fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c); */
+              /*   exit(1); */
+              /* } */
+            }
+            else {
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
-              }
+            }
 
             goto getLeftAndRightNeighbours;
             break;
-          case 3:
-            /* printf("3:::: %s prec: %ld\n", tmpToken->text, tmpToken->typeAndPrecedence.precedence); */
-            break;
-          case 4:
+          case BUILTIN_HIGH_PREC:
             switch(tmpToken->typeAndPrecedence.type) {
 
               case ASSIGN:
@@ -172,7 +182,7 @@ Expression *parseExprBlock(ExprBlock block) {
 
               //here we can change the type of the token to FN_NAME
               rightToken->typeAndPrecedence.type = FN_NAME_TK;
-              rightToken->typeAndPrecedence.precedence = 3;
+              rightToken->typeAndPrecedence.precedence = USER_FUNCTIONS;
               node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
@@ -214,7 +224,12 @@ Expression *parseExprBlock(ExprBlock block) {
 void printLinkExprs(Expression *expr, int layer) {
   if(!expr) return;
 
-  printf("layer: %d, text: %s, num of neighbours %u\n", layer, expr_node_get_value(expr).tk->text, node_get_num_neighbours(expr));
+  const char *humanReadablePrec[] = {"COMPTIME", "USER_VARIABLE", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "USER_FUNCTION","HIGH_PREC"};
+  char space[layer+1];
+  memset(space, ' ', layer);
+  space[layer] = '\0';
+  TokenToParse tp = expr_node_get_value(expr);
+  printf("%s[text: %s, isParsed: %u, prec: %s]\n", space, tp.tk->text, !tp.toParse, humanReadablePrec[tp.tk->typeAndPrecedence.precedence + 1]);
   for(unsigned i = CHILD(1); i < node_get_num_neighbours(expr); i++) {
     /* printf("%s\n", expr_node_get_value(node_get_neighbour(expr, i))->text); */
     printLinkExprs(node_get_neighbour(expr, i), layer+1);
