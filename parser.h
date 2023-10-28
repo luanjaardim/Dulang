@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <assert.h>
 
+#include "utils.h"
 #include "tokenizer.h"
 #include "node.h"
 
@@ -35,7 +36,7 @@ typedef struct {
 } HighLevelBlock;
 
 typedef struct {
-  u_int8_t entryPoint; //index for main function
+  int8_t entryPoint; //index for main function
   size_t qtdBlocks, capBlocks;
   HighLevelBlock *blocks;
 } ParsedFile;

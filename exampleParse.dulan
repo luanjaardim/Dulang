@@ -1,10 +1,9 @@
+$main function
 fn main
-    sla=2*3+15/$   more comments
-        10 - 5
-    sla2 = 3 + $(comments inside lines) 5 * (3 $hello
-         - 5)
-    sla4 = 9*9/81
-    iai+=1 % (1
-        - 2)
+    sla = 2+3*5/
+        10-2
+        *3
+    sla2 = sla + $(asdf jdkfd) 1$1lksajld
 
-$will operate over what is inside parenthesis first
+fn main2
+   sla = 1

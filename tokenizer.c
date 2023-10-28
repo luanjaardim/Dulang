@@ -112,13 +112,8 @@ TokenizedFile cloneTokenizedFile(const TokenizedFile tf) {
  * This function is used to get the current Token
 */
 Token *currToken(TokenizedFile tf) {
-  return tf.lines[tf.currLine].tk + tf.currElem;
-}
-
-/*
- * This function is used to get a mutable reference to the current Token
-*/
-Token *currMutToken(TokenizedFile tf) {
+  if(tf.qtdLines == tf.currLine || tf.lines[tf.currLine].qtdElements == tf.currElem)
+    return NULL;
   return tf.lines[tf.currLine].tk + tf.currElem;
 }
 
@@ -128,11 +123,12 @@ Token *currMutToken(TokenizedFile tf) {
 */
 Token *nextToken(TokenizedFile *tf) {
   if(tf->lines[tf->currLine].qtdElements == ++tf->currElem) {
+    //if there are no more lines to iterate over or the line is empty, then return NULL
+    if(tf->qtdLines == tf->currLine+1 || tf->lines[tf->currLine+1].qtdElements == 0)
+      return NULL;
+
     tf->currElem = 0;
     tf->currLine++;
-    //if there are no more lines to iterate over or the line is empty, then return NULL
-    if(tf->qtdLines == tf->currLine || tf->lines[tf->currLine].qtdElements == 0)
-      return NULL;
   }
   return currToken(*tf);
 }
@@ -360,30 +356,6 @@ void destroyTokenizdFile(TokenizedFile *tp) {
   }
   free(tp->lines);
   tp->lines = NULL;
-}
-
-void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize) {
-    if(*cap <= newSize) {
-        (*cap) *= 2;
-        *pnt = realloc(*pnt, (*cap) * elementSize);
-        if(*pnt == NULL) {
-            fprintf(stderr, "Fail to realloc\n");
-            exit(1);
-        }
-    }
-}
-size_t lenStr(const char *const str) {
-  size_t i = 0;
-  while(str[i++] != 0);
-  return i-1;
-}
-int cmpStr(const char *const str1, const char *const str2) {
-  size_t i = 0;
-  while(str1[i] == str2[i]) {
-    if(str1[i++] == 0)
-      return 1; //true
-  }
-  return 0; //false
 }
 
 #endif

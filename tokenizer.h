@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <assert.h>
 
+#include "utils.h"
+
 typedef enum {
     NAME_TK, //any name created by the user(that does not matches any of the builtin types)
     INT_TK,  //any number (not floating point)
@@ -88,10 +90,6 @@ struct endOfBlock {
   size_t lastId, lastLine;
 };
 struct endOfBlock endOfCurrBlock(TokenizedFile tf);
-
-void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
-size_t lenStr(const char *const str);
-int cmpStr(const char *const str1, const char *const str2);
 
 #define min(a, b) (a) < (b) ? (a) : (b)
 
