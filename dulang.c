@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     //Every word is turned into Tokens, with informations that helps on parsing
     /* printTokenizedFile(tokFile); */
     ParsedFile pf = createParsedFile(&tokFile);
-    printLinkExprs(pf.blocks[pf.entryPoint].block.head, 0); //it will print the main function
+    printLinkExprs(pf.blocks[0].head, 0); //it will print the main function
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");
@@ -61,9 +61,7 @@ int main(int argc, char **argv) {
     fprintf(f, "global _start\n");
     fprintf(f, "_start:\n");
 
-    //
-    // Generate Dulang code
-    //
+    generateDulangFile(f, &pf);
 
     fprintf(f, ";;--end of execution, return 0\n");
     fprintf(f, "    mov rdi, 0\n");

@@ -199,7 +199,7 @@ void printTokenizedFile(TokenizedFile p) {
     for(size_t i = 0; i < p.qtdLines; i++) {
         for(size_t j = 0; j < p.lines[i].qtdElements; j++) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
-                  humanReadableType[0],
+                  humanReadableType[p.lines[i].tk[j].typeAndPrecedence.type >= NUM_DIV ? 3 : p.lines[i].tk[j].typeAndPrecedence.type],
                   p.lines[i].tk[j].typeAndPrecedence.precedence);
 //min(p.lines[i].tk[j].typeAndPrecedence.type, NUM_DIV)
         }

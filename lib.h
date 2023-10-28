@@ -12,6 +12,7 @@
 #include "tokenizer.h"
 #include "parser.h"
 #include "node.h"
+#include "generator.h"
 //#include "bt_map.h"
 
 #endif // LIB_H_

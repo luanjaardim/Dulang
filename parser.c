@@ -1,8 +1,4 @@
 #include "parser.h"
-#include "node.h"
-#include "tokenizer.h"
-#include "utils.h"
-#include <stdio.h>
 
 INIT_NODE_TYPE(expr, TokenToParse)
 
@@ -274,7 +270,7 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
         pf.entryPoint = pf.qtdBlocks;
     }
     maybeRealloc((void**)&pf.blocks, (int*)&pf.capBlocks, pf.qtdBlocks, sizeof(HighLevelBlock));
-    pf.blocks[pf.qtdBlocks++] = (HighLevelBlock){tmpBlock};
+    pf.blocks[pf.qtdBlocks++] = (HighLevelBlock)tmpBlock;
 
     nextToken(tf);
     /* printf("is null: %d\n", currToken(*tf) == NULL); */
@@ -284,7 +280,7 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
 
 void destroyParsedFile(ParsedFile *pf) {
   for(int i = 0; i < pf->qtdBlocks; i++)
-    destroyExprBlock(&pf->blocks[i].block);
+    destroyExprBlock(&pf->blocks[i]);
   free(pf->blocks);
   pf->blocks = NULL;
   /* printf("destroyed\n"); */

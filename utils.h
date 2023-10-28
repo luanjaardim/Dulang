@@ -59,5 +59,6 @@ typedef enum {
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);
 int cmpStr(const char *const str1, const char *const str2);
+void swap(void *a, void *b, size_t size);
 
 #endif // UTILS_H_

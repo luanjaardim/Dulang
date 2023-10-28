@@ -25,3 +25,14 @@ int cmpStr(const char *const str1, const char *const str2) {
   }
   return 0; //false
 }
+
+void swap(void *a, void *b, size_t size) {
+  char *c = (char *)a;
+  char *d = (char *)b;
+  char tmp;
+  for(size_t i = 0; i < size; i++) {
+    tmp = c[i];
+    c[i] = d[i];
+    d[i] = tmp;
+  }
+}

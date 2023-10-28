@@ -25,9 +25,7 @@ typedef struct {
 } ExprBlock;
 
 //High level blocks are blocks that are not inside any other one, just inside of the main scope
-typedef struct {
-  ExprBlock block;
-} HighLevelBlock;
+typedef ExprBlock HighLevelBlock;
 
 typedef struct {
   int8_t entryPoint; //index for main function
