@@ -13,8 +13,12 @@ struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is
   {"/", NUM_DIV, BUILTIN_LOW_PREC},
   {"*", NUM_MUL, BUILTIN_LOW_PREC},
   {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
-  /* {"var", 1}, */
   {"not", LOG_NOT,  BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
+  /* var */ //other unary operations
+  /* int */
+  /* str */
+  /* float */
+  /* char */
   {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
   {"!=", CMP_DIF,   BUILTIN_MEDIUM_PREC},
   {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
@@ -67,7 +71,7 @@ TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
       return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
 
-  return (TkTypeAndPrecedence) {VAR_NAME_TK, USER_VARIABLES};
+  return (TkTypeAndPrecedence) {NAME_TK, USER_DEFINITIONS};
 }
 
 TokenizedLine createTokenizedLine() {

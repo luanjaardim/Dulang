@@ -10,8 +10,7 @@
 #include <assert.h>
 
 typedef enum {
-    FN_NAME_TK, //any name created by the user(that does not matches any of the builtin types) for functions
-    VAR_NAME_TK, //any name created by the user(that does not matches any of the builtin types) for vars
+    NAME_TK, //any name created by the user(that does not matches any of the builtin types)
     INT_TK,  //any number (not floating point)
     STR_TK,  //string (surrounded by `"`)
     NUM_DIV, //after this every identifier represents a builtin word
@@ -44,11 +43,10 @@ typedef enum {
 
 typedef enum {
   COMPTIME_KNOWN = -1,
-  USER_VARIABLES,
+  USER_DEFINITIONS,
   BUILTIN_LOW_PREC,
   BUILTIN_SINGLE_OPERAND,
   BUILTIN_MEDIUM_PREC,
-  USER_FUNCTIONS,
   BUILTIN_HIGH_PREC,
 } Precedence;
 

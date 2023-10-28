@@ -127,20 +127,16 @@ Expression *parseExprBlock(ExprBlock block) {
         }
 
         switch(tmpToken->typeAndPrecedence.precedence) {
-          case COMPTIME_KNOWN:
-          case USER_VARIABLES:
-          case USER_FUNCTIONS:
-            /* printf("3:::: %s prec: %d\n", tmpToken->text, tmpToken->typeAndPrecedence.precedence); */
-            break;
           case BUILTIN_LOW_PREC:
             //case for '*' '/' '%'
             // it will only acept neighbours tokens that has the same or lower precedence, or if they
             // are already parsed
             if(leftToken && rightToken) {
-              /* if(leftToken->typeAndPrecedence.precedence > 0 && rightToken->typeAndPrecedence.precedence > 0) { */
-              /*   fprintf(stderr, "%s has invalid args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c); */
-              /*   exit(1); */
-              /* } */
+              if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_LOW_PREC)
+               ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_LOW_PREC)) {
+                  fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+              }
             }
             else {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
@@ -154,11 +150,11 @@ Expression *parseExprBlock(ExprBlock block) {
             break;
           case BUILTIN_MEDIUM_PREC:
             if(leftToken && rightToken) {
-              /* if((leftToken->typeAndPrecedence.precedence > 2 && !leftIsParsed) || */
-              /*    (rightToken->typeAndPrecedence.precedence >= 2 && !rightIsParsed)) { */
-              /*   fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c); */
-              /*   exit(1); */
-              /* } */
+              if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)
+               ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)) {
+                  fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+              }
             }
             else {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
@@ -175,23 +171,35 @@ Expression *parseExprBlock(ExprBlock block) {
                 break;
               case FUNC:
 
-              if(expr_node_get_value(right).tk->typeAndPrecedence.type != VAR_NAME_TK) {
-                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+              if(right) {
+                if(expr_node_get_value(right).tk->typeAndPrecedence.type != NAME_TK) {
+                  fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+              } else{
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
               }
 
-              //here we can change the type of the token to FN_NAME
-              rightToken->typeAndPrecedence.type = FN_NAME_TK;
-              rightToken->typeAndPrecedence.precedence = USER_FUNCTIONS;
+              //here we should insert the right token name to a list of user function's
               node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
-                break;
-              default:
 
-              break;
+              //here we should iterate tmpExpr till find the end of function definition, at |
+              //storing informations about the type and number of params
+                break;
+
+              default:
+                break;
             }
+
             break;
+
+            //unreachble
+            case COMPTIME_KNOWN:
+            case USER_DEFINITIONS:
+              break;
 
             getLeftAndRightNeighbours:
               node_swap_neighbours(tmpExpr, left, LEFT_LINK, LEFT_LINK);
@@ -224,7 +232,7 @@ Expression *parseExprBlock(ExprBlock block) {
 void printLinkExprs(Expression *expr, int layer) {
   if(!expr) return;
 
-  const char *humanReadablePrec[] = {"COMPTIME", "USER_VARIABLE", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "USER_FUNCTION","HIGH_PREC"};
+  const char *humanReadablePrec[] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "HIGH_PREC"};
   char space[layer+1];
   memset(space, ' ', layer);
   space[layer] = '\0';
