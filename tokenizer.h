@@ -75,7 +75,7 @@ typedef struct TokenizedFile {
 
 void printTokenizedFile(TokenizedFile p);
 TokenizedFile readToTokenizedFile(FILE *fd);
-void destroyTokenizdFile(TokenizedFile tp);
+void destroyTokenizdFile(TokenizedFile *tp);
 TokenizedFile cloneTokenizedFile(const TokenizedFile tf);
 Token *currToken(TokenizedFile tf);
 Token *nextToken(TokenizedFile *tf);

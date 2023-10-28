@@ -349,17 +349,17 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
     return p;
 }
 
-void destroyTokenizdFile(TokenizedFile tp) {
-  for(size_t i = 0; i < tp.qtdLines; i ++) {
-    for(size_t j = 0; j < tp.lines[i].qtdElements; j++) {
-      free(tp.lines[i].tk[j].text);
-      tp.lines[i].tk[j].text = NULL;
+void destroyTokenizdFile(TokenizedFile *tp) {
+  for(size_t i = 0; i < tp->qtdLines; i ++) {
+    for(size_t j = 0; j < tp->lines[i].qtdElements; j++) {
+      free(tp->lines[i].tk[j].text);
+      tp->lines[i].tk[j].text = NULL;
     }
-    free(tp.lines[i].tk);
-    tp.lines[i].tk = NULL;
+    free(tp->lines[i].tk);
+    tp->lines[i].tk = NULL;
   }
-  free(tp.lines);
-  tp.lines = NULL;
+  free(tp->lines);
+  tp->lines = NULL;
 }
 
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize) {

@@ -29,18 +29,22 @@ typedef struct {
   Expression *head, *tail;
 } ExprBlock;
 
+//High level blocks are blocks that are not inside any other one, just inside of the main scope
 typedef struct {
-  Expression *exprs;
-} Functions;
+  ExprBlock block;
+} HighLevelBlock;
 
 typedef struct {
-  size_t entryPoint; //index for main function
-  Functions *funcs;
+  u_int8_t entryPoint; //index for main function
+  size_t qtdBlocks, capBlocks;
+  HighLevelBlock *blocks;
 } ParsedFile;
 
-Expression *parseExprBlock(ExprBlock block);
+ParsedFile createParsedFile(TokenizedFile *tf);
+void destroyParsedFile(ParsedFile *pf);
 ExprBlock createExprBlock(TokenizedFile *tf);
+void destroyExprBlock(ExprBlock *block);
+Expression *parseExprLink(Expression *expr);
 void printLinkExprs(Expression *expr, int layer);
-void destroyExprBlock(Expression *expr);
 
 #endif // PARSER_H_

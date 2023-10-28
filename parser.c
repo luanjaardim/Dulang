@@ -15,18 +15,21 @@ Expression *createExpression(Token *tk) {
 }
 
 ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
-  ExprBlock currBlock = { createExpression(currToken(*tf)), NULL };
-  currBlock.tail = currBlock.head;
-  Expression *tmp = NULL;
+  Expression *headExpr = createExpression(currToken(*tf));
+  Expression *tailExpr = headExpr;
+  Expression *tmp;
   nextToken(tf);
   while(currToken(*tf)->typeAndPrecedence.type != endType) {
     tmp = createExpression(currToken(*tf));
-    node_set_double_link_at(currBlock.tail, tmp, RIGHT_LINK, LEFT_LINK);
-    currBlock.tail = tmp;
+    node_set_double_link_at(tailExpr, tmp, RIGHT_LINK, LEFT_LINK);
+    tailExpr = tmp;
     nextToken(tf);
   }
   /* printLinkExprs(currBlock.head, 0); */
-  return currBlock;
+  Expression *parsedExpr = parseExprLink(headExpr);
+  tailExpr = parsedExpr;
+  while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
+  return (ExprBlock) {parsedExpr, tailExpr};
 }
 
 /*
@@ -34,15 +37,15 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
 */
 ExprBlock createExprBlock(TokenizedFile *tf) {
   Token *headToken = currToken(*tf);
-  ExprBlock currBlock = {createExpression(headToken), NULL};
-  Expression *tmp;
-  currBlock.tail = currBlock.head;
+  Expression *headExpr = createExpression(headToken);
+  Expression *tailExpr = headExpr;
+  ExprBlock tmp;
   size_t lastId = endOfCurrBlock(*tf).lastId;
   while(1){
     nextToken(tf);
     if(currToken(*tf)->typeAndPrecedence.type == PAR_OPEN) {
       nextToken(tf);
-      tmp = parseExprBlock(createExprBlockTill(tf, PAR_CLOSE));
+      tmp = createExprBlockTill(tf, PAR_CLOSE);
     }
     else {
 
@@ -53,18 +56,15 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
       if(tf->currElem == 0 && (int)endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine != currToken(*tf)->l) {
         /* printf("here: %s\n", currToken(*tf)->text); */
         /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
-        ExprBlock tmpBlock = createExprBlock(tf);
-        /* printLinkExprs(tmpBlock.head, 0); */
-        tmp = parseExprBlock(tmpBlock);
+        tmp = createExprBlock(tf);
       }
-      else
-        tmp = createExpression(currToken(*tf));
+      else { tmp.head = tmp.tail = createExpression(currToken(*tf)); }
 
     }
 
-    node_set_double_link_at(currBlock.tail, tmp, RIGHT_LINK, LEFT_LINK);
+    node_set_double_link_at(tailExpr, tmp.head, RIGHT_LINK, LEFT_LINK);
     /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
-    currBlock.tail = tmp;
+    tailExpr = tmp.tail;
     if(currToken(*tf)->id == lastId) break;
     else if(currToken(*tf)->id > lastId) {
       fprintf(stderr, "You can't do that thing you did");
@@ -75,14 +75,16 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   /* printLinkExprs(currBlock.head, 0); */
   /* printf("here\n"); */
   /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
-  return currBlock;
+  Expression *parsedExpr = parseExprLink(headExpr);
+  tailExpr = parsedExpr;
+  while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
+  return (ExprBlock) {parsedExpr, tailExpr};
 }
 
 /*
- * Generates the AST of the block
+ * Generates the expression AST of the expressions linked list
 */
-Expression *parseExprBlock(ExprBlock block) {
-  Expression *expr = block.head;
+Expression *parseExprLink(Expression *expr) {
   for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC; i++) {
     while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
 
@@ -245,6 +247,7 @@ void printLinkExprs(Expression *expr, int layer) {
   printLinkExprs(node_get_neighbour(expr, RIGHT_LINK), layer);
 }
 
-void destroyExprBlock(Expression *expr) {
-  node_delete_recursive(expr, NULL);
+void destroyExprBlock(ExprBlock *block) {
+  node_delete_recursive(block->head, NULL);
+  block->head = block->tail = NULL;
 }
