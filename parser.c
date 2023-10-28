@@ -93,6 +93,8 @@ Expression *parseExprLink(Expression *expr) {
               }
             }
             else {
+                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
             }

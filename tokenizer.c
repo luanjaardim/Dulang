@@ -9,7 +9,7 @@ struct SymbPrecedence {
   int tokenType, precedence;
 };
 
-struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
+static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
   {"/", NUM_DIV, BUILTIN_LOW_PREC},
   {"*", NUM_MUL, BUILTIN_LOW_PREC},
   {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
