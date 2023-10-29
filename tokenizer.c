@@ -58,8 +58,7 @@ Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAnd
 
 TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
   //compile time known values, str or int, has negative predecence: -1
-
-  //validation of str
+  if(word[0] == '"') return (TkTypeAndPrecedence) {STR_TK, COMPTIME_KNOWN};
 
   int i;
   for(i = 0; i < len; i++) //number validation
@@ -270,9 +269,26 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
 
             cleanWord(word, &sizeWord);
         }
-        /* else if(c == '"') { */ //strings
+        else if(c == '"') {
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            cleanWord(word, &sizeWord);
 
-        /* } */
+            do {
+                maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+                word[sizeWord++] = c;
+                c = getc(fd);
+                fileCol++;
+            } while(c != '"' && c != EOF && c != '\n');
+            if(c == EOF || c == '\n') {
+                printf("Error: missing \"\n");
+                exit(1);
+            }
+            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+            word[sizeWord++] = c;
+            fileCol++;
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            cleanWord(word, &sizeWord);
+        }
         else if(c == '$') { //comments
             //adding the word before the comment
             addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
