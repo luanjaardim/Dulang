@@ -12,6 +12,14 @@
 
 #define CMD_ERROR 256
 
+void insertIntToStr(FILE *f) {
+    FILE *toRead = fopen("intToStr.asm", "r");
+    char c;
+    while((c = fgetc(toRead)) != EOF) {
+        fputc(c, f);
+    }
+    fclose(toRead);
+}
 
 int main(int argc, char **argv) {
 
@@ -63,11 +71,13 @@ int main(int argc, char **argv) {
 
     generateDulangFile(f, &pf);
 
+    fprintf(f, "    call int_to_str\n");
     fprintf(f, ";;--end of execution, return 0\n");
     fprintf(f, "    mov rdi, 0\n");
     fprintf(f, "    mov rax, 0x3c\n");
     fprintf(f, "    syscall\n");
 
+    insertIntToStr(f);
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");
         exit(1);

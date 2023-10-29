@@ -23,7 +23,7 @@ void translateExpression(FILE *f, Expression *expr) {
     fprintf(f, ";; -- instruction %ld\n", get_token_to_parse(expr).tk->id);
     switch(type) {
         case INT_TK:
-            fprintf(f, "push %d\n", atoi(get_token_to_parse(expr).tk->text));
+            /* fprintf(f, "push %d\n", atoi(get_token_to_parse(expr).tk->text)); */
             break;
         case ASSIGN:
 
