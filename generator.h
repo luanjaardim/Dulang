@@ -10,10 +10,10 @@
 #include <assert.h>
 
 #include "parser.h"
-#include "bt_map.h"
+#include "map.h"
 #include "utils.h"
 
 void generateDulangFile(FILE *f, ParsedFile *pf);
-void translateExpression(FILE *f, Expression *expr);
+void translateExpression(FILE *f, Expression *expr, Map *var_map);
 
 #endif // GENERATOR_H_
