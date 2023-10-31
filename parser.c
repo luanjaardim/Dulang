@@ -16,10 +16,9 @@ Expression *createExpression(Token *tk) {
 */
 Expression *parseExprLink(Expression *expr) {
   for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC; i++) {
-    while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
+    /* while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK); */
 
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
-    /* printf("%s\n", expr_node_get_value(expr).tk->text); */
 
     TokenToParse leftTk, rightTk;
     Token *tmpToken, *leftToken, *rightToken;
@@ -120,6 +119,19 @@ Expression *parseExprLink(Expression *expr) {
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
 
+              Expression *newRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
+              if(newRight) {
+                node_remove_link_at(newRight, LEFT_LINK); //remove link with fn
+                node_remove_link_at(tmpExpr, RIGHT_LINK);
+                newRight = parseExprLink(newRight); //update the right if needed
+                node_set_link(tmpExpr, NULL);
+                node_set_double_link_at(tmpExpr, newRight, CHILD(2), PARENT_LINK);
+              }
+              else {
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+              }
+
               //here we should iterate tmpExpr till find the end of function definition, at |
               //storing informations about the type and number of params
                 break;
@@ -140,11 +152,16 @@ Expression *parseExprLink(Expression *expr) {
               node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
               node_remove_link_at(left, RIGHT_LINK); node_remove_link_at(left, LEFT_LINK);
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+              if(right) right = parseExprLink(right);
+              if(left) left = parseExprLink(left);
+
               node_set_double_link_at(tmpExpr, left, CHILD(1), PARENT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
+
+
         }
       }
-      while(node_get_neighbour(tmpExpr, PARENT_LINK)) tmpExpr = node_get_neighbour(tmpExpr, PARENT_LINK);
+      /* while(node_get_neighbour(tmpExpr, PARENT_LINK)) tmpExpr = node_get_neighbour(tmpExpr, PARENT_LINK); */
 
       tmpExpr = node_get_neighbour(tmpExpr, RIGHT_LINK);
       if(tmpExpr == NULL)
