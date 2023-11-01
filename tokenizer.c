@@ -185,6 +185,7 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
  * Return the id of the last word of the block
 */
 struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
+  tf.currElem = 0; //always looking to the block made by the current line, begining at the first Token
   int identationBlock = currToken(tf)->c;
   int firstLine = currToken(tf)->l;
   do {

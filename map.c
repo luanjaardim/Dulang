@@ -14,7 +14,7 @@ Map map_create(size_t keySize, size_t valueSize, int (*cmp)(MapPair *, MapPair *
 
 void map_delete(Map *map) {
     if(map && map->pairs) {
-        for(int i = 0; i < map->qtdPairs; i++) {
+        for(int i = 0; i < (int)map->qtdPairs; i++) {
             free(map->pairs[i].key);
             free(map->pairs[i].value);
         }
@@ -41,7 +41,7 @@ void map_insert(Map *map, void *new_key, void *new_value) {
  * Function to find the key in the map and return the value
  */
 int map_get_value(Map *map, void *key, void *to_ret) {
-    for(int i = 0; i < map->qtdPairs; i++) {
+    for(int i = 0; i < (int)map->qtdPairs; i++) {
         if(map->cmp(&map->pairs[i], &(MapPair){.key = key}, map->keySize) == 0) {
             memcpy(to_ret, map->pairs[i].value, map->valueSize);
             return 1;

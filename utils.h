@@ -41,12 +41,14 @@ typedef enum {
     BIT_NOT,
     ASSIGN,
     FUNC,
-    IF,
-    ELSE,
-    WHILE,
-    FOR,
+    IF_TK,
+    ELSE_TK,
+    WHILE_TK,
+    FOR_TK,
     PAR_OPEN,
     PAR_CLOSE,
+    END_BAR,
+    COLON,
     COUNT_OF_TK_TYPES
 } TokenType;
 
@@ -57,6 +59,8 @@ typedef enum {
   BUILTIN_SINGLE_OPERAND,
   BUILTIN_MEDIUM_PREC,
   BUILTIN_HIGH_PREC,
+  SYMBOLS,
+  PRECEDENCE_COUNT
 } Precedence;
 
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);

@@ -15,6 +15,9 @@ Expression *createExpression(Token *tk) {
  * Generates the expression AST of the expressions linked list
 */
 Expression *parseExprLink(Expression *expr) {
+  /* printLinkExprs(expr, 0); */
+  /* printf("-------------------------------------------------------------\n"); */
+
   for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC; i++) {
     /* while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK); */
 
@@ -83,6 +86,9 @@ Expression *parseExprLink(Expression *expr) {
             if(leftToken && rightToken) {
               if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)
                ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)) {
+                  printLinkExprs(tmpExpr, 0);
+                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
                   fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
               }
@@ -101,6 +107,42 @@ Expression *parseExprLink(Expression *expr) {
 
               case ASSIGN:
               goto getLeftAndRightNeighbours;
+                break;
+              case IF_TK:
+              {
+                if(!right) {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+                Expression *condition = right;
+                while(right) {
+                  if(expr_node_get_value(right).tk->typeAndPrecedence.type == END_BAR) {
+                    //removing the END_BAR
+                    node_remove_link_at(node_get_neighbour(right, LEFT_LINK), RIGHT_LINK);
+                    right = node_remove_link_at(right, RIGHT_LINK);
+
+                    if(!right) {
+                      fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                      exit(1);
+                    }
+                    node_remove_link_at(right, LEFT_LINK);
+                    break;
+                  }
+                  right = node_get_neighbour(right, RIGHT_LINK);
+                }
+                condition = parseExprLink(condition);
+                right = parseExprLink(right);
+                if(condition == NULL || right == NULL) {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+                node_remove_link_at(tmpExpr, RIGHT_LINK);
+                node_set_link(tmpExpr, NULL); node_set_link(tmpExpr, NULL);
+                node_set_double_link_at(tmpExpr, condition, CHILD(1), PARENT_LINK);
+                node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
+              }
+                break;
+              case ELSE_TK:
                 break;
               case FUNC:
 
@@ -145,6 +187,8 @@ Expression *parseExprLink(Expression *expr) {
             //unreachble
             case COMPTIME_KNOWN:
             case USER_DEFINITIONS:
+            case SYMBOLS:
+            case PRECEDENCE_COUNT:
               break;
 
             getLeftAndRightNeighbours:
@@ -157,6 +201,7 @@ Expression *parseExprLink(Expression *expr) {
 
               node_set_double_link_at(tmpExpr, left, CHILD(1), PARENT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
+              expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
 
 
         }
@@ -183,7 +228,7 @@ Expression *parseExprLink(Expression *expr) {
 void printLinkExprs(Expression *expr, int layer) {
   if(!expr) return;
 
-  const char *humanReadablePrec[] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "HIGH_PREC"};
+  const char *humanReadablePrec[PRECEDENCE_COUNT+1] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "HIGH_PREC", "SYMBOLS"};
   char space[layer+1];
   memset(space, ' ', layer);
   space[layer] = '\0';
@@ -296,7 +341,7 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
 }
 
 void destroyParsedFile(ParsedFile *pf) {
-  for(int i = 0; i < pf->qtdBlocks; i++)
+  for(int i = 0; i < (int)pf->qtdBlocks; i++)
     destroyExprBlock(&pf->blocks[i]);
   free(pf->blocks);
   pf->blocks = NULL;

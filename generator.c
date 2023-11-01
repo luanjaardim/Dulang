@@ -7,6 +7,7 @@ TokenToParse get_token_to_parse(Expression *expr) {
 }
 
 int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size) {
+    (void)key_size;
     Token *f_tk = *(Token **)(f->key);
     Token *s_tk = *(Token **)(s->key);
     /* pair_get_key(f, (void *)&f_tk, sizeof(TokenToParse)); */
@@ -17,7 +18,7 @@ int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size) {
 
     if(f_tk->qtdChars > s_tk->qtdChars) return 1; //f is bigger
     if(f_tk->qtdChars < s_tk->qtdChars) return -1; //s is bigger
-    for(int i = 0; i < f_tk->qtdChars; i++) {
+    for(int i = 0; i < (int)f_tk->qtdChars; i++) {
         if(f_tk->text[i] != s_tk->text[i]) {
             if(f_tk->text[i] > s_tk->text[i]) return 1; //f is bigger
             else return -1; //s is bigger
@@ -27,7 +28,7 @@ int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size) {
 }
 
 void generateDulangFile(FILE *f, ParsedFile *pf) {
-    for(int i = 0; i < pf->qtdBlocks; i++) {
+    for(int i = 0; i < (int)pf->qtdBlocks; i++) {
         ExprBlock block = pf->blocks[i];
 
         Expression *tmp = block.head;
@@ -61,11 +62,9 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map) {
                 fprintf(f, "pop rax\n");
                 rsp -= 8;
                 fprintf(f, "mov [rbp-%d], rax\n", tmp);
-                //access
             }
             else
                 map_insert(var_map, (void **)&tk, &rsp);
-                //insert
             break;
         case FUNC:
             /* translateExpression(f, node_get_neighbour(expr, RIGHT_LINK)); */
