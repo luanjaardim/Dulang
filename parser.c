@@ -144,6 +144,32 @@ Expression *parseExprLink(Expression *expr) {
                 break;
               case ELSE_TK:
                 break;
+              case SYSCALL_TK:
+                printLinkExprs(tmpExpr, 0);
+                int paramCount = 0;
+                while(1) {
+                  if(paramCount > SYSCALL_ARGS) {
+                    fprintf(stderr, "%s too many args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                    exit(1);
+                  }
+                  if(right == NULL) {
+                    fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                    exit(1);
+                  }
+                  if(expr_node_get_value(right).tk->typeAndPrecedence.type == END_BAR) {
+                    //removing the END_BAR
+                    node_remove_link_at(node_get_neighbour(right, LEFT_LINK), RIGHT_LINK);
+                    node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+                    node_remove_link_at(right, RIGHT_LINK);
+                    break;
+                  }
+                  node_remove_link_at(node_get_neighbour(right, LEFT_LINK), RIGHT_LINK);
+                  node_remove_link_at(right, LEFT_LINK);
+                  node_set_link(tmpExpr, right); //append to childs
+                  right = node_get_neighbour(right, RIGHT_LINK);
+                  paramCount++;
+                }
+                break;
               case FUNC:
 
               if(right) {

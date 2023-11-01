@@ -14,6 +14,7 @@
 #define RIGHT_LINK 2 //represents the expression at the left of some expression
 #define CHILD(pos) RIGHT_LINK + pos
 //any other number for links are it's childs
+#define SYSCALL_ARGS 6
 
 typedef enum {
     NAME_TK, //any name created by the user(that does not matches any of the builtin types)
@@ -45,6 +46,7 @@ typedef enum {
     ELSE_TK,
     WHILE_TK,
     FOR_TK,
+    SYSCALL_TK,
     PAR_OPEN,
     PAR_CLOSE,
     END_BAR,
