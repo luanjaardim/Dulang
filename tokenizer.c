@@ -9,13 +9,14 @@ struct SymbPrecedence {
   int tokenType, precedence;
 };
 
-static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
+static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV - 1] = { //NUM_DIV is the first builtin word
   {"/", NUM_DIV, BUILTIN_LOW_PREC},
   {"*", NUM_MUL, BUILTIN_LOW_PREC},
   {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
   {"not", LOG_NOT,  BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
-  /* var */ //other unary operations
-  /* int */
+  {"var", VARIABLE, BUILTIN_SINGLE_OPERAND},
+  {"int", TYPE_INT, BUILTIN_SINGLE_OPERAND},
+  /* {"str", TYPE_STR, BUILTIN_SINGLE_OPERAND}, */
   /* str */
   /* float */
   /* char */
@@ -34,12 +35,14 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"bnot", BIT_NOT, BUILTIN_MEDIUM_PREC},
   {"=", ASSIGN,     BUILTIN_HIGH_PREC},
   {"fn", FUNC,      BUILTIN_HIGH_PREC},
-  {"if", IF,        BUILTIN_HIGH_PREC},
-  {"else", ELSE,    BUILTIN_HIGH_PREC},
-  {"while", WHILE,  BUILTIN_HIGH_PREC},
-  {"for", FOR,      BUILTIN_HIGH_PREC},
-  {"(", PAR_OPEN,   BUILTIN_HIGH_PREC}, //this precedence will maybe change
-  {")", PAR_CLOSE,  BUILTIN_HIGH_PREC}, //this precedence will maybe change
+  {"if", IF_TK,        BUILTIN_HIGH_PREC},
+  {"else", ELSE_TK,    BUILTIN_HIGH_PREC},
+  {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
+  {"for", FOR_TK,      BUILTIN_HIGH_PREC},
+  {"(", PAR_OPEN,   SYMBOLS},
+  {")", PAR_CLOSE,  SYMBOLS},
+  {"|", END_BAR,  SYMBOLS},
+  {":", COLON,  SYMBOLS}
   /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
@@ -65,7 +68,7 @@ TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
     if(word[i] > 57 || word[i] < 48) break;
   if(len == i) return (TkTypeAndPrecedence) {INT_TK, COMPTIME_KNOWN};
 
-  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
+  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV - 1; i++) {
     if(cmpStr(word, builtinWords[i].symbol))
       return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
@@ -314,7 +317,8 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         }
         else{
             maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-            switch (c) {
+            switch (c) { //for reserved symbols that can be used in expressions withouth spaces
+              //every symbol that can precede a '='
               case '=':
               case '>':
               case '<':
@@ -324,8 +328,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
               case '*':
               case '/':
               case '%':
-              /* case '|': */
-              /* case ':': */
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
                 word[0] = c;
                 c = getc(fd);
@@ -343,6 +345,17 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
                 cleanWord(word, &sizeWord);
                 continue;
+
+              case ':':
+              case '|':
+              case ',':
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                word[0] = c;
+                word[1] = 0;
+                sizeWord = 1;
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
+                cleanWord(word, &sizeWord);
+                break;
 
               default:
                 word[sizeWord++] = c;
