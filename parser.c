@@ -86,7 +86,7 @@ Expression *parseExprLink(Expression *expr) {
             if(leftToken && rightToken) {
               if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)
                ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)) {
-                  printLinkExprs(tmpExpr, 0);
+                  /* printLinkExprs(tmpExpr, 0); */
                 if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
                 if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
                   fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
@@ -145,7 +145,7 @@ Expression *parseExprLink(Expression *expr) {
               case ELSE_TK:
                 break;
               case SYSCALL_TK:
-                printLinkExprs(tmpExpr, 0);
+              {
                 int paramCount = 0;
                 while(1) {
                   if(paramCount > SYSCALL_ARGS) {
@@ -170,6 +170,7 @@ Expression *parseExprLink(Expression *expr) {
                   paramCount++;
                 }
                 break;
+              }
               case FUNC:
 
               if(right) {

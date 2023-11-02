@@ -12,15 +12,6 @@
 
 #define CMD_ERROR 256
 
-void insertIntToStr(FILE *f) {
-    FILE *toRead = fopen("intToStr.asm", "r");
-    char c;
-    while((c = fgetc(toRead)) != EOF) {
-        fputc(c, f);
-    }
-    fclose(toRead);
-}
-
 int main(int argc, char **argv) {
 
     if(argc < 2) {
@@ -65,19 +56,10 @@ int main(int argc, char **argv) {
     sprintf(fileToCreate, "%s%s", fileName, ".asm");
 
     f = fopen(fileToCreate, "w");
-    fprintf(f, "segment .text\n");
-    fprintf(f, "global _start\n");
-    fprintf(f, "_start:\n");
 
+    //Generating the .asm file and compiling it
     generateDulangFile(f, &pf);
 
-    fprintf(f, "    call int_to_str\n");
-    fprintf(f, ";;--end of execution, return 0\n");
-    fprintf(f, "    mov rdi, 0\n");
-    fprintf(f, "    mov rax, 0x3c\n");
-    fprintf(f, "    syscall\n");
-
-    insertIntToStr(f);
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");
         exit(1);

@@ -1,0 +1,18 @@
+$ Code to use the read and write syscalls to a buffer
+fn main
+    write = 1   $ number of the write syscall
+    STDOUT = 1  $ file descriptor of the STDOUT
+    read = 0    $ number of the write syscall
+    STDIN = 0   $ file descriptor of the STDIN
+
+    $ fixed size buffer to store the user input
+    buffer = "                     "
+    lenBuffer = 35-13
+
+    $reading user input
+    sys
+        read STDIN buffer lenBuffer |
+
+    $printing user input
+    sys
+        write STDOUT buffer lenBuffer |

@@ -36,3 +36,12 @@ void swap(void *a, void *b, size_t size) {
     d[i] = tmp;
   }
 }
+
+void insertIntToStr(FILE *f) {
+    FILE *toRead = fopen("intToStr.asm", "r");
+    char c;
+    while((c = fgetc(toRead)) != EOF) {
+        fputc(c, f);
+    }
+    fclose(toRead);
+}

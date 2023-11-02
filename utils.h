@@ -14,7 +14,7 @@
 #define RIGHT_LINK 2 //represents the expression at the left of some expression
 #define CHILD(pos) RIGHT_LINK + pos
 //any other number for links are it's childs
-#define SYSCALL_ARGS 6
+#define SYSCALL_ARGS 7
 
 typedef enum {
     NAME_TK, //any name created by the user(that does not matches any of the builtin types)
@@ -69,5 +69,6 @@ void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);
 int cmpStr(const char *const str1, const char *const str2);
 void swap(void *a, void *b, size_t size);
+void insertIntToStr(FILE *f);
 
 #endif // UTILS_H_
