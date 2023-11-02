@@ -40,6 +40,7 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV - 1]
   {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
   {"for", FOR_TK,      BUILTIN_HIGH_PREC},
   {"sys", SYSCALL_TK,      BUILTIN_HIGH_PREC},
+  {"dump", PRINT_INT, BUILTIN_HIGH_PREC},
   {"(", PAR_OPEN,   SYMBOLS},
   {")", PAR_CLOSE,  SYMBOLS},
   {"|", END_BAR,  SYMBOLS},

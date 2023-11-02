@@ -47,6 +47,7 @@ typedef enum {
     WHILE_TK,
     FOR_TK,
     SYSCALL_TK,
+    PRINT_INT,
     PAR_OPEN,
     PAR_CLOSE,
     END_BAR,

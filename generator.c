@@ -39,7 +39,7 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
     dataSegmentSize = strlen(text);
     memcpy(dataSegment, text, dataSegmentSize);
 
-    /* insertIntToStr(f); */
+    insertIntToStr(f);
     fprintf(f, "segment .text\n");
     fprintf(f, "global _start\n");
     fprintf(f, "_start:\n");
@@ -56,7 +56,6 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
         }
         map_delete(&var_map);
     }
-    /* fprintf(f, "    call int_to_str\n"); */
 
     fprintf(f, ";;--end of execution, return 0\n");
     fprintf(f, "    mov rdi, 0\n");
@@ -118,10 +117,13 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map) {
                printf("Empty syscall\n");
                break;
             }
+            int i;
             char *registers[] = {"rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"};
-            for(int i = CHILD(1); i < (int)node_get_num_neighbours(expr); i++) {
+
+            for(i = CHILD(1); i < (int)node_get_num_neighbours(expr); i++) {
                 translateExpression(f, node_get_neighbour(expr, i), var_map);
-                /* printf("%d %d\n", i, CHILD(1)); */
+            }
+            for( i-= 1; i >= CHILD(1); i--){
                 fprintf(f, "pop %s\n", registers[i-(CHILD(1))]);
                 rsp -= 8;
             }
@@ -200,6 +202,10 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map) {
             }
             break;
         }
+        case PRINT_INT:
+            translateExpression(f, node_get_neighbour(expr, CHILD(1)), var_map);
+            fprintf(f, "call int_to_str\n");
+            break;
         default:
             printf("Error: unknown token type\n");
             break;
