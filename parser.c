@@ -17,8 +17,9 @@ Expression *createExpression(Token *tk) {
 Expression *parseExprLink(Expression *expr) {
   /* printLinkExprs(expr, 0); */
   /* printf("-------------------------------------------------------------\n"); */
+  if(expr == NULL) return NULL;
 
-  for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC; i++) {
+  for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC && expr_node_get_value(expr).toParse; i++) {
     /* while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK); */
 
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
@@ -26,7 +27,7 @@ Expression *parseExprLink(Expression *expr) {
     TokenToParse leftTk, rightTk;
     Token *tmpToken, *leftToken, *rightToken;
     unsigned char leftIsParsed, rightIsParsed;
-    while(node_get_neighbour(tmpExpr, RIGHT_LINK)) {
+    do {
       //if fn expect a name, check if the name already exists, else add it to the map of functions
       //then expect ':' or '|', if ':' is found expect args types and names, if '|' there are no args
       //if the name is main it's the entry point
@@ -37,6 +38,7 @@ Expression *parseExprLink(Expression *expr) {
       //the map of functions must have the name as the key and the label that will be generated as the value
       //the map of variables must have the name as the key and the offset from rbp to access it
       tmpToken = expr_node_get_value(tmpExpr).tk;
+      /* printf("token: %s\n", tmpToken->text); */
 
       if(i == tmpToken->typeAndPrecedence.precedence && expr_node_get_value(tmpExpr).toParse) {
         /* printf("entrou: %s prec: %d\n", tmpToken->text, tmpToken->typeAndPrecedence.precedence); */
@@ -106,7 +108,12 @@ Expression *parseExprLink(Expression *expr) {
             switch(tmpToken->typeAndPrecedence.type) {
 
               case ASSIGN:
-              goto getLeftAndRightNeighbours;
+              if(right && left)
+                goto getLeftAndRightNeighbours;
+              else {
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+              }
                 break;
               case IF_TK:
               {
@@ -256,9 +263,7 @@ Expression *parseExprLink(Expression *expr) {
       /* while(node_get_neighbour(tmpExpr, PARENT_LINK)) tmpExpr = node_get_neighbour(tmpExpr, PARENT_LINK); */
 
       tmpExpr = node_get_neighbour(tmpExpr, RIGHT_LINK);
-      if(tmpExpr == NULL)
-        break;
-    }
+    } while(tmpExpr);
   }
   //return the expression that is at the highest level
   while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
@@ -297,9 +302,9 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
     tmp = createExpression(currToken(*tf));
     node_set_double_link_at(tailExpr, tmp, RIGHT_LINK, LEFT_LINK);
     tailExpr = tmp;
-    nextToken(tf);
+    if(nextToken(tf) == NULL) break;
   }
-  /* printLinkExprs(currBlock.head, 0); */
+  /* printLinkExprs(headExpr, 0); */
   Expression *parsedExpr = parseExprLink(headExpr);
   tailExpr = parsedExpr;
   while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
@@ -313,10 +318,11 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   Token *headToken = currToken(*tf);
   Expression *headExpr = createExpression(headToken);
   Expression *tailExpr = headExpr;
-  ExprBlock tmp;
   size_t lastId = endOfCurrBlock(*tf).lastId;
-  while(1){
-    nextToken(tf);
+  if(nextToken(tf) == NULL) return (ExprBlock) {headExpr, tailExpr};
+
+  ExprBlock tmp;
+  do {
     if(currToken(*tf)->typeAndPrecedence.type == PAR_OPEN) {
       nextToken(tf);
       tmp = createExprBlockTill(tf, PAR_CLOSE);
@@ -327,31 +333,40 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
       /* printf("endOfLine: %ld, currLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine, tf->currLine); */
 
       //if the block has a inner block, make a recurse call to it
-      if(tf->currElem == 0 && (int)endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine != currToken(*tf)->l) {
+      if(tf->currElem == 0) {
         /* printf("here: %s\n", currToken(*tf)->text); */
         /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
         tmp = createExprBlock(tf);
+        /* printf("------------------------------------\n"); */
+        /* printLinkExprs(tmp.head, 0); */
+        /* printf("------------------------------------\n"); */
+        while(node_get_neighbour(tmp.tail, RIGHT_LINK)) tmp.tail = node_get_neighbour(tmp.tail, RIGHT_LINK);
+        /* printf("here2: %ld\n", currToken(*tf)->id); */
+        /* if(nextToken(tf) == NULL) break; */
+        /* else returnToken(tf); */
       }
       else { tmp.head = tmp.tail = createExpression(currToken(*tf)); }
 
     }
 
     node_set_double_link_at(tailExpr, tmp.head, RIGHT_LINK, LEFT_LINK);
+    /* printf("------------------------------------\n"); */
+    /* printLinkExprs(headExpr, 0); */
+    /* printf("------------------------------------\n"); */
     /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
     tailExpr = tmp.tail;
-    if(currToken(*tf)->id == lastId) break;
-    else if(currToken(*tf)->id > lastId) {
-      fprintf(stderr, "You can't do that thing you did");
-      exit(1);
-    }
-  }
-  /* printf("here\n"); */
-  /* printLinkExprs(currBlock.head, 0); */
-  /* printf("here\n"); */
-  /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
+    if(currToken(*tf)->id >= lastId) break;
+    /* else if(currToken(*tf)->id > lastId) { */
+    /*   //print tokenized file informations all */
+
+    /*   exit(1); */
+    /* } */
+  } while(nextToken(tf));
   Expression *parsedExpr = parseExprLink(headExpr);
   tailExpr = parsedExpr;
   while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
+  /* printf("Saindo\n"); */
+  /* printLinkExprs(parsedExpr, 0); */
   return (ExprBlock) {parsedExpr, tailExpr};
 }
 
@@ -371,7 +386,8 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
   };
   ExprBlock tmpBlock;
   /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
-  while(currToken(*tf)) {
+
+  do {
     tmpBlock = createExprBlock(tf);
     //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
     if(pf.entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->typeAndPrecedence.type == FUNC) {
@@ -381,9 +397,8 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
     maybeRealloc((void**)&pf.blocks, (int*)&pf.capBlocks, pf.qtdBlocks, sizeof(HighLevelBlock));
     pf.blocks[pf.qtdBlocks++] = (HighLevelBlock)tmpBlock;
 
-    nextToken(tf);
     /* printf("is null: %d\n", currToken(*tf) == NULL); */
-  }
+  } while(nextToken(tf));
   return pf;
 }
 

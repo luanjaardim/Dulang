@@ -128,8 +128,10 @@ Token *currToken(TokenizedFile tf) {
 Token *nextToken(TokenizedFile *tf) {
   if(tf->lines[tf->currLine].qtdElements == ++tf->currElem) {
     //if there are no more lines to iterate over or the line is empty, then return NULL
-    if(tf->qtdLines == tf->currLine+1 || tf->lines[tf->currLine+1].qtdElements == 0)
+    if(tf->qtdLines == tf->currLine+1 || tf->lines[tf->currLine+1].qtdElements == 0) {
+      tf->currElem--;
       return NULL;
+    }
 
     tf->currElem = 0;
     tf->currLine++;
@@ -184,7 +186,7 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
 }
 
 /*
- * Return the id of the last word of the block
+ * Return the id of the last word of the block and it's line
 */
 struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
   int identationBlock = currToken(tf)->c;
@@ -314,6 +316,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
             //add a size one word with just '(' or ')'
             sizeWord = 1;
             word[0] = c;
+            word[1] = 0;
             addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
             cleanWord(word, &sizeWord);
         }
