@@ -12,9 +12,9 @@ int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size) {
     Token *s_tk = *(Token **)(s->key);
     /* pair_get_key(f, (void *)&f_tk, sizeof(TokenToParse)); */
     /* pair_get_key(s, (void *)&s_tk, sizeof(TokenToParse)); */
-    printf("inside cmp_token_to_parse\n");
-    printf("f: %s\n", f_tk->text);
-    printf("s: %s\n", s_tk->text);
+    /* printf("inside cmp_token_to_parse\n"); */
+    /* printf("f: %s\n", f_tk->text); */
+    /* printf("s: %s\n", s_tk->text); */
 
     if(f_tk->qtdChars > s_tk->qtdChars) return 1; //f is bigger
     if(f_tk->qtdChars < s_tk->qtdChars) return -1; //s is bigger
@@ -130,7 +130,7 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map) {
             fprintf(f, "syscall\n");
             break;
         case FUNC:
-            printf("%d\n", node_get_num_neighbours(expr));
+            /* printf("%d\n", node_get_num_neighbours(expr)); */
             translateExpression(f, node_get_neighbour(expr, CHILD(2)), var_map);
             printf("Error: function declaration not implemented yet\n");
             break;
@@ -186,7 +186,33 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map) {
             rsp += 8;
         }
             break;
+        case IF_TK:
+            if(node_get_neighbour(expr, CHILD(1)) == NULL || node_get_neighbour(expr, CHILD(2)) == NULL) {
+                fprintf(stderr, "Error: if statement without body\n");
+                exit(1);
+            }
+            translateExpression(f, node_get_neighbour(expr, CHILD(1)), var_map);
+            fprintf(f, "pop rax\n");
+            rsp -= 8;
+            fprintf(f, "cmp rax, 0\n");
 
+            Expression *right = node_get_neighbour(expr, RIGHT_LINK);
+            Token *rightTk = NULL;
+            if(right) rightTk = get_token_to_parse(right).tk;
+            if(right != NULL && rightTk->typeAndPrecedence.type == ELSE_TK) {
+                fprintf(f, "je .else_begin_%ld\n", rightTk->id);
+                translateExpression(f, node_get_neighbour(expr, CHILD(2)), var_map);
+                fprintf(f, "jmp .else_end_%ld\n", rightTk->id);
+                fprintf(f, ".else_begin_%ld:\n", rightTk->id);
+                translateExpression(f, node_get_neighbour(right, CHILD(1)), var_map);
+                fprintf(f, ".else_end_%ld:\n", rightTk->id);
+            } else {
+                Token *currToken = get_token_to_parse(expr).tk;
+                fprintf(f, "je .end_if_%ld\n", currToken->id);
+                translateExpression(f, node_get_neighbour(expr, CHILD(2)), var_map);
+                fprintf(f, ".end_if_%ld:\n", currToken->id);
+            }
+            break;
         case NAME_TK:
         {
             Token *tk = get_token_to_parse(expr).tk;

@@ -12,7 +12,7 @@
 #define PARENT_LINK 0//convention, NULL if does not have
 #define LEFT_LINK 1  //represents the expression at the right of some expression
 #define RIGHT_LINK 2 //represents the expression at the left of some expression
-#define CHILD(pos) RIGHT_LINK + pos
+#define CHILD(pos) (RIGHT_LINK + pos)
 //any other number for links are it's childs
 #define SYSCALL_ARGS 7
 

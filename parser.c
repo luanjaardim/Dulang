@@ -143,6 +143,16 @@ Expression *parseExprLink(Expression *expr) {
               }
                 break;
               case ELSE_TK:
+                if(right) {
+                  node_set_link(tmpExpr, NULL);
+                  node_change_neighbour_position(tmpExpr, RIGHT_LINK, CHILD(1));
+                  right = parseExprLink(right);
+                  node_change_neighbour_position(right, LEFT_LINK, PARENT_LINK);
+                }
+                else {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
                 break;
               case SYSCALL_TK:
               {
