@@ -14,6 +14,6 @@
 #include "utils.h"
 
 void generateDulangFile(FILE *f, ParsedFile *pf);
-void translateExpression(FILE *f, Expression *expr, Map *var_map);
+void translateExpression(FILE *f, Expression *expr, Map *var_map, int currConditional);
 
 #endif // GENERATOR_H_

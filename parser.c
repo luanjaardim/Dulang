@@ -117,7 +117,8 @@ Expression *parseExprLink(Expression *expr) {
                 break;
               case IF_TK:
               {
-                if(!right) {
+                conditionAndBodyAsChilds:
+                if(right == NULL) {
                   fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
                 }
@@ -152,9 +153,19 @@ Expression *parseExprLink(Expression *expr) {
               case ELSE_TK:
                 if(right) {
                   node_set_link(tmpExpr, NULL);
-                  node_change_neighbour_position(tmpExpr, RIGHT_LINK, CHILD(1));
-                  right = parseExprLink(right);
-                  node_change_neighbour_position(right, LEFT_LINK, PARENT_LINK);
+                  Token *tmpToken = expr_node_get_value(right).tk;
+                  if(tmpToken->typeAndPrecedence.type == IF_TK && tmpToken->l == expr_node_get_value(tmpExpr).tk->l) {
+                    node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+                    printf("to delete: %s\n", expr_node_get_value(right).tk->text);
+                    node_delete(right, NULL);
+                    right = node_get_neighbour(tmpExpr, RIGHT_LINK);
+                    goto conditionAndBodyAsChilds;
+                  }
+                  else {
+                    node_change_neighbour_position(tmpExpr, RIGHT_LINK, CHILD(1));
+                    right = parseExprLink(right);
+                    node_change_neighbour_position(right, LEFT_LINK, PARENT_LINK);
+                  }
                 }
                 else {
                   fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
