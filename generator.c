@@ -277,6 +277,24 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
                 }
             }
             break;
+        case WHILE_TK:
+            fprintf(f, ";; -- while %ld\n", get_token_to_parse(expr).tk->id);
+            Expression *condition = node_get_neighbour(expr, CHILD(1)), *body = node_get_neighbour(expr, CHILD(2));
+            if(condition == NULL || body == NULL) {
+                fprintf(stderr, "Error: not enough arguments for while\n");
+                exit(1);
+            }
+            fprintf(f, ".while_%ld:\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- condition check\n");
+            translateExpression(f, condition, var_map, currConditional);
+            fprintf(f, "pop rax\n");
+            rsp -= 8;
+            fprintf(f, "cmp rax, 0\n");
+            fprintf(f, "je .end_while_%ld\n", get_token_to_parse(expr).tk->id);
+            translateExpression(f, body, var_map, currConditional);
+            fprintf(f, "jmp .while_%ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ".end_while_%ld:\n", get_token_to_parse(expr).tk->id);
+            break;
         case NAME_TK:
         {
             fprintf(f, ";; -- user variable\n");

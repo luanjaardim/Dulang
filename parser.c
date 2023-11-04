@@ -115,6 +115,7 @@ Expression *parseExprLink(Expression *expr) {
                 exit(1);
               }
                 break;
+              case WHILE_TK:
               case IF_TK:
               {
                 conditionAndBodyAsChilds:
