@@ -197,6 +197,36 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             translateExpression(f, node_get_neighbour(expr, CHILD(2)), g);
             printf("Error: function declaration not implemented yet\n");
             break;
+        //these are the operations that can be done with only one operand at the right
+        case LOG_NOT:
+        case BIT_NOT:
+            fprintf(f, ";; -- %s %ld\n", (type == LOG_NOT) ? "log_not" : "bit_not", get_token_to_parse(expr).tk->id);
+            Expression *child = node_get_neighbour(expr, CHILD(1));
+            Token *childTk = get_token_to_parse(child).tk;
+            if(childTk->typeAndPrecedence.type != INT_TK) {
+                translateExpression(f, child, g);
+                fprintf(f, "pop rax\n");
+                rsp -= 8;
+            }
+            else
+                fprintf(f, "mov rax, %d\n", atoi(childTk->text));
+            switch(type) {
+                case BIT_NOT:
+                    fprintf(f, "not rax\n");
+                    break;
+                case LOG_NOT:
+                    fprintf(f, "cmp rax, 0\n");
+                    fprintf(f, "sete al\n");
+                    fprintf(f, "movzx rax, al\n");
+                    break;
+                default:
+                    break;
+            }
+            fprintf(f, "push rax\n");
+            rsp += 8;
+
+            break;
+        //these are the operations that can be done with 2 operands, one at the left and one at the right
         case NUM_ADD:
         case NUM_SUB:
         case NUM_MUL:
@@ -208,6 +238,10 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         case CMP_GT:
         case CMP_GE:
         case CMP_LE:
+        case LOG_OR:
+        case LOG_AND:
+        case BIT_OR:
+        case BIT_AND:
         {
             fprintf(f, ";; -- operation %s\n", get_token_to_parse(expr).tk->text);
             Expression *left = node_get_neighbour(expr, CHILD(1));
@@ -245,8 +279,23 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, "div rbx\n");
                     break;
                 case NUM_MOD:
+                    fprintf(f, "xor rdx, rdx\n");
                     fprintf(f, "div rbx\n");
                     fprintf(f, "mov rax, rdx\n");
+                    break;
+                //bitwise operations
+                case BIT_OR:
+                case BIT_AND:
+                    fprintf(f, "%s rax, rbx\n", (BIT_OR == type) ? "or" : "and");
+                    break;
+                case LOG_OR:
+                case LOG_AND:
+                    fprintf(f, "cmp rax, 0\n");
+                    fprintf(f, "setne al\n");
+                    fprintf(f, "cmp rbx, 0\n");
+                    fprintf(f, "setne bl\n");
+                    fprintf(f, "%s al, bl\n", (LOG_OR == type) ? "or" : "and");
+                    fprintf(f, "movzx rax, al\n");
                     break;
                 case CMP_NE:
                 case CMP_EQ:
@@ -339,20 +388,10 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             g = backup;
             break;
         case STOP_TK:
-            //it should work only inside loops, don't know how yet
-            if(insideLoop) {
-                fprintf(f, ";; -- stop\n");
-                fprintf(f, "jmp .end_while_%d\n", g.currLoop);
-            } else {
-                fprintf(stderr, "Error: %s outside loop: %d, %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
-                exit(1);
-            }
-            break;
         case SKIP_TK:
-            //it should work only inside loops, don't know how yet
-            if(insideLoop){
-                fprintf(f, ";; -- skip\n");
-                fprintf(f, "jmp .while_%d\n", g.currLoop);
+            if(insideLoop) {
+                fprintf(f, ";; -- %s\n", (type == STOP_TK) ? "stop" : "skip");
+                fprintf(f, "jmp .%s_%d\n", (type == STOP_TK) ? "end_while" : "while", g.currLoop);
             } else {
                 fprintf(stderr, "Error: %s outside loop: %d, %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
                 exit(1);

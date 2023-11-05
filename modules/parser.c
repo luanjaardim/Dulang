@@ -90,6 +90,7 @@ Expression *parseExprLink(Expression *expr) {
                 expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
               break;
               default:
+                getRightNeighbour:
                 //get the first element after it as CHILD(1)
                 if(right) {
                   node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
@@ -254,6 +255,10 @@ Expression *parseExprLink(Expression *expr) {
               //here we should iterate tmpExpr till find the end of function definition, at |
               //storing informations about the type and number of params
                 break;
+
+                case PRINT_INT:
+                  goto getRightNeighbour;
+
               default:
                 break;
             }

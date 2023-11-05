@@ -1,0 +1,22 @@
+fn main
+   $ while the condition after the "while" and before the end bar is true
+   $ the while will continue to execute, skip or stop can be used inside whiles
+   $ skip -> is the continue of other programming languages
+   $ stop -> is the break of other programming languages
+
+   sla = 20
+   while sla != 0|
+         sla = sla - 1
+         if sla == 10| stop
+         dump sla
+   sys
+    1 1 "exited the while with stop!" (39-11) |
+
+   while sla > 0|
+         sla = sla -1
+         $ here we will only print the even numbers
+         if (sla band 1) != 0|
+            skip
+         dump sla
+   sys
+    1 1 "skiped some odd dumps with skip!" (41-8) |
