@@ -13,7 +13,14 @@
 #include "map.h"
 #include "utils.h"
 
+typedef struct {
+    Map *var_map;
+    /* Map *func_map; */
+    int currConditional;
+    int currLoop;
+} Generator;
+
 void generateDulangFile(FILE *f, ParsedFile *pf);
-void translateExpression(FILE *f, Expression *expr, Map *var_map, int currConditional);
+void translateExpression(FILE *f, Expression *expr, Generator g);
 
 #endif // GENERATOR_H_

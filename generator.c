@@ -33,6 +33,10 @@ int dataSegmentSize = 0, dataSegmentCap = 0;
 /* char *bssSegment = NULL; */
 
 void generateDulangFile(FILE *f, ParsedFile *pf) {
+    Generator g = {
+      .currConditional = 0,
+      .currLoop = 0,
+    };
     dataSegment = malloc(sizeof(char) * 100);
     dataSegmentCap = 100;
     char *text= "segment .data\n";
@@ -49,12 +53,13 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
         ExprBlock block = pf->blocks[i];
 
         Expression *tmp = block.head;
-        Map var_map = map_create(sizeof(Token *), sizeof(int), cmp_token_to_parse);
+        Map map = map_create(sizeof(Token *), sizeof(int), cmp_token_to_parse);
+        g.var_map = &map;
         while(tmp) {
-            translateExpression(f, tmp, &var_map, -1);
+            translateExpression(f, tmp, g);
             tmp = node_get_neighbour(tmp, RIGHT_LINK);
         }
-        map_delete(&var_map);
+        map_delete(g.var_map);
     }
 
     fprintf(f, ";;--end of execution, return 0\n");
@@ -69,7 +74,7 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
 int rsp = 0, rbp = 0;
 int conditionals = -1;
 
-void getConditionAndBody(FILE *f, Expression *expr, Map *var_map, int *currConditional) {
+void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
     Expression *condition = node_get_neighbour(expr, CHILD(1)), *body = node_get_neighbour(expr, CHILD(2));
     Token *currToken = get_token_to_parse(expr).tk;
     if(condition == NULL || body == NULL) {
@@ -80,10 +85,10 @@ void getConditionAndBody(FILE *f, Expression *expr, Map *var_map, int *currCondi
     Token *rightTk = NULL;
     if(right) rightTk = get_token_to_parse(right).tk;
     if(right && currToken->typeAndPrecedence.type == IF_TK && rightTk->typeAndPrecedence.type == ELSE_TK) {
-        *currConditional = ++conditionals;
+        g->currConditional = ++conditionals;
     }
 
-    translateExpression(f, condition, var_map, *currConditional);
+    translateExpression(f, condition, *g);
     fprintf(f, "pop rax\n");
     rsp -= 8;
     fprintf(f, "cmp rax, 0\n");
@@ -104,25 +109,25 @@ void getConditionAndBody(FILE *f, Expression *expr, Map *var_map, int *currCondi
         //here we are a solo if, we don't need to create a new end_cond, only the local end_if is fine
         if(currToken->typeAndPrecedence.type == IF_TK) {
             fprintf(f, "je .end_if_%ld\n", currToken->id);
-            translateExpression(f, body, var_map, *currConditional);
+            translateExpression(f, body, *g);
             fprintf(f, ".end_if_%ld:\n", currToken->id);
         }
         //here we are the last one of a sequence that ends without a proper else
         else {
-            fprintf(f, "je .end_cond_%d\n", *currConditional);
-            translateExpression(f, body, var_map, *currConditional);
+            fprintf(f, "je .end_cond_%d\n", g->currConditional);
+            translateExpression(f, body, *g);
         }
     }
     //here we are inside a sequence of if, else if and else, we need a local end and the end of the sequence
     else {
         fprintf(f, "je .end_if_%ld\n", currToken->id);
-        translateExpression(f, body, var_map, *currConditional);
-        fprintf(f, "jmp .end_cond_%d\n", *currConditional);
+        translateExpression(f, body, *g);
+        fprintf(f, "jmp .end_cond_%d\n", g->currConditional);
         fprintf(f, ".end_if_%ld:\n", currToken->id);
     }
 }
 
-void translateExpression(FILE *f, Expression *expr, Map *var_map, int currConditional) {
+void translateExpression(FILE *f, Expression *expr, Generator g) {
     TokenType type = get_token_to_parse(expr).tk->typeAndPrecedence.type;
     /* fprintf(f, ";; -- instruction %ld\n", get_token_to_parse(expr).tk->id); */
     switch(type) {
@@ -155,10 +160,10 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             break;
         case ASSIGN:
             fprintf(f, ";; -- assign %ld\n", get_token_to_parse(expr).tk->id);
-            translateExpression(f, node_get_neighbour(expr, CHILD(2)), var_map, currConditional);
+            translateExpression(f, node_get_neighbour(expr, CHILD(2)), g);
             Token *tk = get_token_to_parse(node_get_neighbour(expr, CHILD(1))).tk;
             int tmp, ret;
-            ret = map_get_value(var_map, (void **)&tk, (void *)&tmp);
+            ret = map_get_value(g.var_map, (void **)&tk, (void *)&tmp);
 
             /* printf("token: %d\n", ret); */
             if(ret) {
@@ -167,7 +172,7 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
                 fprintf(f, "mov [rbp-%d], rax\n", tmp);
             }
             else
-                map_insert(var_map, (void **)&tk, (void *)&rsp);
+                map_insert(g.var_map, (void **)&tk, (void *)&rsp);
             break;
         case SYSCALL_TK:
             fprintf(f, ";; -- syscall %ld\n", get_token_to_parse(expr).tk->id);
@@ -179,7 +184,7 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             char *registers[] = {"rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"};
 
             for(i = CHILD(1); i < (int)node_get_num_neighbours(expr); i++) {
-                translateExpression(f, node_get_neighbour(expr, i), var_map, currConditional);
+                translateExpression(f, node_get_neighbour(expr, i), g);
             }
             for( i-= 1; i >= CHILD(1); i--){
                 fprintf(f, "pop %s\n", registers[i-(CHILD(1))]);
@@ -189,7 +194,7 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             break;
         case FUNC:
             /* printf("%d\n", node_get_num_neighbours(expr)); */
-            translateExpression(f, node_get_neighbour(expr, CHILD(2)), var_map, currConditional);
+            translateExpression(f, node_get_neighbour(expr, CHILD(2)), g);
             printf("Error: function declaration not implemented yet\n");
             break;
         case NUM_ADD:
@@ -204,8 +209,8 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             TokenType left_type = get_token_to_parse(left).tk->typeAndPrecedence.type;
             TokenType right_type = get_token_to_parse(right).tk->typeAndPrecedence.type;
 
-            if(left_type != INT_TK) translateExpression(f, left, var_map, currConditional); //right first because of the stack pop order
-            if(right_type != INT_TK) translateExpression(f, right, var_map, currConditional);
+            if(left_type != INT_TK) translateExpression(f, left, g); //right first because of the stack pop order
+            if(right_type != INT_TK) translateExpression(f, right, g);
 
             if(left_type != INT_TK) {
                 fprintf(f, "pop rax\n");
@@ -247,7 +252,7 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             break;
         case IF_TK:
             fprintf(f, ";; -- if %ld\n", get_token_to_parse(expr).tk->id);
-            getConditionAndBody(f, expr, var_map, &currConditional);
+            getConditionAndBody(f, expr, &g);
             break;
         case ELSE_TK:
             if(get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->typeAndPrecedence.type != ELSE_TK
@@ -263,17 +268,17 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
                     fprintf(stderr, "Error: else without body\n");
                     exit(1);
                 }
-                translateExpression(f, child, var_map, currConditional);
-                fprintf(f, ".end_cond_%d:\n", currConditional);
+                translateExpression(f, child, g);
+                fprintf(f, ".end_cond_%d:\n", g.currConditional);
             }
             //this is an else if
             else {
                 fprintf(f, ";; -- else if %ld\n", get_token_to_parse(expr).tk->id);
-                getConditionAndBody(f, expr, var_map, &currConditional);
+                getConditionAndBody(f, expr, &g);
                 Expression *right = node_get_neighbour(expr, RIGHT_LINK);
                 //if there is not an else after this else if, we need to put the end of the if here
                 if(right == NULL || get_token_to_parse(right).tk->typeAndPrecedence.type != ELSE_TK) {
-                    fprintf(f, ".end_cond_%d:\n", currConditional);
+                    fprintf(f, ".end_cond_%d:\n", g.currConditional);
                 }
             }
             break;
@@ -286,12 +291,12 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             }
             fprintf(f, ".while_%ld:\n", get_token_to_parse(expr).tk->id);
             fprintf(f, ";; -- condition check\n");
-            translateExpression(f, condition, var_map, currConditional);
+            translateExpression(f, condition, g);
             fprintf(f, "pop rax\n");
             rsp -= 8;
             fprintf(f, "cmp rax, 0\n");
             fprintf(f, "je .end_while_%ld\n", get_token_to_parse(expr).tk->id);
-            translateExpression(f, body, var_map, currConditional);
+            translateExpression(f, body, g);
             fprintf(f, "jmp .while_%ld\n", get_token_to_parse(expr).tk->id);
             fprintf(f, ".end_while_%ld:\n", get_token_to_parse(expr).tk->id);
             break;
@@ -300,7 +305,7 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
             fprintf(f, ";; -- user variable\n");
             Token *tk = get_token_to_parse(expr).tk;
             int tmp, ret;
-            ret = map_get_value(var_map, (void **)&tk, (void *)&tmp);
+            ret = map_get_value(g.var_map, (void **)&tk, (void *)&tmp);
             if(ret) {
                 fprintf(f, "push qword[rbp-%d]\n", tmp); //TODO: the size can be variable
                 rsp += 8;
@@ -313,13 +318,15 @@ void translateExpression(FILE *f, Expression *expr, Map *var_map, int currCondit
         }
         case PRINT_INT:
             fprintf(f, ";; -- dump int\n");
-            translateExpression(f, node_get_neighbour(expr, CHILD(1)), var_map, currConditional);
+            translateExpression(f, node_get_neighbour(expr, CHILD(1)), g);
             fprintf(f, "call int_to_str\n");
+            fprintf(f, "add rsp, 8\n");
+            rsp -= 8;
             break;
         default:
             printf("Error: unknown token type\n");
             break;
     }
     Expression *right = node_get_neighbour(expr, RIGHT_LINK);
-    if(right) translateExpression(f, right, var_map, currConditional);
+    if(right) translateExpression(f, right, g);
 }
