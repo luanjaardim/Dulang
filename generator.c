@@ -72,7 +72,7 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
 }
 
 int rsp = 0, rbp = 0;
-int conditionals = -1;
+int conditionals = -1, loops = -1, insideLoop = 0;
 
 void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
     Expression *condition = node_get_neighbour(expr, CHILD(1)), *body = node_get_neighbour(expr, CHILD(2));
@@ -289,16 +289,39 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(stderr, "Error: not enough arguments for while\n");
                 exit(1);
             }
-            fprintf(f, ".while_%ld:\n", get_token_to_parse(expr).tk->id);
+            g.currLoop = ++loops;
+            insideLoop++;
+            fprintf(f, ".while_%d:\n", g.currLoop);
             fprintf(f, ";; -- condition check\n");
             translateExpression(f, condition, g);
             fprintf(f, "pop rax\n");
             rsp -= 8;
             fprintf(f, "cmp rax, 0\n");
-            fprintf(f, "je .end_while_%ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, "je .end_while_%d\n", g.currLoop);
             translateExpression(f, body, g);
-            fprintf(f, "jmp .while_%ld\n", get_token_to_parse(expr).tk->id);
-            fprintf(f, ".end_while_%ld:\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, "jmp .while_%d\n", g.currLoop);
+            fprintf(f, ".end_while_%d:\n", g.currLoop);
+            insideLoop--;
+            break;
+        case STOP_TK:
+            //it should work only inside loops, don't know how yet
+            if(insideLoop) {
+                fprintf(f, ";; -- stop\n");
+                fprintf(f, "jmp .end_while_%d\n", g.currLoop);
+            } else {
+                fprintf(stderr, "Error: stop outside loop\n");
+                exit(1);
+            }
+            break;
+        case SKIP_TK:
+            //it should work only inside loops, don't know how yet
+            if(insideLoop){
+                fprintf(f, ";; -- skip\n");
+                fprintf(f, "jmp .while_%d\n", g.currLoop);
+            } else {
+                fprintf(stderr, "Error: skip outside loop\n");
+                exit(1);
+            }
             break;
         case NAME_TK:
         {

@@ -83,6 +83,27 @@ Expression *parseExprLink(Expression *expr) {
             break;
           case BUILTIN_SINGLE_OPERAND:
             //unary operations, take just one arg after it
+            switch(tmpToken->typeAndPrecedence.type) {
+              //these two doesn't need any arg, we just need to set as parsed
+              case SKIP_TK:
+              case STOP_TK:
+                expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+              break;
+              default:
+                //get the first element after it as CHILD(1)
+                if(right) {
+                  node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+                  node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+                  node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
+                  //set as already parsed
+                  expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+                }
+                else {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+              break;
+            }
             break;
           case BUILTIN_MEDIUM_PREC:
             if(leftToken && rightToken) {
@@ -157,7 +178,7 @@ Expression *parseExprLink(Expression *expr) {
                   Token *tmpToken = expr_node_get_value(right).tk;
                   if(tmpToken->typeAndPrecedence.type == IF_TK && tmpToken->l == expr_node_get_value(tmpExpr).tk->l) {
                     node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
-                    printf("to delete: %s\n", expr_node_get_value(right).tk->text);
+                    /* printf("to delete: %s\n", expr_node_get_value(right).tk->text); */
                     node_delete(right, NULL);
                     right = node_get_neighbour(tmpExpr, RIGHT_LINK);
                     goto conditionAndBodyAsChilds;
@@ -233,17 +254,6 @@ Expression *parseExprLink(Expression *expr) {
               //here we should iterate tmpExpr till find the end of function definition, at |
               //storing informations about the type and number of params
                 break;
-              case PRINT_INT:
-                //get the first element after it as CHILD(1)
-                if(right) {
-                  node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
-                  node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
-                  node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
-                }
-                else {
-                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
-                  exit(1);
-                }
               default:
                 break;
             }

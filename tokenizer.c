@@ -9,17 +9,20 @@ struct SymbPrecedence {
   int tokenType, precedence;
 };
 
-static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV - 1] = { //NUM_DIV is the first builtin word
+static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
   {"/", NUM_DIV, BUILTIN_LOW_PREC},
   {"*", NUM_MUL, BUILTIN_LOW_PREC},
   {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
-  {"not", LOG_NOT,  BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
-  {"var", VARIABLE, BUILTIN_SINGLE_OPERAND},
-  {"int", TYPE_INT, BUILTIN_SINGLE_OPERAND},
-  /* {"str", TYPE_STR, BUILTIN_SINGLE_OPERAND}, */
-  /* str */
+  {"not", LOG_NOT,    BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
+  {"var", VARIABLE,   BUILTIN_SINGLE_OPERAND},
+  {"int", TYPE_INT,   BUILTIN_SINGLE_OPERAND},
+  {"str", TYPE_STR,   BUILTIN_SINGLE_OPERAND},
   /* float */
   /* char */
+  {"skip", SKIP_TK,  BUILTIN_SINGLE_OPERAND},
+  {"stop", STOP_TK,  BUILTIN_SINGLE_OPERAND},
+  {"back", BACK_TK,  BUILTIN_SINGLE_OPERAND},
+  {"dump", PRINT_INT, BUILTIN_SINGLE_OPERAND},
   {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
   {"!=", CMP_DIF,   BUILTIN_MEDIUM_PREC},
   {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
@@ -40,7 +43,6 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV - 1]
   {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
   {"for", FOR_TK,      BUILTIN_HIGH_PREC},
   {"sys", SYSCALL_TK,      BUILTIN_HIGH_PREC},
-  {"dump", PRINT_INT, BUILTIN_HIGH_PREC},
   {"(", PAR_OPEN,   SYMBOLS},
   {")", PAR_CLOSE,  SYMBOLS},
   {"|", END_BAR,  SYMBOLS},
