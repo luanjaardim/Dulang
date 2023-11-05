@@ -40,9 +40,9 @@ int main(int argc, char **argv) {
 
     TokenizedFile tokFile = readToTokenizedFile(f);
     //Every word is turned into Tokens, with informations that helps on parsing
-    /* printTokenizedFile(tokFile); */
+    printTokenizedFile(tokFile);
     ParsedFile pf = createParsedFile(&tokFile);
-    printLinkExprs(pf.blocks[0].head, 0); //it will print the main function
+    /* printLinkExprs(pf.blocks[0].head, 0); //it will print the main function */
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");

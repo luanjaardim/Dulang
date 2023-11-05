@@ -23,16 +23,16 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"stop", STOP_TK,  BUILTIN_SINGLE_OPERAND},
   {"back", BACK_TK,  BUILTIN_SINGLE_OPERAND},
   {"dump", PRINT_INT, BUILTIN_SINGLE_OPERAND},
-  {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
-  {"!=", CMP_DIF,   BUILTIN_MEDIUM_PREC},
   {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
   {"-", NUM_SUB,    BUILTIN_MEDIUM_PREC},
-  {"or", LOG_OR,    BUILTIN_MEDIUM_PREC},
-  {"and", LOG_AND,  BUILTIN_MEDIUM_PREC},
+  {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
+  {"!=", CMP_NE,    BUILTIN_MEDIUM_PREC},
   {">=", CMP_GE,    BUILTIN_MEDIUM_PREC},
   {"<=", CMP_LE,    BUILTIN_MEDIUM_PREC},
   {">", CMP_GT,     BUILTIN_MEDIUM_PREC},
   {"<", CMP_LT,     BUILTIN_MEDIUM_PREC},
+  {"or", LOG_OR,    BUILTIN_MEDIUM_PREC},
+  {"and", LOG_AND,  BUILTIN_MEDIUM_PREC},
   {"band", BIT_AND, BUILTIN_MEDIUM_PREC},
   {"bor", BIT_OR,   BUILTIN_MEDIUM_PREC},
   {"bnot", BIT_NOT, BUILTIN_MEDIUM_PREC},
@@ -316,6 +316,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         }
         else if(c == '(' || c == ')') {
             addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            cleanWord(word, &sizeWord);
 
             //add a size one word with just '(' or ')'
             sizeWord = 1;
@@ -338,6 +339,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
               case '/':
               case '%':
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                cleanWord(word, &sizeWord);
                 word[0] = c;
                 c = getc(fd);
                 fileCol++;
@@ -359,6 +361,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
               case '|':
               case ',':
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                cleanWord(word, &sizeWord);
                 word[0] = c;
                 word[1] = 0;
                 sizeWord = 1;

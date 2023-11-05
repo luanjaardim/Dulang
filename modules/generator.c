@@ -202,6 +202,12 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         case NUM_MUL:
         case NUM_DIV:
         case NUM_MOD:
+        case CMP_EQ:
+        case CMP_NE:
+        case CMP_LT:
+        case CMP_GT:
+        case CMP_GE:
+        case CMP_LE:
         {
             fprintf(f, ";; -- operation %s\n", get_token_to_parse(expr).tk->text);
             Expression *left = node_get_neighbour(expr, CHILD(1));
@@ -241,6 +247,31 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 case NUM_MOD:
                     fprintf(f, "div rbx\n");
                     fprintf(f, "mov rax, rdx\n");
+                    break;
+                case CMP_NE:
+                case CMP_EQ:
+                case CMP_LT:
+                case CMP_GT:
+                case CMP_LE:
+                case CMP_GE:
+                    fprintf(f, "cmp rax, rbx\n");
+                    switch(type) {
+                        case CMP_EQ:
+                        case CMP_NE:
+                            fprintf(f, "%s al\n", (type == CMP_EQ) ? "sete" : "setne"); break;
+                        case CMP_GT:
+                        case CMP_LT:
+                            fprintf(f, "%s al\n", (type == CMP_GT) ? "setg" : "setl"); break;
+                        case CMP_GE:
+                        case CMP_LE:
+                            fprintf(f, "%s al\n", (type == CMP_GE) ? "setge" : "setle"); break;
+                        default:
+                            //error of unhandled comparison, tell the line and column
+                            printf("Error: unhandled comparison: %d, %d\n", get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
+                            exit(1);
+                            break;
+                    }
+                    fprintf(f, "movzx rax, al\n");
                     break;
                 default:
                     printf("Error: unknown token type\n");
@@ -338,7 +369,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 rsp += 8;
             }
             else {
-                printf("Error: variable not declared\n");
+                printf("Error: variable %s not declared, %d %d\n", tk->text, tk->l, tk->c);
                 exit(1);
             }
             break;
@@ -351,7 +382,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             rsp -= 8;
             break;
         default:
-            printf("Error: unknown token type\n");
+            printf("Error: unknown token type: %s, %d %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
             break;
     }
     Expression *right = node_get_neighbour(expr, RIGHT_LINK);

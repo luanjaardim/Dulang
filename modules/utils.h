@@ -31,7 +31,7 @@ typedef enum {
     STOP_TK,
     BACK_TK,
     CMP_EQ,
-    CMP_DIF,
+    CMP_NE,
     NUM_ADD,
     NUM_SUB,
     LOG_OR,
