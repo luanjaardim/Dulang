@@ -289,8 +289,9 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(stderr, "Error: not enough arguments for while\n");
                 exit(1);
             }
+            Generator backup = g;
             g.currLoop = ++loops;
-            insideLoop++;
+            printf("begin while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
             fprintf(f, ".while_%d:\n", g.currLoop);
             fprintf(f, ";; -- condition check\n");
             translateExpression(f, condition, g);
@@ -298,10 +299,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             rsp -= 8;
             fprintf(f, "cmp rax, 0\n");
             fprintf(f, "je .end_while_%d\n", g.currLoop);
+            insideLoop++;
             translateExpression(f, body, g);
             fprintf(f, "jmp .while_%d\n", g.currLoop);
             fprintf(f, ".end_while_%d:\n", g.currLoop);
             insideLoop--;
+            printf("end while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
+            g = backup;
             break;
         case STOP_TK:
             //it should work only inside loops, don't know how yet
@@ -309,7 +313,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(f, ";; -- stop\n");
                 fprintf(f, "jmp .end_while_%d\n", g.currLoop);
             } else {
-                fprintf(stderr, "Error: stop outside loop\n");
+                fprintf(stderr, "Error: %s outside loop: %d, %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
                 exit(1);
             }
             break;
@@ -319,7 +323,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(f, ";; -- skip\n");
                 fprintf(f, "jmp .while_%d\n", g.currLoop);
             } else {
-                fprintf(stderr, "Error: skip outside loop\n");
+                fprintf(stderr, "Error: %s outside loop: %d, %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
                 exit(1);
             }
             break;

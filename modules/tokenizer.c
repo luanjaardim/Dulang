@@ -191,6 +191,7 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
  * Return the id of the last word of the block and it's line
 */
 struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
+  /* printf("first word: %s\n", currToken(tf)->text); */
   int identationBlock = currToken(tf)->c;
   int firstLine = currToken(tf)->l;
   do {
@@ -198,6 +199,7 @@ struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
   } while(identationBlock < currToken(tf)->c);
   if(currToken(tf)->c <= identationBlock && firstLine != currToken(tf)->l)
     returnToken(&tf);
+  /* printf("last word: %s\n", currToken(tf)->text); */
 
   return (struct endOfBlock){ currToken(tf)->id, currToken(tf)->l };
 }

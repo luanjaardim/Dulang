@@ -1,6 +1,5 @@
 #include "map.h"
 
-
 Map map_create(size_t keySize, size_t valueSize, int (*cmp)(MapPair *, MapPair *, size_t)) {
     return (Map){
         .capPairs = 1,

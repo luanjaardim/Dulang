@@ -9,10 +9,8 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include "tokenizer.h"
-#include "parser.h"
-#include "node.h"
-#include "generator.h"
-//#include "bt_map.h"
+#include "modules/tokenizer.h"
+#include "modules/parser.h"
+#include "modules/generator.h"
 
 #endif // LIB_H_

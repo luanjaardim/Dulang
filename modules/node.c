@@ -8,13 +8,13 @@
 #define INITIAL_CAP 2
 unsigned num_nodes = 0;
 
-typedef struct Node {
+struct Node {
   void *data;
   unsigned id;
   unsigned num_neighbours;
   unsigned cap_neighbours;
   struct Node **neighbours;
-} Node;
+};
 
 /*
 * return a new node with that contains value and points to next_node

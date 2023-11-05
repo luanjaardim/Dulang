@@ -341,6 +341,7 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   Expression *headExpr = createExpression(headToken);
   Expression *tailExpr = headExpr;
   size_t lastId = endOfCurrBlock(*tf).lastId;
+  if(lastId == headToken->id) return (ExprBlock) {headExpr, tailExpr};
   if(nextToken(tf) == NULL) return (ExprBlock) {headExpr, tailExpr};
 
   ExprBlock tmp;
@@ -351,12 +352,9 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
     }
     else {
 
-      /* printf("line: %d, word: %s, ", currToken(*tf)->l, currToken(*tf)->text); */
-      /* printf("endOfLine: %ld, currLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine, tf->currLine); */
 
       //if the block has a inner block, make a recurse call to it
       if(tf->currElem == 0) {
-        /* printf("here: %s\n", currToken(*tf)->text); */
         /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
         tmp = createExprBlock(tf);
         /* printf("------------------------------------\n"); */
@@ -417,7 +415,7 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
         pf.entryPoint = pf.qtdBlocks;
     }
     maybeRealloc((void**)&pf.blocks, (int*)&pf.capBlocks, pf.qtdBlocks, sizeof(HighLevelBlock));
-    pf.blocks[pf.qtdBlocks++] = (HighLevelBlock)tmpBlock;
+    pf.blocks[pf.qtdBlocks++] = tmpBlock;
 
     /* printf("is null: %d\n", currToken(*tf) == NULL); */
   } while(nextToken(tf));
