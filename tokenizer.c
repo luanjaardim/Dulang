@@ -9,16 +9,20 @@ struct SymbPrecedence {
   int tokenType, precedence;
 };
 
-struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
+static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
   {"/", NUM_DIV, BUILTIN_LOW_PREC},
   {"*", NUM_MUL, BUILTIN_LOW_PREC},
   {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
-  {"not", LOG_NOT,  BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
-  /* var */ //other unary operations
-  /* int */
-  /* str */
+  {"not", LOG_NOT,    BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
+  {"var", VARIABLE,   BUILTIN_SINGLE_OPERAND},
+  {"int", TYPE_INT,   BUILTIN_SINGLE_OPERAND},
+  {"str", TYPE_STR,   BUILTIN_SINGLE_OPERAND},
   /* float */
   /* char */
+  {"skip", SKIP_TK,  BUILTIN_SINGLE_OPERAND},
+  {"stop", STOP_TK,  BUILTIN_SINGLE_OPERAND},
+  {"back", BACK_TK,  BUILTIN_SINGLE_OPERAND},
+  {"dump", PRINT_INT, BUILTIN_SINGLE_OPERAND},
   {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
   {"!=", CMP_DIF,   BUILTIN_MEDIUM_PREC},
   {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
@@ -34,12 +38,15 @@ struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is
   {"bnot", BIT_NOT, BUILTIN_MEDIUM_PREC},
   {"=", ASSIGN,     BUILTIN_HIGH_PREC},
   {"fn", FUNC,      BUILTIN_HIGH_PREC},
-  {"if", IF,        BUILTIN_HIGH_PREC},
-  {"else", ELSE,    BUILTIN_HIGH_PREC},
-  {"while", WHILE,  BUILTIN_HIGH_PREC},
-  {"for", FOR,      BUILTIN_HIGH_PREC},
-  {"(", PAR_OPEN,   BUILTIN_HIGH_PREC}, //this precedence will maybe change
-  {")", PAR_CLOSE,  BUILTIN_HIGH_PREC}, //this precedence will maybe change
+  {"if", IF_TK,        BUILTIN_HIGH_PREC},
+  {"else", ELSE_TK,    BUILTIN_HIGH_PREC},
+  {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
+  {"for", FOR_TK,      BUILTIN_HIGH_PREC},
+  {"sys", SYSCALL_TK,      BUILTIN_HIGH_PREC},
+  {"(", PAR_OPEN,   SYMBOLS},
+  {")", PAR_CLOSE,  SYMBOLS},
+  {"|", END_BAR,  SYMBOLS},
+  {":", COLON,  SYMBOLS}
   /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
@@ -58,15 +65,14 @@ Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAnd
 
 TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
   //compile time known values, str or int, has negative predecence: -1
-
-  //validation of str
+  if(word[0] == '"') return (TkTypeAndPrecedence) {STR_TK, COMPTIME_KNOWN};
 
   int i;
   for(i = 0; i < len; i++) //number validation
     if(word[i] > 57 || word[i] < 48) break;
   if(len == i) return (TkTypeAndPrecedence) {INT_TK, COMPTIME_KNOWN};
 
-  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
+  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV - 1; i++) {
     if(cmpStr(word, builtinWords[i].symbol))
       return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
@@ -124,8 +130,10 @@ Token *currToken(TokenizedFile tf) {
 Token *nextToken(TokenizedFile *tf) {
   if(tf->lines[tf->currLine].qtdElements == ++tf->currElem) {
     //if there are no more lines to iterate over or the line is empty, then return NULL
-    if(tf->qtdLines == tf->currLine+1 || tf->lines[tf->currLine+1].qtdElements == 0)
+    if(tf->qtdLines == tf->currLine+1 || tf->lines[tf->currLine+1].qtdElements == 0) {
+      tf->currElem--;
       return NULL;
+    }
 
     tf->currElem = 0;
     tf->currLine++;
@@ -180,7 +188,7 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
 }
 
 /*
- * Return the id of the last word of the block
+ * Return the id of the last word of the block and it's line
 */
 struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
   int identationBlock = currToken(tf)->c;
@@ -199,7 +207,7 @@ void printTokenizedFile(TokenizedFile p) {
     for(size_t i = 0; i < p.qtdLines; i++) {
         for(size_t j = 0; j < p.lines[i].qtdElements; j++) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
-                  humanReadableType[0],
+                  humanReadableType[p.lines[i].tk[j].typeAndPrecedence.type >= NUM_DIV ? 3 : p.lines[i].tk[j].typeAndPrecedence.type],
                   p.lines[i].tk[j].typeAndPrecedence.precedence);
 //min(p.lines[i].tk[j].typeAndPrecedence.type, NUM_DIV)
         }
@@ -270,9 +278,26 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
 
             cleanWord(word, &sizeWord);
         }
-        /* else if(c == '"') { */ //strings
+        else if(c == '"') {
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            cleanWord(word, &sizeWord);
 
-        /* } */
+            do {
+                maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+                word[sizeWord++] = c;
+                c = getc(fd);
+                fileCol++;
+            } while(c != '"' && c != EOF && c != '\n');
+            if(c == EOF || c == '\n') {
+                printf("Error: missing \"\n");
+                exit(1);
+            }
+            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
+            word[sizeWord++] = c;
+            fileCol++;
+            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+            cleanWord(word, &sizeWord);
+        }
         else if(c == '$') { //comments
             //adding the word before the comment
             addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
@@ -293,12 +318,14 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
             //add a size one word with just '(' or ')'
             sizeWord = 1;
             word[0] = c;
+            word[1] = 0;
             addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
             cleanWord(word, &sizeWord);
         }
         else{
             maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-            switch (c) {
+            switch (c) { //for reserved symbols that can be used in expressions withouth spaces
+              //every symbol that can precede a '='
               case '=':
               case '>':
               case '<':
@@ -308,8 +335,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
               case '*':
               case '/':
               case '%':
-              /* case '|': */
-              /* case ':': */
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
                 word[0] = c;
                 c = getc(fd);
@@ -327,6 +352,17 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
                 cleanWord(word, &sizeWord);
                 continue;
+
+              case ':':
+              case '|':
+              case ',':
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                word[0] = c;
+                word[1] = 0;
+                sizeWord = 1;
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
+                cleanWord(word, &sizeWord);
+                break;
 
               default:
                 word[sizeWord++] = c;

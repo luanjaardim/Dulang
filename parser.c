@@ -1,8 +1,4 @@
 #include "parser.h"
-#include "node.h"
-#include "tokenizer.h"
-#include "utils.h"
-#include <stdio.h>
 
 INIT_NODE_TYPE(expr, TokenToParse)
 
@@ -19,16 +15,19 @@ Expression *createExpression(Token *tk) {
  * Generates the expression AST of the expressions linked list
 */
 Expression *parseExprLink(Expression *expr) {
-  for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC; i++) {
-    while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
+  /* printLinkExprs(expr, 0); */
+  /* printf("-------------------------------------------------------------\n"); */
+  if(expr == NULL) return NULL;
+
+  for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC && expr_node_get_value(expr).toParse; i++) {
+    /* while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK); */
 
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
-    /* printf("%s\n", expr_node_get_value(expr).tk->text); */
 
     TokenToParse leftTk, rightTk;
     Token *tmpToken, *leftToken, *rightToken;
     unsigned char leftIsParsed, rightIsParsed;
-    while(node_get_neighbour(tmpExpr, RIGHT_LINK)) {
+    do {
       //if fn expect a name, check if the name already exists, else add it to the map of functions
       //then expect ':' or '|', if ':' is found expect args types and names, if '|' there are no args
       //if the name is main it's the entry point
@@ -39,6 +38,7 @@ Expression *parseExprLink(Expression *expr) {
       //the map of functions must have the name as the key and the label that will be generated as the value
       //the map of variables must have the name as the key and the offset from rbp to access it
       tmpToken = expr_node_get_value(tmpExpr).tk;
+      /* printf("token: %s\n", tmpToken->text); */
 
       if(i == tmpToken->typeAndPrecedence.precedence && expr_node_get_value(tmpExpr).toParse) {
         /* printf("entrou: %s prec: %d\n", tmpToken->text, tmpToken->typeAndPrecedence.precedence); */
@@ -83,16 +83,42 @@ Expression *parseExprLink(Expression *expr) {
             break;
           case BUILTIN_SINGLE_OPERAND:
             //unary operations, take just one arg after it
+            switch(tmpToken->typeAndPrecedence.type) {
+              //these two doesn't need any arg, we just need to set as parsed
+              case SKIP_TK:
+              case STOP_TK:
+                expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+              break;
+              default:
+                //get the first element after it as CHILD(1)
+                if(right) {
+                  node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+                  node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+                  node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
+                  //set as already parsed
+                  expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+                }
+                else {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+              break;
+            }
             break;
           case BUILTIN_MEDIUM_PREC:
             if(leftToken && rightToken) {
               if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)
                ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)) {
+                  /* printLinkExprs(tmpExpr, 0); */
+                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
                   fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
               }
             }
             else {
+                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
             }
@@ -103,8 +129,98 @@ Expression *parseExprLink(Expression *expr) {
             switch(tmpToken->typeAndPrecedence.type) {
 
               case ASSIGN:
-              goto getLeftAndRightNeighbours;
+              if(right && left)
+                goto getLeftAndRightNeighbours;
+              else {
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+              }
                 break;
+              case WHILE_TK:
+              case IF_TK:
+              {
+                conditionAndBodyAsChilds:
+                if(right == NULL) {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+                Expression *condition = right;
+                while(right) {
+                  if(expr_node_get_value(right).tk->typeAndPrecedence.type == END_BAR) {
+                    //removing the END_BAR
+                    node_remove_link_at(node_get_neighbour(right, LEFT_LINK), RIGHT_LINK);
+                    right = node_remove_link_at(right, RIGHT_LINK);
+
+                    if(!right) {
+                      fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                      exit(1);
+                    }
+                    node_remove_link_at(right, LEFT_LINK);
+                    break;
+                  }
+                  right = node_get_neighbour(right, RIGHT_LINK);
+                }
+                condition = parseExprLink(condition);
+                right = parseExprLink(right);
+                if(condition == NULL || right == NULL) {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+                node_remove_link_at(tmpExpr, RIGHT_LINK);
+                node_set_link(tmpExpr, NULL); node_set_link(tmpExpr, NULL);
+                node_set_double_link_at(tmpExpr, condition, CHILD(1), PARENT_LINK);
+                node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
+              }
+                break;
+              case ELSE_TK:
+                if(right) {
+                  node_set_link(tmpExpr, NULL);
+                  Token *tmpToken = expr_node_get_value(right).tk;
+                  if(tmpToken->typeAndPrecedence.type == IF_TK && tmpToken->l == expr_node_get_value(tmpExpr).tk->l) {
+                    node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+                    /* printf("to delete: %s\n", expr_node_get_value(right).tk->text); */
+                    node_delete(right, NULL);
+                    right = node_get_neighbour(tmpExpr, RIGHT_LINK);
+                    goto conditionAndBodyAsChilds;
+                  }
+                  else {
+                    node_change_neighbour_position(tmpExpr, RIGHT_LINK, CHILD(1));
+                    right = parseExprLink(right);
+                    node_change_neighbour_position(right, LEFT_LINK, PARENT_LINK);
+                  }
+                }
+                else {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+                break;
+              case SYSCALL_TK:
+              {
+                int paramCount = 0;
+                while(1) {
+                  if(paramCount > SYSCALL_ARGS) {
+                    fprintf(stderr, "%s too many args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                    exit(1);
+                  }
+                  if(right == NULL) {
+                    fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                    exit(1);
+                  }
+                  if(expr_node_get_value(right).tk->typeAndPrecedence.type == END_BAR) {
+                    //removing the END_BAR
+                    node_remove_link_at(node_get_neighbour(right, LEFT_LINK), RIGHT_LINK);
+                    node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
+                    node_remove_link_at(right, RIGHT_LINK);
+                    break;
+                  }
+                  node_remove_link_at(node_get_neighbour(right, LEFT_LINK), RIGHT_LINK);
+                  node_remove_link_at(right, LEFT_LINK);
+                  node_set_link(tmpExpr, right); //append to childs
+                  right = node_get_neighbour(right, RIGHT_LINK);
+                  paramCount++;
+                }
+                break;
+              }
               case FUNC:
 
               if(right) {
@@ -122,10 +238,22 @@ Expression *parseExprLink(Expression *expr) {
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
 
+              Expression *newRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
+              if(newRight) {
+                node_remove_link_at(newRight, LEFT_LINK); //remove link with fn
+                node_remove_link_at(tmpExpr, RIGHT_LINK);
+                newRight = parseExprLink(newRight); //update the right if needed
+                node_set_link(tmpExpr, NULL);
+                node_set_double_link_at(tmpExpr, newRight, CHILD(2), PARENT_LINK);
+              }
+              else {
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+              }
+
               //here we should iterate tmpExpr till find the end of function definition, at |
               //storing informations about the type and number of params
                 break;
-
               default:
                 break;
             }
@@ -135,6 +263,8 @@ Expression *parseExprLink(Expression *expr) {
             //unreachble
             case COMPTIME_KNOWN:
             case USER_DEFINITIONS:
+            case SYMBOLS:
+            case PRECEDENCE_COUNT:
               break;
 
             getLeftAndRightNeighbours:
@@ -142,16 +272,20 @@ Expression *parseExprLink(Expression *expr) {
               node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
               node_remove_link_at(left, RIGHT_LINK); node_remove_link_at(left, LEFT_LINK);
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+              if(right) right = parseExprLink(right);
+              if(left) left = parseExprLink(left);
+
               node_set_double_link_at(tmpExpr, left, CHILD(1), PARENT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
+              expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+
+
         }
       }
-      while(node_get_neighbour(tmpExpr, PARENT_LINK)) tmpExpr = node_get_neighbour(tmpExpr, PARENT_LINK);
+      /* while(node_get_neighbour(tmpExpr, PARENT_LINK)) tmpExpr = node_get_neighbour(tmpExpr, PARENT_LINK); */
 
       tmpExpr = node_get_neighbour(tmpExpr, RIGHT_LINK);
-      if(tmpExpr == NULL)
-        break;
-    }
+    } while(tmpExpr);
   }
   //return the expression that is at the highest level
   while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK);
@@ -168,7 +302,7 @@ Expression *parseExprLink(Expression *expr) {
 void printLinkExprs(Expression *expr, int layer) {
   if(!expr) return;
 
-  const char *humanReadablePrec[] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "HIGH_PREC"};
+  const char *humanReadablePrec[PRECEDENCE_COUNT+1] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "HIGH_PREC", "SYMBOLS"};
   char space[layer+1];
   memset(space, ' ', layer);
   space[layer] = '\0';
@@ -190,9 +324,9 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
     tmp = createExpression(currToken(*tf));
     node_set_double_link_at(tailExpr, tmp, RIGHT_LINK, LEFT_LINK);
     tailExpr = tmp;
-    nextToken(tf);
+    if(nextToken(tf) == NULL) break;
   }
-  /* printLinkExprs(currBlock.head, 0); */
+  /* printLinkExprs(headExpr, 0); */
   Expression *parsedExpr = parseExprLink(headExpr);
   tailExpr = parsedExpr;
   while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
@@ -206,10 +340,11 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   Token *headToken = currToken(*tf);
   Expression *headExpr = createExpression(headToken);
   Expression *tailExpr = headExpr;
-  ExprBlock tmp;
   size_t lastId = endOfCurrBlock(*tf).lastId;
-  while(1){
-    nextToken(tf);
+  if(nextToken(tf) == NULL) return (ExprBlock) {headExpr, tailExpr};
+
+  ExprBlock tmp;
+  do {
     if(currToken(*tf)->typeAndPrecedence.type == PAR_OPEN) {
       nextToken(tf);
       tmp = createExprBlockTill(tf, PAR_CLOSE);
@@ -220,31 +355,40 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
       /* printf("endOfLine: %ld, currLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine, tf->currLine); */
 
       //if the block has a inner block, make a recurse call to it
-      if(tf->currElem == 0 && (int)endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine != currToken(*tf)->l) {
+      if(tf->currElem == 0) {
         /* printf("here: %s\n", currToken(*tf)->text); */
         /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
         tmp = createExprBlock(tf);
+        /* printf("------------------------------------\n"); */
+        /* printLinkExprs(tmp.head, 0); */
+        /* printf("------------------------------------\n"); */
+        while(node_get_neighbour(tmp.tail, RIGHT_LINK)) tmp.tail = node_get_neighbour(tmp.tail, RIGHT_LINK);
+        /* printf("here2: %ld\n", currToken(*tf)->id); */
+        /* if(nextToken(tf) == NULL) break; */
+        /* else returnToken(tf); */
       }
       else { tmp.head = tmp.tail = createExpression(currToken(*tf)); }
 
     }
 
     node_set_double_link_at(tailExpr, tmp.head, RIGHT_LINK, LEFT_LINK);
+    /* printf("------------------------------------\n"); */
+    /* printLinkExprs(headExpr, 0); */
+    /* printf("------------------------------------\n"); */
     /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
     tailExpr = tmp.tail;
-    if(currToken(*tf)->id == lastId) break;
-    else if(currToken(*tf)->id > lastId) {
-      fprintf(stderr, "You can't do that thing you did");
-      exit(1);
-    }
-  }
-  /* printf("here\n"); */
-  /* printLinkExprs(currBlock.head, 0); */
-  /* printf("here\n"); */
-  /* printf("%d %ld %s\n", node_get_num_neighbours(currBlock.tail), expr_node_get_value(currBlock.tail)->id, expr_node_get_value(currBlock.tail)->text); */
+    if(currToken(*tf)->id >= lastId) break;
+    /* else if(currToken(*tf)->id > lastId) { */
+    /*   //print tokenized file informations all */
+
+    /*   exit(1); */
+    /* } */
+  } while(nextToken(tf));
   Expression *parsedExpr = parseExprLink(headExpr);
   tailExpr = parsedExpr;
   while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
+  /* printf("Saindo\n"); */
+  /* printLinkExprs(parsedExpr, 0); */
   return (ExprBlock) {parsedExpr, tailExpr};
 }
 
@@ -264,7 +408,8 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
   };
   ExprBlock tmpBlock;
   /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
-  while(currToken(*tf)) {
+
+  do {
     tmpBlock = createExprBlock(tf);
     //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
     if(pf.entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->typeAndPrecedence.type == FUNC) {
@@ -272,17 +417,16 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
         pf.entryPoint = pf.qtdBlocks;
     }
     maybeRealloc((void**)&pf.blocks, (int*)&pf.capBlocks, pf.qtdBlocks, sizeof(HighLevelBlock));
-    pf.blocks[pf.qtdBlocks++] = (HighLevelBlock){tmpBlock};
+    pf.blocks[pf.qtdBlocks++] = (HighLevelBlock)tmpBlock;
 
-    nextToken(tf);
     /* printf("is null: %d\n", currToken(*tf) == NULL); */
-  }
+  } while(nextToken(tf));
   return pf;
 }
 
 void destroyParsedFile(ParsedFile *pf) {
-  for(int i = 0; i < pf->qtdBlocks; i++)
-    destroyExprBlock(&pf->blocks[i].block);
+  for(int i = 0; i < (int)pf->qtdBlocks; i++)
+    destroyExprBlock(&pf->blocks[i]);
   free(pf->blocks);
   pf->blocks = NULL;
   /* printf("destroyed\n"); */
