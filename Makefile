@@ -1,29 +1,24 @@
 CC=gcc
 CFLAGS=-g -std=c99 -Wextra -Wall -Werror -pedantic
-SRC=modules
+SRC_DIR=modules
+SRC=$(wildcard $(SRC_DIR)/*.c)
 OBJS_DIR=objs
+OBJS=$(SRC:$(SRC_DIR)/%.c=$(OBJS_DIR)/%.o)
+TARGET=dulang
 
-all: $(OBJS_DIR) dulang
+all: $(OBJS_DIR) $(OBJS) $(SRC_DIR)/modules.o $(TARGET)
 
-#create a directory to keep object files
 $(OBJS_DIR):
-	mkdir $@
+	mkdir $(OBJS_DIR)
 
-#craete a .o file at OBJS_DIR directory for every .c file on SRC directory
-$(OBJS_DIR)/%.o: $(SRC)/%.c
-	$(CC) $(CFLAGS) -c $^ -o $(OBJS_DIR)/$*.o
-#mv *.o ./$(OBJS_DIR)/
+$(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-#linking all .o files
-$(SRC)/modules.o: $(OBJS_DIR)/*.o
-	ld -r -o $@ $^
+$(SRC_DIR)/modules.o: $(OBJS)
+	ld -r $(OBJS) -o $(SRC_DIR)/modules.o
 
-#cleaniiiiiiiiiiiinnnnnnnnnnnnnnnngggggggggggg
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) $(SRC_DIR)/modules.o $@.c -o $@
+
 clean:
-	rm -r $(OBJS_DIR)
-	rm $(SRC)/modules.o
-	rm dulang
-
-#compiling the dulang.c file with the modules.o file
-dulang: $(SRC)/modules.o dulang.c
-	gcc $^ -o $@
+	rm -r $(OBJS_DIR) $(TARGET) $(SRC_DIR)/modules.o
