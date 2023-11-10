@@ -11,6 +11,33 @@ Expression *createExpression(Token *tk) {
   return tmp;
 }
 
+//This map will store the previously defined functions to take exactly the number of arguments
+//it receives on parsing
+Map declaredFuncs;
+
+Expression *getRightAsChild(Expression *expr, int pos_child) {
+  Expression *right = node_get_neighbour(expr, RIGHT_LINK);
+  if(right) {
+    node_swap_neighbours(expr, right, RIGHT_LINK, RIGHT_LINK);
+    node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
+    node_set_double_link_at(expr, right, pos_child, PARENT_LINK);
+  }
+  else
+    return NULL; //fail
+
+  return right; //success
+}
+
+int isType(Token *tk) {
+  switch(tk->typeAndPrecedence.type) {
+    case TYPE_INT:
+    case TYPE_STR:
+      return 1; //true
+    default:
+      return 0; //false
+  }
+}
+
 /*
  * Generates the expression AST of the expressions linked list
 */
@@ -19,7 +46,8 @@ Expression *parseExprLink(Expression *expr) {
   /* printf("-------------------------------------------------------------\n"); */
   if(expr == NULL) return NULL;
 
-  for(int i = BUILTIN_LOW_PREC; i <= BUILTIN_HIGH_PREC && expr_node_get_value(expr).toParse; i++) {
+  //starting from user definitios to find functions
+  for(int i = USER_DEFINITIONS; i <= BUILTIN_HIGH_PREC && expr_node_get_value(expr).toParse; i++) {
     /* while(node_get_neighbour(expr, PARENT_LINK)) expr = node_get_neighbour(expr, PARENT_LINK); */
 
     Expression *tmpExpr = expr, *right = NULL, *left = NULL;
@@ -63,6 +91,53 @@ Expression *parseExprLink(Expression *expr) {
         }
 
         switch(tmpToken->typeAndPrecedence.precedence) {
+          case USER_DEFINITIONS:
+          {
+            Expression *maybeFunc = NULL;
+            int tmp;
+            if(left) maybeFunc = node_get_neighbour(left, LEFT_LINK);
+            if(right && maybeFunc && expr_node_get_value(maybeFunc).tk->typeAndPrecedence.type == FUNC) {
+              /* printf("left: %s\n", expr_node_get_value(left).tk->text); */
+              /* printf("right: %s\n", expr_node_get_value(right).tk->text); */
+              if(map_get_value(&declaredFuncs, (void **)&tmpToken, &tmp)) {
+                fprintf(stderr, "Trying to use a function name twice\n");
+                exit(1);
+              }
+              tmp = 0;
+              TokenType rightType = expr_node_get_value(right).tk->typeAndPrecedence.type;
+              if(rightType == COLON) {
+                right = node_get_neighbour(right, RIGHT_LINK);
+                if(right) {
+                  if(expr_node_get_value(right).tk->typeAndPrecedence.type != END_BAR) tmp = 1;
+                }
+                else {
+                  fprintf(stderr, "Bad function format, %d %d\n", tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+                while(right) {
+                  rightToken = expr_node_get_value(right).tk;
+                  if(rightToken->typeAndPrecedence.type == END_BAR) {
+                    map_insert(&declaredFuncs, (void **)&tmpToken, &tmp);
+                    break;
+                  }
+                  if(rightToken->typeAndPrecedence.type == COMMA) tmp++;
+                  /* printf("right: %s\n", rightToken->text); */
+                  right = node_get_neighbour(right, RIGHT_LINK);
+                }
+              }
+              if(right && expr_node_get_value(right).tk->typeAndPrecedence.type == END_BAR) {
+                map_insert(&declaredFuncs, (void **)&tmpToken, &tmp);
+              }
+              else {
+                fprintf(stderr, "Bad function format, expected end bar delimiter, %d %d\n", tmpToken->l, tmpToken->c);
+                exit(1);
+              }
+            }
+            else if(map_get_value(&declaredFuncs, (void **)&tmpToken, &tmp)) {
+              tmpToken->typeAndPrecedence.precedence = USER_FUNCTIONS;
+            }
+          }
+            break;
           case BUILTIN_LOW_PREC:
             //case for '*' '/' '%'
             // it will only acept neighbours tokens that has the same or lower precedence, or if they
@@ -107,28 +182,47 @@ Expression *parseExprLink(Expression *expr) {
             }
             break;
           case BUILTIN_MEDIUM_PREC:
-            if(leftToken && rightToken) {
-              if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)
-               ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)) {
-                  /* printLinkExprs(tmpExpr, 0); */
-                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
-                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
-                  fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+              if(leftToken && rightToken) {
+                if((!leftIsParsed && leftToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)
+                ||(!rightIsParsed && rightToken->typeAndPrecedence.precedence > BUILTIN_MEDIUM_PREC)) {
+                    /* printLinkExprs(tmpExpr, 0); */
+                  if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                  if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
+                    fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                    exit(1);
+                }
+              }
+              else {
+                  if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                  if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
               }
+
+              goto getLeftAndRightNeighbours;
+          break;
+
+          case USER_FUNCTIONS:
+          {
+            int tmp;
+            if(map_get_value(&declaredFuncs, (void **) &tmpToken, &tmp) == 0) {
+              fprintf(stderr, "Trying to use a undeclared function\n");
+              exit(1);
             }
-            else {
-                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
-                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
+            printf("%s com %d argumentos\n", tmpToken->text, tmp);
+            int child = 0;
+            while(tmp--) {
+              if(node_get_neighbour(tmpExpr, RIGHT_LINK) == NULL) {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
+              }
+              getRightAsChild(tmpExpr, CHILD(++child));
             }
-
-            goto getLeftAndRightNeighbours;
+            expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+          }
             break;
           case BUILTIN_HIGH_PREC:
             switch(tmpToken->typeAndPrecedence.type) {
-
               case ASSIGN:
               if(right && left)
                 goto getLeftAndRightNeighbours;
@@ -225,7 +319,7 @@ Expression *parseExprLink(Expression *expr) {
               case FUNC:
 
               if(right) {
-                if(expr_node_get_value(right).tk->typeAndPrecedence.type != NAME_TK) {
+                if(isType(expr_node_get_value(right).tk) == 0) {
                   fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
                 }
@@ -234,18 +328,58 @@ Expression *parseExprLink(Expression *expr) {
                 exit(1);
               }
 
-              //here we should insert the right token name to a list of user function's
-              node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
-              node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
-              node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
+              //taking the return type and the function name
+              int child = 1;
+              getRightAsChild(tmpExpr, CHILD(child));;
+              Expression *tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
+              if(tmpRight) {
+                Token *tmpRightToken = expr_node_get_value(tmpRight).tk;
+                if(tmpRightToken->typeAndPrecedence.type == COLON) {
+                  while(tmpRightToken->typeAndPrecedence.type != END_BAR) {
+                    //discarting the COLON or the COMMA
+                    node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK);
+                    node_delete(tmpRight, NULL);
 
-              Expression *newRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
-              if(newRight) {
-                node_remove_link_at(newRight, LEFT_LINK); //remove link with fn
-                node_remove_link_at(tmpExpr, RIGHT_LINK);
-                newRight = parseExprLink(newRight); //update the right if needed
-                node_set_link(tmpExpr, NULL);
-                node_set_double_link_at(tmpExpr, newRight, CHILD(2), PARENT_LINK);
+                    //the next parameter must be a function variable name
+                    tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
+                    if(tmpRight == NULL || isType(expr_node_get_value(tmpRight).tk) == 0) {
+                      printf("sla: %s\n", expr_node_get_value(tmpRight).tk->text);
+                      fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                      exit(1);
+                    }
+                    getRightAsChild(tmpExpr, CHILD(++child));
+                    tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
+                    tmpRightToken = expr_node_get_value(tmpRight).tk;
+                    if(tmpRight == NULL
+                       || (tmpRightToken->typeAndPrecedence.type != COMMA
+                       && tmpRightToken->typeAndPrecedence.type != END_BAR)) {
+                      fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                      exit(1);
+                    }
+                  }
+                }
+                if(tmpRightToken->typeAndPrecedence.type == END_BAR) {
+                  node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK);
+                  node_delete(tmpRight, NULL);
+                  tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
+                  if(tmpRight) {
+                    tmpRight = parseExprLink(tmpRight);
+                    /* node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK); */
+                    node_remove_link_at(tmpRight, LEFT_LINK);
+                    node_remove_link_at(tmpExpr, RIGHT_LINK);
+                    node_set_link(tmpExpr, NULL);
+                    node_set_double_link_at(tmpExpr, tmpRight, CHILD(++child), PARENT_LINK);
+                  }
+                  else {
+                    printf("here\n");
+                    fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                    exit(1);
+                  }
+
+                } else {
+                  fprintf(stderr, "Not a valid function definition: %d, %d\n", tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
               }
               else {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
@@ -258,6 +392,7 @@ Expression *parseExprLink(Expression *expr) {
 
                 case PRINT_INT:
                   goto getRightNeighbour;
+                  break;
 
               default:
                 break;
@@ -267,7 +402,6 @@ Expression *parseExprLink(Expression *expr) {
 
             //unreachble
             case COMPTIME_KNOWN:
-            case USER_DEFINITIONS:
             case SYMBOLS:
             case PRECEDENCE_COUNT:
               break;
@@ -307,7 +441,7 @@ Expression *parseExprLink(Expression *expr) {
 void printLinkExprs(Expression *expr, int layer) {
   if(!expr) return;
 
-  const char *humanReadablePrec[PRECEDENCE_COUNT+1] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "HIGH_PREC", "SYMBOLS"};
+  const char *humanReadablePrec[PRECEDENCE_COUNT+1] = {"COMPTIME", "USER_DEF", "LOW_PREC", "BUILTIN_UNARY", "MEDIUM_PREC", "USER_FUNCTIONS", "HIGH_PREC", "SYMBOLS"};
   char space[layer+1];
   memset(space, ' ', layer);
   space[layer] = '\0';
@@ -412,6 +546,9 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
   ExprBlock tmpBlock;
   /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
 
+  //it will only be used to store the number of arguments a function has, for when parsing, get the right amount
+  declaredFuncs= map_create(sizeof(Token *), sizeof(int), cmp_token_to_parse);
+
   do {
     tmpBlock = createExprBlock(tf);
     //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
@@ -424,6 +561,8 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
 
     /* printf("is null: %d\n", currToken(*tf) == NULL); */
   } while(nextToken(tf));
+
+  map_delete(&declaredFuncs);
   return pf;
 }
 

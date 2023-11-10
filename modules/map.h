@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "utils.h"
+#include "tokenizer.h"
 
 typedef struct MapPair {
     void *key, *value;
@@ -26,5 +27,6 @@ Map map_create(size_t keySize, size_t valueSize, int (*cmp)(MapPair *, MapPair *
 void map_delete(Map *map);
 void map_insert(Map *map, void *new_key, void *new_value);
 int map_get_value(Map *map, void *key, void *to_ret);
+int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size);
 
 #endif // MAP_H_

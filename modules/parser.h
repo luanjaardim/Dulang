@@ -12,6 +12,7 @@
 #include "utils.h"
 #include "tokenizer.h"
 #include "node.h"
+#include "map.h"
 
 typedef Node Expression;
 

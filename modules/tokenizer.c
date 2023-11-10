@@ -46,7 +46,8 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"(", PAR_OPEN,   SYMBOLS},
   {")", PAR_CLOSE,  SYMBOLS},
   {"|", END_BAR,  SYMBOLS},
-  {":", COLON,  SYMBOLS}
+  {":", COLON,  SYMBOLS},
+  {",", COMMA,  SYMBOLS}
   /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
@@ -72,7 +73,7 @@ TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
     if(word[i] > 57 || word[i] < 48) break;
   if(len == i) return (TkTypeAndPrecedence) {INT_TK, COMPTIME_KNOWN};
 
-  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV - 1; i++) {
+  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
     if(cmpStr(word, builtinWords[i].symbol))
       return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
@@ -357,6 +358,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 cleanWord(word, &sizeWord);
                 continue;
 
+              //symbols
               case ':':
               case '|':
               case ',':

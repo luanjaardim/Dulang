@@ -17,7 +17,7 @@ $(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
 $(SRC_DIR)/modules.o: $(OBJS)
 	ld -r $(OBJS) -o $(SRC_DIR)/modules.o
 
-$(TARGET): $(OBJS)
+$(TARGET): $(OBJS) $(TARGET).c
 	$(CC) $(CFLAGS) $(SRC_DIR)/modules.o $@.c -o $@
 
 clean:

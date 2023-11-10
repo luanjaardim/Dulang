@@ -6,27 +6,6 @@ TokenToParse get_token_to_parse(Expression *expr) {
     return to_ret;
 }
 
-int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size) {
-    (void)key_size;
-    Token *f_tk = *(Token **)(f->key);
-    Token *s_tk = *(Token **)(s->key);
-    /* pair_get_key(f, (void *)&f_tk, sizeof(TokenToParse)); */
-    /* pair_get_key(s, (void *)&s_tk, sizeof(TokenToParse)); */
-    /* printf("inside cmp_token_to_parse\n"); */
-    /* printf("f: %s\n", f_tk->text); */
-    /* printf("s: %s\n", s_tk->text); */
-
-    if(f_tk->qtdChars > s_tk->qtdChars) return 1; //f is bigger
-    if(f_tk->qtdChars < s_tk->qtdChars) return -1; //s is bigger
-    for(int i = 0; i < (int)f_tk->qtdChars; i++) {
-        if(f_tk->text[i] != s_tk->text[i]) {
-            if(f_tk->text[i] > s_tk->text[i]) return 1; //f is bigger
-            else return -1; //s is bigger
-        }
-    }
-    return 0; //they are equal
-}
-
 //This will store every declaration that requires the .data segment to be appended to the .asm file at the end
 char *dataSegment = NULL;
 int dataSegmentSize = 0, dataSegmentCap = 0;
