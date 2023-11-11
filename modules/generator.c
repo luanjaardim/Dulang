@@ -53,6 +53,22 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
 int rsp = 0, rbp = 0;
 int conditionals = -1, loops = -1, insideLoop = 0;
 
+void deinitVariables(FILE *f, int prev_rsp, Generator g) {
+    printf("prev_rsp: %d, curr rsp: %d\n", prev_rsp, rsp);
+    MapPair *vars = g.var_map->pairs;
+    int i;
+    for(i = g.var_map->qtdPairs - 1; i >= 0; i--) {
+        if(*(int *)vars[i].value <= prev_rsp) break;
+        printf("pos to deallocate: %d\n", *(int *)vars[i].value);
+        free(vars[i].key);
+        free(vars[i].value);
+    }
+    fprintf(f, "mov rsp, rbp\n");
+    fprintf(f, "sub rsp, %d\n", g.prev_rsp);
+    g.var_map->qtdPairs = i+1;
+    rsp = g.prev_rsp = prev_rsp;
+}
+
 void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
     Expression *condition = node_get_neighbour(expr, CHILD(1)), *body = node_get_neighbour(expr, CHILD(2));
     Token *currToken = get_token_to_parse(expr).tk;
@@ -108,6 +124,7 @@ void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
 
 void translateExpression(FILE *f, Expression *expr, Generator g) {
     TokenType type = get_token_to_parse(expr).tk->typeAndPrecedence.type;
+    int backUpRsp;
     /* fprintf(f, ";; -- instruction %ld\n", get_token_to_parse(expr).tk->id); */
     switch(type) {
         case STR_TK:
@@ -152,6 +169,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             }
             else
                 map_insert(g.var_map, (void **)&tk, (void *)&rsp);
+            g.prev_rsp = rsp;
             break;
         case SYSCALL_TK:
             fprintf(f, ";; -- syscall %ld\n", get_token_to_parse(expr).tk->id);
@@ -173,7 +191,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             break;
         case FUNC:
             /* printf("%d\n", node_get_num_neighbours(expr)); */
-            translateExpression(f, node_get_neighbour(expr, CHILD(2)), g);
+            translateExpression(f, node_get_neighbour(expr, node_get_num_neighbours(expr)-1), g);
             printf("Error: function declaration not implemented yet\n");
             break;
         //these are the operations that can be done with only one operand at the right
@@ -311,7 +329,10 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             break;
         case IF_TK:
             fprintf(f, ";; -- if %ld\n", get_token_to_parse(expr).tk->id);
+            backUpRsp = g.prev_rsp;
             getConditionAndBody(f, expr, &g);
+            if(g.prev_rsp != rsp)
+                deinitVariables(f, backUpRsp, g);
             break;
         case ELSE_TK:
             if(get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->typeAndPrecedence.type != ELSE_TK
@@ -319,6 +340,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(stderr, "Error: else without if\n");
                 exit(1);
             }
+            backUpRsp = g.prev_rsp;
             //only an else, without if at right
             if(node_get_num_neighbours(expr) == CHILD(2)) {
                 fprintf(f, ";; -- else %ld\n", get_token_to_parse(expr).tk->id);
@@ -340,6 +362,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, ".end_cond_%d:\n", g.currConditional);
                 }
             }
+            if(g.prev_rsp != rsp)
+                deinitVariables(f, backUpRsp, g);
             break;
         case WHILE_TK:
             fprintf(f, ";; -- while %ld\n", get_token_to_parse(expr).tk->id);
@@ -349,22 +373,25 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 exit(1);
             }
             Generator backup = g;
-            g.currLoop = ++loops;
-            printf("begin while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
-            fprintf(f, ".while_%d:\n", g.currLoop);
-            fprintf(f, ";; -- condition check\n");
-            translateExpression(f, condition, g);
-            fprintf(f, "pop rax\n");
-            rsp -= 8;
-            fprintf(f, "cmp rax, 0\n");
-            fprintf(f, "je .end_while_%d\n", g.currLoop);
-            insideLoop++;
-            translateExpression(f, body, g);
+            backUpRsp = g.prev_rsp;
+                g.currLoop = ++loops;
+                printf("begin while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
+                fprintf(f, ".while_%d:\n", g.currLoop);
+                fprintf(f, ";; -- condition check\n");
+                translateExpression(f, condition, g);
+                fprintf(f, "pop rax\n");
+                rsp -= 8;
+                fprintf(f, "cmp rax, 0\n");
+                fprintf(f, "je .end_while_%d\n", g.currLoop);
+                insideLoop++;
+                translateExpression(f, body, g);
+            g = backup;
+            if(g.prev_rsp != rsp)
+                deinitVariables(f, backUpRsp, g);
             fprintf(f, "jmp .while_%d\n", g.currLoop);
             fprintf(f, ".end_while_%d:\n", g.currLoop);
             insideLoop--;
             printf("end while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
-            g = backup;
             break;
         case STOP_TK:
         case SKIP_TK:

@@ -18,6 +18,7 @@ typedef struct {
     /* Map *func_map; */
     int currConditional;
     int currLoop;
+    int prev_rsp; //used to know what variables were created inside a block and will be deallocated
 } Generator;
 
 void generateDulangFile(FILE *f, ParsedFile *pf);
