@@ -386,10 +386,16 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 insideLoop++;
                 translateExpression(f, body, g);
             g = backup;
-            if(g.prev_rsp != rsp)
+            if(g.prev_rsp != rsp) {
+                fprintf(f, ";; -- while inner deallocation\n");
                 deinitVariables(f, backUpRsp, g);
+            }
             fprintf(f, "jmp .while_%d\n", g.currLoop);
             fprintf(f, ".end_while_%d:\n", g.currLoop);
+            //we need to deallocate here to because the loop can end at any point with a 'stop'
+            //we may check if it's to deallocate here at some point, for now it's fine
+            fprintf(f, ";; -- while outter deallocation\n");
+            deinitVariables(f, backUpRsp, g);
             insideLoop--;
             printf("end while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
             break;
