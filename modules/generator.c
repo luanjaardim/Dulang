@@ -11,10 +11,14 @@ char *dataSegment = NULL;
 int dataSegmentSize = 0, dataSegmentCap = 0;
 /* char *bssSegment = NULL; */
 
+int rsp = 0;
+int conditionals = -1, loops = -1, insideLoop = 0;
+
 void generateDulangFile(FILE *f, ParsedFile *pf) {
     Generator g = {
       .currConditional = 0,
       .currLoop = 0,
+      .func_map = NULL,
     };
     dataSegment = malloc(sizeof(char) * 100);
     dataSegmentCap = 100;
@@ -25,10 +29,12 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
     insertIntToStr(f);
     fprintf(f, "segment .text\n");
     fprintf(f, "global _start\n");
-    fprintf(f, "_start:\n");
-    fprintf(f, "mov rbp, rsp\n");
+    //it will store the id of the function name creation
+    Map map_functions = map_create(sizeof(Token *), sizeof(int), cmp_token_to_parse);
+    g.func_map = &map_functions;
 
     for(int i = 0; i < (int)pf->qtdBlocks; i++) {
+        rsp = 0;
         ExprBlock block = pf->blocks[i];
 
         Expression *tmp = block.head;
@@ -41,17 +47,9 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
         map_delete(g.var_map);
     }
 
-    fprintf(f, ";;--end of execution, return 0\n");
-    fprintf(f, "    mov rdi, 0\n");
-    fprintf(f, "    mov rax, 0x3c\n");
-    fprintf(f, "    syscall\n");
-
     fwrite(dataSegment, sizeof(char), dataSegmentSize, f);
     free(dataSegment);
 }
-
-int rsp = 0, rbp = 0;
-int conditionals = -1, loops = -1, insideLoop = 0;
 
 void deinitVariables(FILE *f, int prev_rsp, Generator g) {
     printf("prev_rsp: %d, curr rsp: %d\n", prev_rsp, rsp);
@@ -161,11 +159,11 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             int tmp, ret;
             ret = map_get_value(g.var_map, (void **)&tk, (void *)&tmp);
 
-            /* printf("token: %d\n", ret); */
             if(ret) {
                 fprintf(f, "pop rax\n");
                 rsp -= 8;
-                fprintf(f, "mov [rbp-%d], rax\n", tmp);
+                //it can be '+' for arguments and '-' for local variables
+                fprintf(f, "mov [rbp%s%d], rax\n", tmp > 0 ? "-" : "+", abs(tmp));
             }
             else
                 map_insert(g.var_map, (void **)&tk, (void *)&rsp);
@@ -190,9 +188,56 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, "syscall\n");
             break;
         case FUNC:
-            /* printf("%d\n", node_get_num_neighbours(expr)); */
-            translateExpression(f, node_get_neighbour(expr, node_get_num_neighbours(expr)-1), g);
-            printf("Error: function declaration not implemented yet\n");
+        {
+            Expression *returnTypeAndName = node_get_neighbour(expr, CHILD(1));
+            Token *name, *tokenChild;
+            name = get_token_to_parse(node_get_neighbour(returnTypeAndName, CHILD(1))).tk;
+            int tmp;
+            if(map_get_value(g.func_map, (void **)&name, (void *)&tmp)) {
+               fprintf(stderr, "Error: function %s already declared\n", tokenChild->text);
+               exit(1);
+            } else {
+                map_insert(g.func_map, (void **)&name, (void *)&name->id);
+                int isMain = memcmp("main", name->text, 4) == 0;
+                printf("child: %s\n", name->text);
+                printf("isMain: %d\n", isMain);
+                if(isMain)
+                    fprintf(f, "_start:\n");
+                else {
+                    fprintf(f, "func_%s_%ld:\n", name->text, name->id);
+                    fprintf(f, "push rbp\n");
+                }
+                fprintf(f, "mov rbp, rsp\n");
+                int argsOffset = -16;
+                for(int i = node_get_num_neighbours(expr) - 2; i >= CHILD(2); i--) {
+                    tokenChild = get_token_to_parse(
+                        node_get_neighbour(node_get_neighbour(expr, i),
+                        CHILD(1))).tk;
+                    map_insert(g.var_map, (void **)&tokenChild, (void *)&argsOffset);
+                    printf("name and offset: %s %d\n", tokenChild->text, argsOffset);
+                    argsOffset -= 8;
+                }
+                translateExpression(f, node_get_neighbour(expr, node_get_num_neighbours(expr) - 1), g);
+
+                fprintf(f, ";; -- end_of_curr_function\n");
+                if(isMain) {
+                    fprintf(f, ".end_of_start:\n");
+                    fprintf(f, ";;--end of execution, return 0\n");
+                    fprintf(f, "mov rdi, 0\n");
+                    fprintf(f, "mov rax, 0x3c\n");
+                    fprintf(f, "syscall\n");
+                } else {
+                    fprintf(f, ".end_func_%s_%ld:\n", name->text, name->id);
+                    fprintf(f, "mov rsp, rbp\n");
+                    fprintf(f, "mov rsp, rbp\n");
+                    fprintf(f, "pop rbp\n");
+                    fprintf(f, "ret\n");
+                    fprintf(f, ";; -- end of func\n");
+                }
+
+            }
+        }
+
             break;
         //these are the operations that can be done with only one operand at the right
         case LOG_NOT:
@@ -413,16 +458,37 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         {
             fprintf(f, ";; -- user variable\n");
             Token *tk = get_token_to_parse(expr).tk;
-            int tmp, ret;
-            ret = map_get_value(g.var_map, (void **)&tk, (void *)&tmp);
-            if(ret) {
-                fprintf(f, "push qword[rbp-%d]\n", tmp); //TODO: the size can be variable
-                rsp += 8;
-            }
-            else {
-                printf("Error: variable %s not declared, %d %d\n", tk->text, tk->l, tk->c);
+            int tmp;
+            if(tk->typeAndPrecedence.precedence == USER_DEFINITIONS) {
+                if(map_get_value(g.var_map, (void **)&tk, (void *)&tmp)) {
+                    //it can be '+' for arguments and '-' for local variables
+                    fprintf(f, "push qword[rbp%s%d]\n", tmp > 0 ? "-" : "+", abs(tmp)); //TODO: the size can be variable
+                    rsp += 8;
+                }
+                else {
+                    printf("Error: variable %s not declared, %d %d\n", tk->text, tk->l, tk->c);
+                    exit(1);
+                }
+            } else if(tk->typeAndPrecedence.precedence == USER_FUNCTIONS) {
+                int someThingWasPushed;
+                if(map_get_value(g.func_map, (void **)&tk, (void *)&tmp)) {
+                    backUpRsp = g.prev_rsp;
+                    for(int i = CHILD(1); i < (int)node_get_num_neighbours(expr); i++) {
+                        someThingWasPushed = rsp;
+                        translateExpression(f, node_get_neighbour(expr, i), g);
+                        if(someThingWasPushed == rsp) {
+                            fprintf(stderr, "Error: function %s requires expressions that return values\n", tk->text);
+                            exit(1);
+                        }
+                    }
+                    fprintf(f, "call func_%s_%d\n", tk->text, tmp);
+                    deinitVariables(f, backUpRsp, g);
+                }
+            } else {
+                printf("Error: unknown precedence: %d\n", tk->typeAndPrecedence.precedence);
                 exit(1);
             }
+
             break;
         }
         case PRINT_INT:

@@ -15,7 +15,7 @@
 
 typedef struct {
     Map *var_map;
-    /* Map *func_map; */
+    Map *func_map;
     int currConditional;
     int currLoop;
     int prev_rsp; //used to know what variables were created inside a block and will be deallocated

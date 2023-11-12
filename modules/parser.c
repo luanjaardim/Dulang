@@ -371,7 +371,6 @@ Expression *parseExprLink(Expression *expr) {
                     node_set_double_link_at(tmpExpr, tmpRight, CHILD(++child), PARENT_LINK);
                   }
                   else {
-                    printf("here\n");
                     fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                     exit(1);
                   }
