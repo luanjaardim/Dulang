@@ -216,7 +216,10 @@ Expression *parseExprLink(Expression *expr) {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
               }
-              getRightAsChild(tmpExpr, CHILD(++child));
+              Expression *tmpRight = parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK));
+              node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK);
+              node_remove_link_at(tmpRight, LEFT_LINK); node_remove_link_at(tmpRight, RIGHT_LINK);
+              node_set_double_link_at(tmpExpr, tmpRight, CHILD(++child), PARENT_LINK);
             }
             expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
           }
@@ -387,7 +390,21 @@ Expression *parseExprLink(Expression *expr) {
 
               //here we should iterate tmpExpr till find the end of function definition, at |
               //storing informations about the type and number of params
-                break;
+              break;
+              case BACK_TK:
+              {
+                if(right) {
+                  Expression *tmpRight = parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK));
+                  node_remove_link_at(tmpExpr, RIGHT_LINK);
+                  node_set_link(tmpExpr, NULL);
+                  node_remove_link_at(tmpRight, LEFT_LINK); node_remove_link_at(tmpRight, RIGHT_LINK);
+                  node_set_double_link_at(tmpExpr, tmpRight, CHILD(1), PARENT_LINK);
+                } else {
+                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                  exit(1);
+                }
+              }
+              break;
 
                 case PRINT_INT:
                   goto getRightNeighbour;

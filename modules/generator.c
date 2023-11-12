@@ -253,24 +253,27 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             }
             else
                 fprintf(f, "mov rax, %d\n", atoi(childTk->text));
-            switch(type) {
-                case BIT_NOT:
-                    fprintf(f, "not rax\n");
-                    break;
-                case LOG_NOT:
-                    fprintf(f, "cmp rax, 0\n");
-                    fprintf(f, "sete al\n");
-                    fprintf(f, "movzx rax, al\n");
-                    break;
-                case BACK_TK:
+            if(type == BACK_TK)
                     fprintf(f, "jmp .end_curr_func\n");
-                    break;
-                default:
-                    break;
+            else {
+                switch(type) {
+                    case BIT_NOT:
+                        fprintf(f, "not rax\n");
+                        break;
+                    case LOG_NOT:
+                        fprintf(f, "cmp rax, 0\n");
+                        fprintf(f, "sete al\n");
+                        fprintf(f, "movzx rax, al\n");
+                        break;
+                    case BACK_TK:
+                        fprintf(f, "jmp .end_curr_func\n");
+                        break;
+                    default:
+                        break;
+                }
+                fprintf(f, "push rax\n");
+                rsp += 8;
             }
-            fprintf(f, "push rax\n");
-            rsp += 8;
-
         }
         break;
         //these are the operations that can be done with 2 operands, one at the left and one at the right
@@ -435,13 +438,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(f, "je .end_while_%d\n", g.currLoop);
                 insideLoop++;
                 translateExpression(f, body, g);
+                if(g.prev_rsp != rsp) {
+                    fprintf(f, ";; -- while inner deallocation\n");
+                    deinitVariables(f, backUpRsp, g);
+                }
+                fprintf(f, "jmp .while_%d\n", g.currLoop);
+                fprintf(f, ".end_while_%d:\n", g.currLoop);
             g = backup;
-            if(g.prev_rsp != rsp) {
-                fprintf(f, ";; -- while inner deallocation\n");
-                deinitVariables(f, backUpRsp, g);
-            }
-            fprintf(f, "jmp .while_%d\n", g.currLoop);
-            fprintf(f, ".end_while_%d:\n", g.currLoop);
             //we need to deallocate here to because the loop can end at any point with a 'stop'
             //we may check if it's to deallocate here at some point, for now it's fine
             fprintf(f, ";; -- while outter deallocation\n");

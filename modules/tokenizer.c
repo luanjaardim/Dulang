@@ -22,7 +22,6 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   /* char */
   {"skip", SKIP_TK,  BUILTIN_SINGLE_OPERAND},
   {"stop", STOP_TK,  BUILTIN_SINGLE_OPERAND},
-  {"back", BACK_TK,  BUILTIN_SINGLE_OPERAND},
   {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
   {"-", NUM_SUB,    BUILTIN_MEDIUM_PREC},
   {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
@@ -42,6 +41,7 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
   {"for", FOR_TK,      BUILTIN_HIGH_PREC},
   {"sys", SYSCALL_TK,      BUILTIN_HIGH_PREC},
+  {"back", BACK_TK,  BUILTIN_HIGH_PREC},
   {"dump", PRINT_INT, BUILTIN_HIGH_PREC},
   {"(", PAR_OPEN,   SYMBOLS},
   {")", PAR_CLOSE,  SYMBOLS},
