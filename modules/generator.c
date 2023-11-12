@@ -220,14 +220,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 translateExpression(f, node_get_neighbour(expr, node_get_num_neighbours(expr) - 1), g);
 
                 fprintf(f, ";; -- end_of_curr_function\n");
+                fprintf(f, ".end_curr_func:\n");
                 if(isMain) {
-                    fprintf(f, ".end_of_start:\n");
                     fprintf(f, ";;--end of execution, return 0\n");
-                    fprintf(f, "mov rdi, 0\n");
+                    fprintf(f, "mov rdi, rax\n");
                     fprintf(f, "mov rax, 0x3c\n");
                     fprintf(f, "syscall\n");
                 } else {
-                    fprintf(f, ".end_func_%s_%ld:\n", name->text, name->id);
                     fprintf(f, "mov rsp, rbp\n");
                     fprintf(f, "mov rsp, rbp\n");
                     fprintf(f, "pop rbp\n");
@@ -242,7 +241,9 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         //these are the operations that can be done with only one operand at the right
         case LOG_NOT:
         case BIT_NOT:
-            fprintf(f, ";; -- %s %ld\n", (type == LOG_NOT) ? "log_not" : "bit_not", get_token_to_parse(expr).tk->id);
+        case BACK_TK:
+        {
+            fprintf(f, ";; -- %s %ld\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->id);
             Expression *child = node_get_neighbour(expr, CHILD(1));
             Token *childTk = get_token_to_parse(child).tk;
             if(childTk->typeAndPrecedence.type != INT_TK) {
@@ -261,13 +262,17 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, "sete al\n");
                     fprintf(f, "movzx rax, al\n");
                     break;
+                case BACK_TK:
+                    fprintf(f, "jmp .end_curr_func\n");
+                    break;
                 default:
                     break;
             }
             fprintf(f, "push rax\n");
             rsp += 8;
 
-            break;
+        }
+        break;
         //these are the operations that can be done with 2 operands, one at the left and one at the right
         case NUM_ADD:
         case NUM_SUB:
@@ -483,6 +488,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     }
                     fprintf(f, "call func_%s_%d\n", tk->text, tmp);
                     deinitVariables(f, backUpRsp, g);
+                    fprintf(f, "push rax\n");
+                    rsp += 8;
                 }
             } else {
                 printf("Error: unknown precedence: %d\n", tk->typeAndPrecedence.precedence);
