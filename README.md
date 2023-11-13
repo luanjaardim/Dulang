@@ -4,7 +4,7 @@
 ## Compile the Compiler
 
 You will need `make`, `nasm` and `gcc` to perfom that.
-- run `make` on the main directory
+- run `make` inside the Dulang main directory
 - possibly, add the generated `dulang` executable to your path
 - then, just run `./dulang <file>.dulan` to compile a Dulang file
 - it will generate a `<file>.o`, `<file>.asm` and `<file>` executable
@@ -82,7 +82,7 @@ while foo > 0|
     dump foo
     foo = foo - 1
 ```
-Loops also suport ways to `skip` the rest of the body, going back to the begining, and `stop` the body execution. These two are the old `continue` and `break`.
+Loops also suport ways to `skip` the rest of the body, going back to the beginning, and `stop` the body execution. These two are the old `continue` and `break`.
 ```
 $ loop to display from 10 to 1
 foo = 10
