@@ -299,8 +299,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             TokenType left_type = get_token_to_parse(left).tk->typeAndPrecedence.type;
             TokenType right_type = get_token_to_parse(right).tk->typeAndPrecedence.type;
 
-            if(left_type != INT_TK) translateExpression(f, left, g); //right first because of the stack pop order
-            if(right_type != INT_TK) translateExpression(f, right, g);
+            if(right_type != INT_TK) translateExpression(f, right, g);//right first because of the stack pop order
+            if(left_type != INT_TK) translateExpression(f, left, g);
 
             if(left_type != INT_TK) {
                 fprintf(f, "pop rax\n");
