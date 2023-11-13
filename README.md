@@ -128,10 +128,11 @@ My plans:
 - [X] If, else if and else
 - [X] While loops
 - [X] Interface for kernel syscalls
-- [ ]  Functions calls
-- [ ]  Multiple files compiling
-- [ ]  Basic Type system
-- [ ]  Basic Macro / Comptime evaluation
-- [ ]  Structs / Enums / Unions
-- [ ]  Type Inference
-- [ ]  Self-host
+- [X] Function calls
+- [ ] Recursive function calls
+- [ ] Multiple files compiling
+- [ ] Basic Type system
+- [ ] Basic Macro / Comptime evaluation
+- [ ] Structs / Enums / Unions
+- [ ] Type Inference
+- [ ] Self-host
