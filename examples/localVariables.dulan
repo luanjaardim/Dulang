@@ -1,0 +1,28 @@
+fn int main|
+
+   first = 79
+   while first > 69|
+      first = first - 1
+      sla = first%10
+      if sla|
+         innerSla = sla*sla
+         dump innerSla
+
+      $ innerSla exists only inside the "if"
+      $ dump innerSla
+
+   $ sla does not exist outside the while above
+   $ dump sla
+
+   $ "one" and "two" are local variables, they can only be
+   $ acessed inside the body of "if" and "else if"
+   if first == 69|
+      one = 1
+      dump one
+   else if first == 70|
+      two = 2
+      dump two
+   else
+      dump 3
+
+   back 0

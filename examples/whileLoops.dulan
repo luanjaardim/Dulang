@@ -1,4 +1,4 @@
-fn main
+fn int main|
    $ while the condition after the "while" and before the end bar is true
    $ the while will continue to execute, skip or stop can be used inside whiles
    $ skip -> is the continue of other programming languages
@@ -20,3 +20,5 @@ fn main
          dump sla
    sys
     1 1 "skiped some odd dumps with skip!" (41-8) |
+
+   back 0

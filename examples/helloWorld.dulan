@@ -1,4 +1,4 @@
-fn main
+fn int main|
    write = 1    $ write syscall number
    STDOUT = 1   $ file descriptor of the STDOUT
 
@@ -12,3 +12,6 @@ fn main
    )
    sys
     write STDOUT "Hello World" 16-4|
+
+   $ return 0 at the end
+   back 0
