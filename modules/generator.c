@@ -51,12 +51,12 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
     free(dataSegment);
 }
 
-void deinitVariables(FILE *f, int prev_rsp, Generator g) {
+void deinitVariables(FILE *f, Generator g) {
     /* printf("prev_rsp: %d, curr rsp: %d\n", prev_rsp, rsp); */
     MapPair *vars = g.var_map->pairs;
     int i;
     for(i = g.var_map->qtdPairs - 1; i >= 0; i--) {
-        if(*(int *)vars[i].value <= prev_rsp) break;
+        if(*(int *)vars[i].value <= g.prev_rsp) break;
         /* printf("pos to deallocate: %d\n", *(int *)vars[i].value); */
         free(vars[i].key);
         free(vars[i].value);
@@ -64,7 +64,7 @@ void deinitVariables(FILE *f, int prev_rsp, Generator g) {
     fprintf(f, "mov rsp, rbp\n");
     fprintf(f, "sub rsp, %d\n", g.prev_rsp);
     g.var_map->qtdPairs = i+1;
-    rsp = g.prev_rsp = prev_rsp;
+    rsp = g.prev_rsp;
 }
 
 void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
@@ -383,10 +383,10 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             break;
         case IF_TK:
             fprintf(f, ";; -- if %ld\n", get_token_to_parse(expr).tk->id);
-            backUpRsp = g.prev_rsp;
+            g.prev_rsp = rsp;
             getConditionAndBody(f, expr, &g);
             if(g.prev_rsp != rsp)
-                deinitVariables(f, backUpRsp, g);
+                deinitVariables(f, g);
             break;
         case ELSE_TK:
             if(get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->info.type != ELSE_TK
@@ -395,6 +395,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 exit(1);
             }
             backUpRsp = g.prev_rsp;
+            g.prev_rsp = rsp;
             //only an else, without if at right
             if(node_get_num_neighbours(expr) == CHILD(2)) {
                 fprintf(f, ";; -- else %ld\n", get_token_to_parse(expr).tk->id);
@@ -417,7 +418,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 }
             }
             if(g.prev_rsp != rsp)
-                deinitVariables(f, backUpRsp, g);
+                deinitVariables(f, g);
+            g.prev_rsp = backUpRsp;
             break;
         case WHILE_TK:
             fprintf(f, ";; -- while %ld\n", get_token_to_parse(expr).tk->id);
@@ -427,7 +429,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 exit(1);
             }
             Generator backup = g;
-            backUpRsp = g.prev_rsp;
+            g.prev_rsp = rsp;
                 g.currLoop = ++loops;
                 /* printf("begin while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l); */
                 fprintf(f, ".while_%d:\n", g.currLoop);
@@ -441,15 +443,16 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 translateExpression(f, body, g);
                 if(g.prev_rsp != rsp) {
                     fprintf(f, ";; -- while inner deallocation\n");
-                    deinitVariables(f, backUpRsp, g);
+                    deinitVariables(f, g);
                 }
                 fprintf(f, "jmp .while_%d\n", g.currLoop);
                 fprintf(f, ".end_while_%d:\n", g.currLoop);
-            g = backup;
             //we need to deallocate here to because the loop can end at any point with a 'stop'
-            //we may check if it's to deallocate here at some point, for now it's fine
-            fprintf(f, ";; -- while outter deallocation\n");
-            deinitVariables(f, backUpRsp, g);
+            if(g.prev_rsp != rsp) {
+                fprintf(f, ";; -- while outter deallocation\n");
+                deinitVariables(f, g);
+            }
+            g = backup;
             insideLoop--;
             /* printf("end while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l); */
             break;
@@ -482,6 +485,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 int someThingWasPushed;
                 if(map_get_value(g.func_map, (void **)&tk, (void *)&tmp)) {
                     backUpRsp = g.prev_rsp;
+                    g.prev_rsp = rsp;
                     for(int i = CHILD(1); i < (int)node_get_num_neighbours(expr); i++) {
                         someThingWasPushed = rsp;
                         translateExpression(f, node_get_neighbour(expr, i), g);
@@ -492,7 +496,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     }
                     fprintf(f, ";; -- function call %s\n", tk->text);
                     fprintf(f, "call func_%s_%d\n", tk->text, tmp);
-                    deinitVariables(f, backUpRsp, g);
+                    deinitVariables(f, g);
+                    g.prev_rsp = backUpRsp;
                     fprintf(f, "push rax\n");
                     rsp += 8;
                 }
