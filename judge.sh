@@ -3,8 +3,8 @@
 operation=$1
 dir=$(pwd)/$2
 
-if [ "$operation" = "test" ]; then
-    echo "Testing"
+if [ "$operation" = "run" ]; then
+    echo "Run Testing"
     if [ -d "$dir" ]; then
         for file in $dir/*.dulan
         do
@@ -80,8 +80,8 @@ elif [ "$operation" = "update" ]; then
         echo "Directory does not exist"
     fi
 else
-    echo "Usage: ./judge.sh <operation> <directory>"
+    echo "Usage: sh judge.sh <operation> <directory>"
     echo "Operations:"
-    echo "  test: test all the files in the directory"
+    echo "  run: test all the files in the directory"
     echo "  update: update all the .answ files in the directory"
 fi
