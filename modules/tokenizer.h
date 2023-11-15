@@ -14,13 +14,13 @@
 typedef struct {
     TokenType type;
     Precedence precedence;
-} TkTypeAndPrecedence ;
+} TkInfo;
 
 typedef struct Token {
     size_t id, qtdChars;
     char *text;
     int l, c; //line and column
-    TkTypeAndPrecedence typeAndPrecedence;
+    TkInfo info;
 } Token;
 
 typedef struct TokenizedLine {

@@ -77,7 +77,7 @@ void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
     Expression *right = node_get_neighbour(expr, RIGHT_LINK);
     Token *rightTk = NULL;
     if(right) rightTk = get_token_to_parse(right).tk;
-    if(right && currToken->typeAndPrecedence.type == IF_TK && rightTk->typeAndPrecedence.type == ELSE_TK) {
+    if(right && currToken->info.type == IF_TK && rightTk->info.type == ELSE_TK) {
         g->currConditional = ++conditionals;
     }
 
@@ -98,9 +98,9 @@ void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
         *   but it's working for now.
         */
 
-    if(right == NULL || rightTk->typeAndPrecedence.type != ELSE_TK) {
+    if(right == NULL || rightTk->info.type != ELSE_TK) {
         //here we are a solo if, we don't need to create a new end_cond, only the local end_if is fine
-        if(currToken->typeAndPrecedence.type == IF_TK) {
+        if(currToken->info.type == IF_TK) {
             fprintf(f, "je .end_if_%ld\n", currToken->id);
             translateExpression(f, body, *g);
             fprintf(f, ".end_if_%ld:\n", currToken->id);
@@ -121,7 +121,7 @@ void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
 }
 
 void translateExpression(FILE *f, Expression *expr, Generator g) {
-    TokenType type = get_token_to_parse(expr).tk->typeAndPrecedence.type;
+    TokenType type = get_token_to_parse(expr).tk->info.type;
     int backUpRsp;
     /* fprintf(f, ";; -- instruction %ld\n", get_token_to_parse(expr).tk->id); */
     switch(type) {
@@ -197,6 +197,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                fprintf(stderr, "Error: function %s already declared\n", tokenChild->text);
                exit(1);
             } else {
+                fprintf(f, ";; -- function %s %ld\n", name->text, name->id);
                 map_insert(g.func_map, (void **)&name, (void *)&name->id);
                 int isMain = memcmp("main", name->text, 4) == 0;
                 /* printf("child: %s\n", name->text); */
@@ -228,7 +229,6 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, "syscall\n");
                 } else {
                     fprintf(f, "mov rsp, rbp\n");
-                    fprintf(f, "mov rsp, rbp\n");
                     fprintf(f, "pop rbp\n");
                     fprintf(f, "ret\n");
                     fprintf(f, ";; -- end of func\n");
@@ -246,7 +246,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, ";; -- %s %ld\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->id);
             Expression *child = node_get_neighbour(expr, CHILD(1));
             Token *childTk = get_token_to_parse(child).tk;
-            if(childTk->typeAndPrecedence.type != INT_TK) {
+            if(childTk->info.type != INT_TK) {
                 translateExpression(f, child, g);
                 fprintf(f, "pop rax\n");
                 rsp -= 8;
@@ -296,8 +296,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, ";; -- operation %s\n", get_token_to_parse(expr).tk->text);
             Expression *left = node_get_neighbour(expr, CHILD(1));
             Expression *right = node_get_neighbour(expr, CHILD(2));
-            TokenType left_type = get_token_to_parse(left).tk->typeAndPrecedence.type;
-            TokenType right_type = get_token_to_parse(right).tk->typeAndPrecedence.type;
+            TokenType left_type = get_token_to_parse(left).tk->info.type;
+            TokenType right_type = get_token_to_parse(right).tk->info.type;
 
             if(right_type != INT_TK) translateExpression(f, right, g);//right first because of the stack pop order
             if(left_type != INT_TK) translateExpression(f, left, g);
@@ -389,8 +389,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 deinitVariables(f, backUpRsp, g);
             break;
         case ELSE_TK:
-            if(get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->typeAndPrecedence.type != ELSE_TK
-               && get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->typeAndPrecedence.type != IF_TK) {
+            if(get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->info.type != ELSE_TK
+               && get_token_to_parse(node_get_neighbour(expr, LEFT_LINK)).tk->info.type != IF_TK) {
                 fprintf(stderr, "Error: else without if\n");
                 exit(1);
             }
@@ -412,7 +412,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 getConditionAndBody(f, expr, &g);
                 Expression *right = node_get_neighbour(expr, RIGHT_LINK);
                 //if there is not an else after this else if, we need to put the end of the if here
-                if(right == NULL || get_token_to_parse(right).tk->typeAndPrecedence.type != ELSE_TK) {
+                if(right == NULL || get_token_to_parse(right).tk->info.type != ELSE_TK) {
                     fprintf(f, ".end_cond_%d:\n", g.currConditional);
                 }
             }
@@ -468,7 +468,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, ";; -- user variable\n");
             Token *tk = get_token_to_parse(expr).tk;
             int tmp;
-            if(tk->typeAndPrecedence.precedence == USER_DEFINITIONS) {
+            if(tk->info.precedence == USER_DEFINITIONS) {
                 if(map_get_value(g.var_map, (void **)&tk, (void *)&tmp)) {
                     //it can be '+' for arguments and '-' for local variables
                     fprintf(f, "push qword[rbp%s%d]\n", tmp > 0 ? "-" : "+", abs(tmp)); //TODO: the size can be variable
@@ -478,7 +478,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(stderr, "Error: variable %s not declared, %d %d\n", tk->text, tk->l, tk->c);
                     exit(1);
                 }
-            } else if(tk->typeAndPrecedence.precedence == USER_FUNCTIONS) {
+            } else if(tk->info.precedence == USER_FUNCTIONS) {
                 int someThingWasPushed;
                 if(map_get_value(g.func_map, (void **)&tk, (void *)&tmp)) {
                     backUpRsp = g.prev_rsp;
@@ -490,13 +490,14 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                             exit(1);
                         }
                     }
+                    fprintf(f, ";; -- function call %s\n", tk->text);
                     fprintf(f, "call func_%s_%d\n", tk->text, tmp);
                     deinitVariables(f, backUpRsp, g);
                     fprintf(f, "push rax\n");
                     rsp += 8;
                 }
             } else {
-                fprintf(stderr, "Error: unknown precedence: %d\n", tk->typeAndPrecedence.precedence);
+                fprintf(stderr, "Error: unknown precedence: %d\n", tk->info.precedence);
                 exit(1);
             }
 

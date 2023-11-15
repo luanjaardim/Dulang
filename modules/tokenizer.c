@@ -35,7 +35,6 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"band", BIT_AND, BUILTIN_MEDIUM_PREC},
   {"bor", BIT_OR,   BUILTIN_MEDIUM_PREC},
   {"=", ASSIGN,     BUILTIN_HIGH_PREC},
-  {"fn", FUNC,      BUILTIN_HIGH_PREC},
   {"if", IF_TK,        BUILTIN_HIGH_PREC},
   {"else", ELSE_TK,    BUILTIN_HIGH_PREC},
   {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
@@ -43,6 +42,7 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"sys", SYSCALL_TK,      BUILTIN_HIGH_PREC},
   {"back", BACK_TK,  BUILTIN_HIGH_PREC},
   {"dump", PRINT_INT, BUILTIN_HIGH_PREC},
+  {"fn", FUNC,      BUILTIN_HIGH_PREC},
   {"(", PAR_OPEN,   SYMBOLS},
   {")", PAR_CLOSE,  SYMBOLS},
   {"|", END_BAR,  SYMBOLS},
@@ -51,34 +51,34 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
-Token createToken(char *text, size_t len, size_t id, TkTypeAndPrecedence typeAndPrec, int l, int c) {
+Token createToken(char *text, size_t len, size_t id, TkInfo info, int l, int c) {
     Token tmp = {
       .id = id,
       .qtdChars = len,
       .text = (char *) malloc(sizeof(char) * len),
       .l = l,
       .c = c,
-      .typeAndPrecedence = typeAndPrec,
+      .info = info,
     };
     memcpy(tmp.text, text, len);
     return tmp;
 }
 
-TkTypeAndPrecedence typeOfToken(const char *const word, int len) {
+TkInfo typeOfToken(const char *const word, int len) {
   //compile time known values, str or int, has negative predecence: -1
-  if(word[0] == '"') return (TkTypeAndPrecedence) {STR_TK, COMPTIME_KNOWN};
+  if(word[0] == '"') return (TkInfo) {STR_TK, COMPTIME_KNOWN};
 
   int i;
   for(i = 0; i < len; i++) //number validation
     if(word[i] > 57 || word[i] < 48) break;
-  if(len == i) return (TkTypeAndPrecedence) {INT_TK, COMPTIME_KNOWN};
+  if(len == i) return (TkInfo) {INT_TK, COMPTIME_KNOWN};
 
   for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
     if(cmpStr(word, builtinWords[i].symbol))
-      return (TkTypeAndPrecedence){ builtinWords[i].tokenType, builtinWords[i].precedence };
+      return (TkInfo){ builtinWords[i].tokenType, builtinWords[i].precedence };
   }
 
-  return (TkTypeAndPrecedence) {NAME_TK, USER_DEFINITIONS};
+  return (TkInfo) {NAME_TK, USER_DEFINITIONS};
 }
 
 TokenizedLine createTokenizedLine() {
@@ -210,9 +210,9 @@ void printTokenizedFile(TokenizedFile p) {
     for(size_t i = 0; i < p.qtdLines; i++) {
         for(size_t j = 0; j < p.lines[i].qtdElements; j++) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
-                  humanReadableType[p.lines[i].tk[j].typeAndPrecedence.type >= NUM_DIV ? 3 : p.lines[i].tk[j].typeAndPrecedence.type],
-                  p.lines[i].tk[j].typeAndPrecedence.precedence);
-//min(p.lines[i].tk[j].typeAndPrecedence.type, NUM_DIV)
+                  humanReadableType[p.lines[i].tk[j].info.type >= NUM_DIV ? 3 : p.lines[i].tk[j].info.type],
+                  p.lines[i].tk[j].info.precedence);
+//min(p.lines[i].tk[j].info.type, NUM_DIV)
         }
         printf("\n");
     }
