@@ -52,12 +52,12 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
 }
 
 void deinitVariables(FILE *f, int prev_rsp, Generator g) {
-    printf("prev_rsp: %d, curr rsp: %d\n", prev_rsp, rsp);
+    /* printf("prev_rsp: %d, curr rsp: %d\n", prev_rsp, rsp); */
     MapPair *vars = g.var_map->pairs;
     int i;
     for(i = g.var_map->qtdPairs - 1; i >= 0; i--) {
         if(*(int *)vars[i].value <= prev_rsp) break;
-        printf("pos to deallocate: %d\n", *(int *)vars[i].value);
+        /* printf("pos to deallocate: %d\n", *(int *)vars[i].value); */
         free(vars[i].key);
         free(vars[i].value);
     }
@@ -199,8 +199,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             } else {
                 map_insert(g.func_map, (void **)&name, (void *)&name->id);
                 int isMain = memcmp("main", name->text, 4) == 0;
-                printf("child: %s\n", name->text);
-                printf("isMain: %d\n", isMain);
+                /* printf("child: %s\n", name->text); */
+                /* printf("isMain: %d\n", isMain); */
                 if(isMain)
                     fprintf(f, "_start:\n");
                 else {
@@ -214,7 +214,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                         node_get_neighbour(node_get_neighbour(expr, i),
                         CHILD(1))).tk;
                     map_insert(g.var_map, (void **)&tokenChild, (void *)&argsOffset);
-                    printf("name and offset: %s %d\n", tokenChild->text, argsOffset);
+                    /* printf("name and offset: %s %d\n", tokenChild->text, argsOffset); */
                     argsOffset -= 8;
                 }
                 translateExpression(f, node_get_neighbour(expr, node_get_num_neighbours(expr) - 1), g);
@@ -326,6 +326,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, "mul rbx\n");
                     break;
                 case NUM_DIV:
+                    fprintf(f, "xor rdx, rdx\n");
                     fprintf(f, "div rbx\n");
                     break;
                 case NUM_MOD:
@@ -428,7 +429,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             Generator backup = g;
             backUpRsp = g.prev_rsp;
                 g.currLoop = ++loops;
-                printf("begin while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
+                /* printf("begin while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l); */
                 fprintf(f, ".while_%d:\n", g.currLoop);
                 fprintf(f, ";; -- condition check\n");
                 translateExpression(f, condition, g);
@@ -450,7 +451,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, ";; -- while outter deallocation\n");
             deinitVariables(f, backUpRsp, g);
             insideLoop--;
-            printf("end while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l);
+            /* printf("end while. currLoop: %d, line: %d\n", g.currLoop, get_token_to_parse(expr).tk->l); */
             break;
         case STOP_TK:
         case SKIP_TK:
@@ -474,7 +475,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     rsp += 8;
                 }
                 else {
-                    printf("Error: variable %s not declared, %d %d\n", tk->text, tk->l, tk->c);
+                    fprintf(stderr, "Error: variable %s not declared, %d %d\n", tk->text, tk->l, tk->c);
                     exit(1);
                 }
             } else if(tk->typeAndPrecedence.precedence == USER_FUNCTIONS) {
@@ -495,7 +496,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     rsp += 8;
                 }
             } else {
-                printf("Error: unknown precedence: %d\n", tk->typeAndPrecedence.precedence);
+                fprintf(stderr, "Error: unknown precedence: %d\n", tk->typeAndPrecedence.precedence);
                 exit(1);
             }
 

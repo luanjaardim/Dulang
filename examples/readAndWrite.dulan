@@ -1,5 +1,5 @@
 $ Code to use the read and write syscalls to a buffer
-fn main
+fn int main|
     write = 1   $ number of the write syscall
     STDOUT = 1  $ file descriptor of the STDOUT
     read = 0    $ number of the write syscall

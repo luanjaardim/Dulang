@@ -209,7 +209,7 @@ Expression *parseExprLink(Expression *expr) {
               fprintf(stderr, "Trying to use a undeclared function\n");
               exit(1);
             }
-            printf("%s com %d argumentos\n", tmpToken->text, tmp);
+            /* printf("%s com %d argumentos\n", tmpToken->text, tmp); */
             int child = 0;
             while(tmp--) {
               if(node_get_neighbour(tmpExpr, RIGHT_LINK) == NULL) {
