@@ -99,6 +99,59 @@ while foo | $ another to say while different than 0
     dump foo $ printing only even numbers
 ```
 
+## Funcions
+Functions for better modularization:
+```
+$ recursive implementation of the Fibonacci sequence
+fn int fib: int n|
+    if n < 3|
+        $ back is the keyword user for sending back values, just like the well known `return`
+        back 1
+    else
+        back (fib n-1) + (fib n-2)
+
+fn int main|
+    $ functions calls has no parenthesis around arguments, it will take `n` elements
+    $ after it as parameters, similar to haskell aproach
+    
+    $ we are taking the value back from the inner fib call and then calling fib again
+    $ this will return 5, don't matter how many fib's we put here. (the 5th element of Fibonacci sequence is 5.)
+    dump fib fib 5
+    dump fib fib fib fib fib fib 5 $ gives the same result
+    
+    back 0 $ main send back 0 at the end, everything ok
+```
+Another example, now for functions with different number of arguments
+
+```
+fn int div: int a, int b | back a/b
+
+fn int sum: int a, int b | back a+b
+
+fn int mod: int a, int b | back a%b
+
+fn int main|
+    write = 1
+    STDOUT = 1
+
+    if 1 + 2 / 2 % 5 ==
+       sum 1 mod div 2 2 5 |
+
+       sys write STDOUT
+           "true" 5|
+    else
+       sys write STDOUT
+           "false" 6|
+
+    $ that's how you can read the expression above, so, surely, the
+    $ condition will be satisfied.
+    value = mod (div 2 2) 5
+    value = sum 1 value
+    dump value
+    value = 1 + 2 / 2 % 5
+    dump value
+```
+
 ## Syscall
 This is the reserved keyword to communicate directly with the kernel syscall.
 It can receive a variable number of arguments, as many the syscall needs, from 1 to 7.
@@ -129,7 +182,7 @@ My plans:
 - [X] While loops
 - [X] Interface for kernel syscalls
 - [X] Function calls
-- [ ] Recursive function calls
+- [X] Recursive function calls
 - [ ] Multiple files compiling
 - [ ] Basic Type system
 - [ ] Basic Macro / Comptime evaluation
