@@ -32,6 +32,7 @@ if [ "$operation" = "run" ]; then
                         exit 1
                     fi
                     rm "$exec.asm"
+                    rm "$exec.o"
                     rm "$exec"
                 else
                     echo "Failed to compile $file"
@@ -68,6 +69,7 @@ elif [ "$operation" = "update" ]; then
                     "/$exec" > "$file.answ" #wait last command to finish
                     wait $!
                     rm "$exec.asm"
+                    rm "$exec.o"
                     rm "$exec"
                 else
                     echo "Failed to compile $file"

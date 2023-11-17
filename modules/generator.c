@@ -210,7 +210,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 }
                 fprintf(f, "mov rbp, rsp\n");
                 int argsOffset = -16;
-                for(int i = node_get_num_neighbours(expr) - 2; i >= CHILD(2); i--) {
+                for(int i = CHILD(2); i < (int)node_get_num_neighbours(expr) - 1; i++) {
                     tokenChild = get_token_to_parse(
                         node_get_neighbour(node_get_neighbour(expr, i),
                         CHILD(1))).tk;
@@ -486,7 +486,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 if(map_get_value(g.func_map, (void **)&tk, (void *)&tmp)) {
                     backUpRsp = g.prev_rsp;
                     g.prev_rsp = rsp;
-                    for(int i = CHILD(1); i < (int)node_get_num_neighbours(expr); i++) {
+                    for(int i = (int)node_get_num_neighbours(expr) - 1; i >= CHILD(1); i--) {
                         someThingWasPushed = rsp;
                         translateExpression(f, node_get_neighbour(expr, i), g);
                         if(someThingWasPushed == rsp) {
