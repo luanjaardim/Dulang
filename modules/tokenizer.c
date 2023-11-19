@@ -52,10 +52,11 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
 };
 
 Token createToken(char *text, size_t len, size_t id, TkInfo info, int l, int c) {
+    /* printf("creating token: %s %d\n", text, (int)len); */
     Token tmp = {
       .id = id,
-      .qtdChars = len,
-      .text = (char *) malloc(sizeof(char) * len),
+      .qtdChars = len+1,
+      .text = (char *) calloc(len+1, sizeof(char)),
       .l = l,
       .c = c,
       .info = info,
@@ -250,7 +251,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
     char c = getc(fd);
     while(c != EOF) {
 
-        if(c == ' ' || c == '\n') {
+        if(c == ' ' || c == '\n' || c == '\t') {
             if(!sizeWord) { //len of the current word is 0
                 if(c == '\n') {
                     fileCol = -1;

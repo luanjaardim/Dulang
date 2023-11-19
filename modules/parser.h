@@ -40,5 +40,6 @@ ExprBlock createExprBlock(TokenizedFile *tf);
 void destroyExprBlock(ExprBlock *block);
 Expression *parseExprLink(Expression *expr);
 void printLinkExprs(Expression *expr, int layer);
+void deleteData(void *data); //deletes the data of a node
 
 #endif // PARSER_H_

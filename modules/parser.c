@@ -3,7 +3,13 @@
 INIT_NODE_TYPE(expr, TokenToParse)
 
 Expression *createExpression(Token *tk) {
-  TokenToParse tmpToken = {tk, 1 };
+  //copying the token to a new one, to avoid problems with the tokenized file
+  Token *tmpTk = malloc(sizeof(Token));
+  memcpy(tmpTk, tk, sizeof(Token));
+  tmpTk->text = malloc(tmpTk->qtdChars);
+  memcpy(tmpTk->text, tk->text, tmpTk->qtdChars);
+
+  TokenToParse tmpToken = {tmpTk, 1 };
   Expression *tmp = expr_node_create(tmpToken);
   node_set_link(tmp, NULL); //parent
   node_set_link(tmp, NULL); //left
@@ -239,7 +245,7 @@ Expression *parseExprLink(Expression *expr) {
                   if(tmpToken->info.type == IF_TK && tmpToken->l == expr_node_get_value(tmpExpr).tk->l) {
                     node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
                     /* printf("to delete: %s\n", expr_node_get_value(right).tk->text); */
-                    node_delete(right, NULL);
+                    node_delete(right, deleteData);
                     right = node_get_neighbour(tmpExpr, RIGHT_LINK);
                     goto conditionAndBodyAsChilds;
                   }
@@ -303,7 +309,7 @@ Expression *parseExprLink(Expression *expr) {
                   while(tmpRightToken->info.type != END_BAR) {
                     //discarting the COLON or the COMMA
                     node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK);
-                    node_delete(tmpRight, NULL);
+                    node_delete(tmpRight, deleteData);
 
                     //the next parameter must be a function variable name
                     tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
@@ -325,7 +331,7 @@ Expression *parseExprLink(Expression *expr) {
                 }
                 if(tmpRightToken->info.type == END_BAR) {
                   node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK);
-                  node_delete(tmpRight, NULL);
+                  node_delete(tmpRight, deleteData);
                   tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
                   if(tmpRight) {
                     tmpRight = parseExprLink(tmpRight);
@@ -579,8 +585,18 @@ void checkHighLevelBlock(TokenizedFile tf) {
   }
 }
 
+void deleteData(void *data) {
+  TokenToParse *casted = (TokenToParse *)data;
+  if(casted) {
+    free(casted->tk->text);
+    free(casted->tk);
+    casted->tk = NULL;
+  }
+}
+
 void destroyExprBlock(ExprBlock *block) {
-  node_delete_recursive(block->head, NULL);
+  if(block == NULL) return;
+  node_delete_recursive(block->head, deleteData);
   block->head = block->tail = NULL;
 }
 
