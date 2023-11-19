@@ -32,13 +32,15 @@ typedef struct {
   int8_t entryPoint; //index for main function
   size_t qtdBlocks, capBlocks;
   HighLevelBlock *blocks;
+  //Map of declared functions, contains the id of the function as key and the number of arguments it receives
+  Map declaredFuncs;
 } ParsedFile;
 
 ParsedFile createParsedFile(TokenizedFile *tf);
 void destroyParsedFile(ParsedFile *pf);
-ExprBlock createExprBlock(TokenizedFile *tf);
+ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs);
 void destroyExprBlock(ExprBlock *block);
-Expression *parseExprLink(Expression *expr);
+Expression *parseExprLink(Expression *expr, Map *declaredFuncs);
 void printLinkExprs(Expression *expr, int layer);
 void deleteData(void *data); //deletes the data of a node
 

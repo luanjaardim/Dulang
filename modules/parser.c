@@ -2,6 +2,10 @@
 
 INIT_NODE_TYPE(expr, TokenToParse)
 
+struct pairFunc {
+  int qtdArgs, id;
+};
+
 Expression *createExpression(Token *tk) {
   //copying the token to a new one, to avoid problems with the tokenized file
   Token *tmpTk = malloc(sizeof(Token));
@@ -16,10 +20,6 @@ Expression *createExpression(Token *tk) {
   node_set_link(tmp, NULL); //right
   return tmp;
 }
-
-//This map will store the previously defined functions to take exactly the number of arguments
-//it receives on parsing
-Map declaredFuncs;
 
 Expression *getRightAsChild(Expression *expr, int pos_child) {
   Expression *right = node_get_neighbour(expr, RIGHT_LINK);
@@ -47,7 +47,7 @@ int isType(Token *tk) {
 /*
  * Generates the expression AST of the expressions linked list
 */
-Expression *parseExprLink(Expression *expr) {
+Expression *parseExprLink(Expression *expr, Map *declaredFuncs) {
   /* printLinkExprs(expr, 0); */
   /* printf("-------------------------------------------------------------\n"); */
   if(expr == NULL) return NULL;
@@ -101,7 +101,7 @@ Expression *parseExprLink(Expression *expr) {
           {
             int tmp;
             //if it's a function name, we must change it's precedence
-            if(map_get_value(&declaredFuncs, (void **)&tmpToken, &tmp)) {
+            if(map_get_value(declaredFuncs, (void **)&tmpToken, &tmp)) {
               tmpToken->info.precedence = USER_FUNCTIONS;
             }
           }
@@ -173,7 +173,7 @@ Expression *parseExprLink(Expression *expr) {
           case USER_FUNCTIONS:
           {
             int tmp;
-            if(map_get_value(&declaredFuncs, (void **) &tmpToken, &tmp) == 0) {
+            if(map_get_value(declaredFuncs, (void **) &tmpToken, &tmp) == 0) {
               fprintf(stderr, "Trying to use a undeclared function\n");
               exit(1);
             }
@@ -184,7 +184,7 @@ Expression *parseExprLink(Expression *expr) {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
               }
-              Expression *tmpRight = parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK));
+              Expression *tmpRight = parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK), declaredFuncs);
               node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK);
               node_remove_link_at(tmpRight, LEFT_LINK); node_remove_link_at(tmpRight, RIGHT_LINK);
               node_set_double_link_at(tmpExpr, tmpRight, CHILD(++child), PARENT_LINK);
@@ -226,8 +226,8 @@ Expression *parseExprLink(Expression *expr) {
                   }
                   right = node_get_neighbour(right, RIGHT_LINK);
                 }
-                condition = parseExprLink(condition);
-                right = parseExprLink(right);
+                condition = parseExprLink(condition, declaredFuncs);
+                right = parseExprLink(right, declaredFuncs);
                 if(condition == NULL || right == NULL) {
                   fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
@@ -251,7 +251,7 @@ Expression *parseExprLink(Expression *expr) {
                   }
                   else {
                     node_change_neighbour_position(tmpExpr, RIGHT_LINK, CHILD(1));
-                    right = parseExprLink(right);
+                    right = parseExprLink(right, declaredFuncs);
                     node_change_neighbour_position(right, LEFT_LINK, PARENT_LINK);
                   }
                 }
@@ -334,7 +334,7 @@ Expression *parseExprLink(Expression *expr) {
                   node_delete(tmpRight, deleteData);
                   tmpRight = node_get_neighbour(tmpExpr, RIGHT_LINK);
                   if(tmpRight) {
-                    tmpRight = parseExprLink(tmpRight);
+                    tmpRight = parseExprLink(tmpRight, declaredFuncs);
                     /* node_swap_neighbours(tmpExpr, tmpRight, RIGHT_LINK, RIGHT_LINK); */
                     node_remove_link_at(tmpRight, LEFT_LINK);
                     node_remove_link_at(tmpExpr, RIGHT_LINK);
@@ -362,7 +362,7 @@ Expression *parseExprLink(Expression *expr) {
               case BACK_TK:
               {
                 if(right) {
-                  Expression *tmpRight = parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK));
+                  Expression *tmpRight = parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK), declaredFuncs);
                   node_remove_link_at(tmpExpr, RIGHT_LINK);
                   node_set_link(tmpExpr, NULL);
                   node_remove_link_at(tmpRight, LEFT_LINK); node_remove_link_at(tmpRight, RIGHT_LINK);
@@ -395,8 +395,8 @@ Expression *parseExprLink(Expression *expr) {
               node_swap_neighbours(tmpExpr, right, RIGHT_LINK, RIGHT_LINK);
               node_remove_link_at(left, RIGHT_LINK); node_remove_link_at(left, LEFT_LINK);
               node_remove_link_at(right, RIGHT_LINK); node_remove_link_at(right, LEFT_LINK);
-              if(right) right = parseExprLink(right);
-              if(left) left = parseExprLink(left);
+              if(right) right = parseExprLink(right, declaredFuncs);
+              if(left) left = parseExprLink(left, declaredFuncs);
 
               node_set_double_link_at(tmpExpr, left, CHILD(1), PARENT_LINK);
               node_set_double_link_at(tmpExpr, right, CHILD(2), PARENT_LINK);
@@ -438,7 +438,7 @@ void printLinkExprs(Expression *expr, int layer) {
   printLinkExprs(node_get_neighbour(expr, RIGHT_LINK), layer);
 }
 
-ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
+ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType, Map *declaredFuncs) {
   Expression *headExpr = createExpression(currToken(*tf));
   Expression *tailExpr = headExpr;
   Expression *tmp;
@@ -450,7 +450,7 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
     if(nextToken(tf) == NULL) break;
   }
   /* printLinkExprs(headExpr, 0); */
-  Expression *parsedExpr = parseExprLink(headExpr);
+  Expression *parsedExpr = parseExprLink(headExpr, declaredFuncs);
   tailExpr = parsedExpr;
   while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
   return (ExprBlock) {parsedExpr, tailExpr};
@@ -459,7 +459,7 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType) {
 /*
  * Creates a linked list for all the tokens of the block
 */
-ExprBlock createExprBlock(TokenizedFile *tf) {
+ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
   if(tf == NULL || currToken(*tf) == NULL) {
     fprintf(stderr, "Trying to create a expression block from a NULL tokenized file\n");
     exit(1);
@@ -475,7 +475,7 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   do {
     if(currToken(*tf)->info.type == PAR_OPEN) {
       nextToken(tf);
-      tmp = createExprBlockTill(tf, PAR_CLOSE);
+      tmp = createExprBlockTill(tf, PAR_CLOSE, declaredFuncs);
     }
     else {
 
@@ -483,7 +483,7 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
       //if the block has a inner block, make a recurse call to it
       if(tf->currElem == 0) {
         /* printf("lastId: %ld, lastLine: %ld\n", endOfCurrBlock(cloneTokenizedFile(*tf)).lastId, endOfCurrBlock(cloneTokenizedFile(*tf)).lastLine); */
-        tmp = createExprBlock(tf);
+        tmp = createExprBlock(tf, declaredFuncs);
         /* printf("------------------------------------\n"); */
         /* printLinkExprs(tmp.head, 0); */
         /* printf("------------------------------------\n"); */
@@ -509,7 +509,7 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
     /*   exit(1); */
     /* } */
   } while(nextToken(tf));
-  Expression *parsedExpr = parseExprLink(headExpr);
+  Expression *parsedExpr = parseExprLink(headExpr, declaredFuncs);
   tailExpr = parsedExpr;
   while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
   /* printf("Saindo\n"); */
@@ -517,7 +517,7 @@ ExprBlock createExprBlock(TokenizedFile *tf) {
   return (ExprBlock) {parsedExpr, tailExpr};
 }
 
-void checkHighLevelBlock(TokenizedFile tf) {
+void checkHighLevelBlock(TokenizedFile tf, ParsedFile *pf) {
   //some keywords can start a high level block -> fn ...
 
   Token *tmpTk = currToken(tf), *name;
@@ -528,7 +528,7 @@ void checkHighLevelBlock(TokenizedFile tf) {
       if(isType(tmpTk)) {
         name = nextToken(&tf);
         int tmp;
-        if(map_get_value(&declaredFuncs, (void **)&name, &tmp)) {
+        if(map_get_value(&(pf->declaredFuncs), (void **)&name, &tmp)) {
           fprintf(stderr, "Trying to use a function name twice\n");
           exit(1);
         }
@@ -563,7 +563,7 @@ void checkHighLevelBlock(TokenizedFile tf) {
               fprintf(stderr, "Bad function definition, missing function body, %d %d\n", tmpTk->l, tmpTk->c);
               exit(1);
             }
-            map_insert(&declaredFuncs, (void **)&name, (void *)&argNum);
+            map_insert(&(pf->declaredFuncs), (void **)&name, (void *)&argNum);
           } else {
             fprintf(stderr, "Bad function definition, missing end bar delimiter, %d %d\n", tmpTk->l, tmpTk->c);
             exit(1);
@@ -607,17 +607,15 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
     .entryPoint = -1,
     .qtdBlocks = 0,
     .capBlocks = 1,
-    .blocks = malloc(sizeof(HighLevelBlock))
+    .blocks = malloc(sizeof(HighLevelBlock)),
+    .declaredFuncs = map_create(sizeof(Token *), sizeof(struct pairFunc), cmp_token_to_parse)
   };
   ExprBlock tmpBlock;
   /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
 
-  //it will only be used to store the number of arguments a function has, for when parsing, get the right amount
-  declaredFuncs = map_create(sizeof(Token *), sizeof(int), cmp_token_to_parse);
-
   do {
-    checkHighLevelBlock(cloneTokenizedFile(*tf));
-    tmpBlock = createExprBlock(tf);
+    checkHighLevelBlock(cloneTokenizedFile(*tf), &pf);
+    tmpBlock = createExprBlock(tf, &(pf.declaredFuncs));
     //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
     if(pf.entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->info.type == FUNC) {
       Expression *fnName = node_get_neighbour(node_get_neighbour(tmpBlock.head, CHILD(1)), CHILD(1));
@@ -635,7 +633,6 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
     exit(1);
   }
 
-  map_delete(&declaredFuncs);
   return pf;
 }
 
@@ -643,6 +640,7 @@ void destroyParsedFile(ParsedFile *pf) {
   for(int i = 0; i < (int)pf->qtdBlocks; i++)
     destroyExprBlock(&pf->blocks[i]);
   free(pf->blocks);
+  map_delete(&(pf->declaredFuncs));
   pf->blocks = NULL;
   /* printf("destroyed\n"); */
 }
