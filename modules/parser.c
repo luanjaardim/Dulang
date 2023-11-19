@@ -600,9 +600,32 @@ void destroyExprBlock(ExprBlock *block) {
   block->head = block->tail = NULL;
 }
 
-ParsedFile createParsedFile(TokenizedFile *tf) {
-  if(tf == NULL) return (ParsedFile){0};
+void parseBlocks(TokenizedFile *tf, ParsedFile *pf) {
+  if(tf == NULL) {
+    fprintf(stderr, "Trying to parse a NULL tokenized file\n");
+    exit(1);
+  }
 
+  ExprBlock tmpBlock;
+  /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
+
+  do {
+    checkHighLevelBlock(cloneTokenizedFile(*tf), pf);
+    tmpBlock = createExprBlock(tf, &(pf->declaredFuncs));
+    //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
+    if(pf->entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->info.type == FUNC) {
+      Expression *fnName = node_get_neighbour(node_get_neighbour(tmpBlock.head, CHILD(1)), CHILD(1));
+      if(cmpStr(expr_node_get_value(fnName).tk->text, "main"))
+        pf->entryPoint = pf->qtdBlocks;
+    }
+    maybeRealloc((void**)&pf->blocks, (int*)&pf->capBlocks, pf->qtdBlocks, sizeof(HighLevelBlock));
+    pf->blocks[pf->qtdBlocks++] = tmpBlock;
+
+    /* printf("is null: %d\n", currToken(*tf) == NULL); */
+  } while(nextToken(tf));
+}
+
+ParsedFile createParsedFile(TokenizedFile *tf) {
   ParsedFile pf = {
     .entryPoint = -1,
     .qtdBlocks = 0,
@@ -610,23 +633,8 @@ ParsedFile createParsedFile(TokenizedFile *tf) {
     .blocks = malloc(sizeof(HighLevelBlock)),
     .declaredFuncs = map_create(sizeof(Token *), sizeof(struct pairFunc), cmp_token_to_parse)
   };
-  ExprBlock tmpBlock;
-  /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
 
-  do {
-    checkHighLevelBlock(cloneTokenizedFile(*tf), &pf);
-    tmpBlock = createExprBlock(tf, &(pf.declaredFuncs));
-    //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
-    if(pf.entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->info.type == FUNC) {
-      Expression *fnName = node_get_neighbour(node_get_neighbour(tmpBlock.head, CHILD(1)), CHILD(1));
-      if(cmpStr(expr_node_get_value(fnName).tk->text, "main"))
-        pf.entryPoint = pf.qtdBlocks;
-    }
-    maybeRealloc((void**)&pf.blocks, (int*)&pf.capBlocks, pf.qtdBlocks, sizeof(HighLevelBlock));
-    pf.blocks[pf.qtdBlocks++] = tmpBlock;
-
-    /* printf("is null: %d\n", currToken(*tf) == NULL); */
-  } while(nextToken(tf));
+  parseBlocks(tf, &pf);
 
   if(pf.entryPoint == -1) {
     fprintf(stderr, "No entry point found\n");

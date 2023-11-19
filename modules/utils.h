@@ -45,6 +45,7 @@ typedef enum {
     BIT_NOT,
     ASSIGN,
     FUNC,
+    LOAD_TK,
     IF_TK,
     ELSE_TK,
     WHILE_TK,

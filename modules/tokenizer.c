@@ -18,6 +18,7 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"var", VARIABLE,   BUILTIN_SINGLE_OPERAND},
   {"int", TYPE_INT,   BUILTIN_SINGLE_OPERAND},
   {"str", TYPE_STR,   BUILTIN_SINGLE_OPERAND},
+  {"load", LOAD_TK, BUILTIN_SINGLE_OPERAND},
   /* float */
   /* char */
   {"skip", SKIP_TK,  BUILTIN_SINGLE_OPERAND},
