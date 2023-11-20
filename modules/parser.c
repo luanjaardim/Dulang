@@ -2,10 +2,6 @@
 
 INIT_NODE_TYPE(expr, TokenToParse)
 
-struct pairFunc {
-  int qtdArgs, id;
-};
-
 Expression *createExpression(Token *tk) {
   //copying the token to a new one, to avoid problems with the tokenized file
   Token *tmpTk = malloc(sizeof(Token));
@@ -99,9 +95,9 @@ Expression *parseExprLink(Expression *expr, Map *declaredFuncs) {
         switch(tmpToken->info.precedence) {
           case USER_DEFINITIONS:
           {
-            int tmp;
+            pairFunc tmp;
             //if it's a function name, we must change it's precedence
-            if(map_get_value(declaredFuncs, (void **)&tmpToken, &tmp)) {
+            if(map_get_value(declaredFuncs, (void **)&tmpToken, (void *)&tmp)) {
               tmpToken->info.precedence = USER_FUNCTIONS;
             }
           }
@@ -172,14 +168,14 @@ Expression *parseExprLink(Expression *expr, Map *declaredFuncs) {
 
           case USER_FUNCTIONS:
           {
-            int tmp;
+            pairFunc tmp;
             if(map_get_value(declaredFuncs, (void **) &tmpToken, &tmp) == 0) {
               fprintf(stderr, "Trying to use a undeclared function\n");
               exit(1);
             }
             /* printf("%s com %d argumentos\n", tmpToken->text, tmp); */
             int child = 0;
-            while(tmp--) {
+            while(tmp.qtdArgs--) {
               if(node_get_neighbour(tmpExpr, RIGHT_LINK) == NULL) {
                 fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                 exit(1);
@@ -517,22 +513,25 @@ ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
   return (ExprBlock) {parsedExpr, tailExpr};
 }
 
-void checkHighLevelBlock(TokenizedFile tf, ParsedFile *pf) {
+void checkHighLevelBlock(TokenizedFile *tokFile, ParsedFile *pf) {
   //some keywords can start a high level block -> fn ...
 
+  TokenizedFile tf = cloneTokenizedFile(*tokFile);
   Token *tmpTk = currToken(tf), *name;
   switch(tmpTk->info.type) {
     case FUNC:
       tmpTk = nextToken(&tf);
-      int argNum = 0;
+      pairFunc p = { .id = 0, .qtdArgs = 0};
       if(isType(tmpTk)) {
         name = nextToken(&tf);
-        int tmp;
-        if(map_get_value(&(pf->declaredFuncs), (void **)&name, &tmp)) {
+        pairFunc tmp;
+        if(map_get_value(pf->declaredFuncs, (void **)&name, &tmp)) {
           fprintf(stderr, "Trying to use a function name twice\n");
           exit(1);
         }
         if(name->info.type == NAME_TK) {
+          p.id = name->id; //storing the id of the function name
+
           tmpTk = nextToken(&tf);
           if(tmpTk->info.type == COLON) {
             while(nextToken(&tf)) {
@@ -541,7 +540,7 @@ void checkHighLevelBlock(TokenizedFile tf, ParsedFile *pf) {
                 tmpTk = nextToken(&tf);
                 if(tmpTk->info.type == NAME_TK) {
                   tmpTk = nextToken(&tf);
-                  argNum++;
+                  p.qtdArgs++;
                   if(tmpTk->info.type == COMMA) continue;
                   else if(tmpTk->info.type == END_BAR) break;
                   else {
@@ -563,7 +562,7 @@ void checkHighLevelBlock(TokenizedFile tf, ParsedFile *pf) {
               fprintf(stderr, "Bad function definition, missing function body, %d %d\n", tmpTk->l, tmpTk->c);
               exit(1);
             }
-            map_insert(&(pf->declaredFuncs), (void **)&name, (void *)&argNum);
+            map_insert(pf->declaredFuncs, (void **)&name, (void *)&p);
           } else {
             fprintf(stderr, "Bad function definition, missing end bar delimiter, %d %d\n", tmpTk->l, tmpTk->c);
             exit(1);
@@ -610,8 +609,9 @@ void parseBlocks(TokenizedFile *tf, ParsedFile *pf) {
   /* printf("line: %d, word: %s\n", currToken(*tf)->l, currToken(*tf)->text); */
 
   do {
-    checkHighLevelBlock(cloneTokenizedFile(*tf), pf);
-    tmpBlock = createExprBlock(tf, &(pf->declaredFuncs));
+    checkHighLevelBlock(tf, pf);
+    tmpBlock = createExprBlock(tf, pf->declaredFuncs);
+
     //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
     if(pf->entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->info.type == FUNC) {
       Expression *fnName = node_get_neighbour(node_get_neighbour(tmpBlock.head, CHILD(1)), CHILD(1));
@@ -626,12 +626,14 @@ void parseBlocks(TokenizedFile *tf, ParsedFile *pf) {
 }
 
 ParsedFile createParsedFile(TokenizedFile *tf) {
+  Map *funcs = malloc(sizeof(Map));
+  *funcs = map_create(sizeof(Token *), sizeof(pairFunc), cmp_token_to_parse);
   ParsedFile pf = {
     .entryPoint = -1,
     .qtdBlocks = 0,
     .capBlocks = 1,
     .blocks = malloc(sizeof(HighLevelBlock)),
-    .declaredFuncs = map_create(sizeof(Token *), sizeof(struct pairFunc), cmp_token_to_parse)
+    .declaredFuncs = funcs,
   };
 
   parseBlocks(tf, &pf);
@@ -648,7 +650,8 @@ void destroyParsedFile(ParsedFile *pf) {
   for(int i = 0; i < (int)pf->qtdBlocks; i++)
     destroyExprBlock(&pf->blocks[i]);
   free(pf->blocks);
-  map_delete(&(pf->declaredFuncs));
+  map_delete(pf->declaredFuncs);
+  free(pf->declaredFuncs);
   pf->blocks = NULL;
   /* printf("destroyed\n"); */
 }

@@ -28,12 +28,18 @@ typedef struct {
 //High level blocks are blocks that are not inside any other one, just inside of the main scope
 typedef ExprBlock HighLevelBlock;
 
+//This is the element of the declaredFuncs map, it stores the number of arguments the function receives
+//and the id of the function name
+typedef struct {
+  int qtdArgs, id;
+} pairFunc;
+
 typedef struct {
   int8_t entryPoint; //index for main function
   size_t qtdBlocks, capBlocks;
   HighLevelBlock *blocks;
   //Map of declared functions, contains the id of the function as key and the number of arguments it receives
-  Map declaredFuncs;
+  Map *declaredFuncs;
 } ParsedFile;
 
 ParsedFile createParsedFile(TokenizedFile *tf);
