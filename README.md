@@ -99,7 +99,7 @@ while foo | $ another to say while different than 0
     dump foo $ printing only even numbers
 ```
 
-## Funcions
+## Functions
 Functions for better modularization:
 ```
 $ recursive implementation of the Fibonacci sequence
@@ -150,6 +150,7 @@ fn int main|
     dump value
     value = 1 + 2 / 2 % 5
     dump value
+    back 0
 ```
 
 ## Syscall
