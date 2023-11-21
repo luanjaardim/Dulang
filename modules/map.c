@@ -18,8 +18,8 @@ void map_delete(Map *map) {
             free(map->pairs[i].value);
         }
         free(map->pairs);
+        map->pairs = NULL;
     }
-    map->pairs = NULL;
 }
 
 /*
@@ -40,6 +40,10 @@ void map_insert(Map *map, void *new_key, void *new_value) {
  * Function to find the key in the map and return the value
  */
 int map_get_value(Map *map, void *key, void *to_ret) {
+    if(map == NULL) {
+        fprintf(stderr, "Error! map is NULL\n");
+        exit(1);
+    }
     for(int i = 0; i < (int)map->qtdPairs; i++) {
         if(map->cmp(&map->pairs[i], &(MapPair){.key = key}, map->keySize) == 0) {
             memcpy(to_ret, map->pairs[i].value, map->valueSize);
@@ -68,4 +72,33 @@ int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size) {
         }
     }
     return 0; //they are equal
+}
+
+/*
+ * This funcstion is used to replace elements that came from TokenizedFile
+ * for elements that came from ParsedFile, so we can transfer the parse
+ * of a loaded file to another file without losing it's functions definitions
+ */
+void map_fetch_element(Map *map, void *key_to_update) {
+    if(map == NULL) {
+        fprintf(stderr, "Error! map is NULL\n");
+        exit(1);
+    }
+    for(int i = 0; i < (int)map->qtdPairs; i++) {
+        if(map->cmp(&map->pairs[i], &(MapPair){.key = key_to_update}, map->keySize) == 0) {
+            memcpy(map->pairs[i].key, key_to_update, map->keySize);
+            return;
+        }
+    }
+    fprintf(stderr, "Error! Could not find the key to update\n");
+    exit(1);
+}
+
+void map_get_element(Map *map, int index, void *key_ret, void *value_ret) {
+    if(index < 0 || index >= (int)map->qtdPairs) {
+        fprintf(stderr, "Error! Index out of bounds\n");
+        exit(1);
+    }
+    memcpy(key_ret, map->pairs[index].key, sizeof(map->keySize));
+    memcpy(value_ret, map->pairs[index].value, sizeof(map->valueSize));
 }

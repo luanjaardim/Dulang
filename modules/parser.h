@@ -46,6 +46,7 @@ ParsedFile createParsedFile(TokenizedFile *tf);
 void destroyParsedFile(ParsedFile *pf);
 ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs);
 void destroyExprBlock(ExprBlock *block);
+void parseBlocks(TokenizedFile *tf, ParsedFile *pf);
 Expression *parseExprLink(Expression *expr, Map *declaredFuncs);
 void printLinkExprs(Expression *expr, int layer);
 void deleteData(void *data); //deletes the data of a node

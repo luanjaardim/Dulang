@@ -577,6 +577,75 @@ void checkHighLevelBlock(TokenizedFile *tokFile, ParsedFile *pf) {
         exit(1);
       }
       break;
+    case LOAD_TK:
+      tmpTk = nextToken(tokFile);
+      if(tmpTk->info.type == STR_TK) {
+        int len = strlen(tmpTk->text);
+        char fileName[len-1];
+        memcpy(fileName, tmpTk->text+1, len-2);
+        fileName[len-2] = '\0';
+        /* printf("loading file: %s\n", fileName); */
+        FILE *file = fopen(fileName, "r");
+
+        TokenizedFile loadedFile = readToTokenizedFile(file);
+
+        fclose(file);
+
+        ParsedFile parFile = {
+          .entryPoint = -1,
+          .qtdBlocks = 0,
+          .capBlocks = 1,
+          .blocks = malloc(sizeof(HighLevelBlock)),
+          .declaredFuncs = pf->declaredFuncs,
+        };
+        parseBlocks(&loadedFile, &parFile);
+        /* printf("qtd blocks: %ld, prev qtd blocks: %ld\n", parFile.qtdBlocks, pf->qtdBlocks); */
+
+        //a loaded file cannot have a main function inside it
+        if(parFile.entryPoint != -1) {
+          fprintf(stderr, "Main function inside a loaded file\n");
+          exit(1);
+        }
+        //passing the blocks to the main parsedFile
+        for(int i = 0; i < (int)parFile.qtdBlocks; i++) {
+          maybeRealloc((void**)&pf->blocks, (int*)&pf->capBlocks, pf->qtdBlocks, sizeof(HighLevelBlock));
+          pf->blocks[pf->qtdBlocks++] = parFile.blocks[i];
+          if(expr_node_get_value(parFile.blocks[i].head).tk->info.type == FUNC) {
+            Expression *fnName = node_get_neighbour(node_get_neighbour(parFile.blocks[i].head, CHILD(1)), CHILD(1));
+            Token *fnToken = expr_node_get_value(fnName).tk;
+            map_fetch_element(pf->declaredFuncs, (void **)&fnToken);
+          }
+        }
+
+        parFile.qtdBlocks = 0;
+        parFile.declaredFuncs = NULL;
+        destroyParsedFile(&parFile);
+        destroyTokenizdFile(&loadedFile);
+        //print every highlevel block
+        /* for(int i = 0; i < (int)pf->qtdBlocks; i++) { */
+        /*   printLinkExprs(pf->blocks[i].head, 0); */
+        /* } */
+
+        //print every function declaration
+        /* for(int i = 0; i < (int)pf->declaredFuncs->qtdPairs; i++) { */
+        /*   map_get_element(pf->declaredFuncs, i, (void **)&tmpTk, (void **)&p); */
+        /*   printf("func: %s, id: %d, qtdArgs: %d\n", tmpTk->text, p.id, p.qtdArgs); */
+        /* } */
+
+        Token *next = nextToken(tokFile);
+        if(next != NULL && tmpTk->l == next->l) {
+          fprintf(stderr, "Load file only has the file path as parameter, %d %d\n", tmpTk->l, tmpTk->c);
+          exit(1);
+        }
+        //recursion to ignore this highlevel block and check the next one
+        checkHighLevelBlock(tokFile, pf);
+        /* printf("loaded file: %s\n", fileName); */
+
+      } else {
+        fprintf(stderr, "Load expected a string with the file path\n");
+        exit(1);
+      }
+      break;
     default:
       fprintf(stderr, "%s must implement it's high level block check\n", tmpTk->text);
       exit(1);
@@ -611,6 +680,7 @@ void parseBlocks(TokenizedFile *tf, ParsedFile *pf) {
   do {
     checkHighLevelBlock(tf, pf);
     tmpBlock = createExprBlock(tf, pf->declaredFuncs);
+    /* printLinkExprs(tmpBlock.head, 0); */
 
     //if it's a function and we didn't find the main yet, check if it's the main function, if it is, set the entry point
     if(pf->entryPoint == -1 && expr_node_get_value(tmpBlock.head).tk->info.type == FUNC) {

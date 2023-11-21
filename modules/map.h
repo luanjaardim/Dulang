@@ -27,6 +27,8 @@ Map map_create(size_t keySize, size_t valueSize, int (*cmp)(MapPair *, MapPair *
 void map_delete(Map *map);
 void map_insert(Map *map, void *new_key, void *new_value);
 int map_get_value(Map *map, void *key, void *to_ret);
+void map_get_element(Map *map, int index, void *key_ret, void *value_ret);
+void map_fetch_element(Map *map, void *key_to_update);
 int cmp_token_to_parse(MapPair *f, MapPair *s, size_t key_size);
 
 #endif // MAP_H_
