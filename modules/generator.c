@@ -29,9 +29,7 @@ void generateDulangFile(FILE *f, ParsedFile *pf) {
     insertIntToStr(f);
     fprintf(f, "segment .text\n");
     fprintf(f, "global _start\n");
-    //it will store the id of the function name creation
-    Map map_functions = map_create(sizeof(Token *), sizeof(int), cmp_token_to_parse);
-    g.func_map = &map_functions;
+    g.func_map = pf->declaredFuncs;
 
     for(int i = 0; i < (int)pf->qtdBlocks; i++) {
         rsp = 0;
@@ -192,13 +190,9 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             Expression *returnTypeAndName = node_get_neighbour(expr, CHILD(1));
             Token *name, *tokenChild;
             name = get_token_to_parse(node_get_neighbour(returnTypeAndName, CHILD(1))).tk;
-            int tmp;
+            pairFunc tmp;
             if(map_get_value(g.func_map, (void **)&name, (void *)&tmp)) {
-               fprintf(stderr, "Error: function %s already declared\n", tokenChild->text);
-               exit(1);
-            } else {
                 fprintf(f, ";; -- function %s %ld\n", name->text, name->id);
-                map_insert(g.func_map, (void **)&name, (void *)&name->id);
                 int isMain = memcmp("main", name->text, 4) == 0;
                 /* printf("child: %s\n", name->text); */
                 /* printf("isMain: %d\n", isMain); */
@@ -234,6 +228,9 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, ";; -- end of func\n");
                 }
 
+            } else {
+                fprintf(stderr, "Error: function %s not declared, %d %d\n", name->text, name->l, name->c);
+                exit(1);
             }
         }
 
@@ -470,8 +467,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         {
             fprintf(f, ";; -- user variable\n");
             Token *tk = get_token_to_parse(expr).tk;
-            int tmp;
             if(tk->info.precedence == USER_DEFINITIONS) {
+                int tmp;
                 if(map_get_value(g.var_map, (void **)&tk, (void *)&tmp)) {
                     //it can be '+' for arguments and '-' for local variables
                     fprintf(f, "push qword[rbp%s%d]\n", tmp > 0 ? "-" : "+", abs(tmp)); //TODO: the size can be variable
@@ -483,6 +480,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 }
             } else if(tk->info.precedence == USER_FUNCTIONS) {
                 int someThingWasPushed;
+                pairFunc tmp;
                 if(map_get_value(g.func_map, (void **)&tk, (void *)&tmp)) {
                     backUpRsp = g.prev_rsp;
                     g.prev_rsp = rsp;
@@ -495,14 +493,14 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                         }
                     }
                     fprintf(f, ";; -- function call %s\n", tk->text);
-                    fprintf(f, "call func_%s_%d\n", tk->text, tmp);
+                    fprintf(f, "call func_%s_%d\n", tk->text, tmp.id);
                     deinitVariables(f, g);
                     g.prev_rsp = backUpRsp;
                     fprintf(f, "push rax\n");
                     rsp += 8;
                 }
             } else {
-                fprintf(stderr, "Error: unknown precedence: %d\n", tk->info.precedence);
+                fprintf(stderr, "Error: Something very strange has happened, %d %d\n", tk->l, tk->c);
                 exit(1);
             }
 
