@@ -45,7 +45,7 @@ In Dulang, the most basic block is a line, it will be parsed individually as a s
 ```
 bar = 1 +
       1 *
-      1 + 1
+        1 + 1
 ```
 
 This indentation is always used with `if`, `else if`, `else`, `while` to define the code that is inside or not of any block.
@@ -153,6 +153,23 @@ fn int main|
     back 0
 ```
 
+## Load
+Load some other files to your main file, to use functions defined inside them
+
+```someFile.dulan:
+fn int square: int num|
+    back num * num $ returns num^2
+```
+```main.dulan:
+$ load someFile.dulan to use it'ss definitions
+load "someFile.dulan"
+
+fn int main|
+    $ this will return (2^2)^2 = 2^4 = 16
+    dump square square 2
+    back 0
+```
+
 ## Syscall
 This is the reserved keyword to communicate directly with the kernel syscall.
 It can receive a variable number of arguments, as many the syscall needs, from 1 to 7.
@@ -184,7 +201,7 @@ My plans:
 - [X] Interface for kernel syscalls
 - [X] Function calls
 - [X] Recursive function calls
-- [ ] Multiple files compiling
+- [X] Multiple files compiling
 - [ ] Basic Type system
 - [ ] Basic Macro / Comptime evaluation
 - [ ] Structs / Enums / Unions
