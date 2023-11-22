@@ -23,6 +23,7 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   /* char */
   {"skip", SKIP_TK,  BUILTIN_SINGLE_OPERAND},
   {"stop", STOP_TK,  BUILTIN_SINGLE_OPERAND},
+  {"@", DEREF_TK,  BUILTIN_SINGLE_OPERAND},
   {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
   {"-", NUM_SUB,    BUILTIN_MEDIUM_PREC},
   {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
@@ -360,6 +361,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 cleanWord(word, &sizeWord);
                 continue;
 
+              case '@':
               //symbols
               case ':':
               case '|':

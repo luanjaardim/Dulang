@@ -513,6 +513,12 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, "add rsp, 8\n");
             rsp -= 8;
             break;
+        case DEREF_TK:
+            fprintf(f, ";; -- deref\n");
+            translateExpression(f, node_get_neighbour(expr, CHILD(1)), g);
+            fprintf(f, "pop rax\n");
+            fprintf(f, "push qword[rax]\n");
+            break;
         default:
             printf("Error: unknown token type: %s, %d %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
             break;
