@@ -36,6 +36,8 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"and", LOG_AND,  BUILTIN_MEDIUM_PREC},
   {"band", BIT_AND, BUILTIN_MEDIUM_PREC},
   {"bor", BIT_OR,   BUILTIN_MEDIUM_PREC},
+  {"shl", SHIFT_L_TK,   BUILTIN_MEDIUM_PREC},
+  {"shr", SHIFT_R_TK,   BUILTIN_MEDIUM_PREC},
   {"=", ASSIGN,     BUILTIN_HIGH_PREC},
   {"if", IF_TK,        BUILTIN_HIGH_PREC},
   {"else", ELSE_TK,    BUILTIN_HIGH_PREC},

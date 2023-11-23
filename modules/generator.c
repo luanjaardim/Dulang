@@ -289,6 +289,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         case LOG_AND:
         case BIT_OR:
         case BIT_AND:
+        case SHIFT_L_TK:
+        case SHIFT_R_TK:
         {
             fprintf(f, ";; -- operation %s\n", get_token_to_parse(expr).tk->text);
             Expression *left = node_get_neighbour(expr, CHILD(1));
@@ -332,6 +334,11 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, "mov rax, rdx\n");
                     break;
                 //bitwise operations
+                case SHIFT_L_TK:
+                case SHIFT_R_TK:
+                    fprintf(f, "mov cl, bl\n"); //HERE WE ARE USING CL, CHANGE THIS WHEN REFACTORING REGISTERS USE
+                    fprintf(f, "%s rax, cl\n", (type == SHIFT_L_TK) ? "shl" : "shr");
+                    break;
                 case BIT_OR:
                 case BIT_AND:
                     fprintf(f, "%s rax, rbx\n", (BIT_OR == type) ? "or" : "and");
@@ -371,7 +378,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     fprintf(f, "movzx rax, al\n");
                     break;
                 default:
-                    printf("Error: unknown token type\n");
+                    printf("Error: unknown token type for generator\n");
                     break;
             }
             fprintf(f, "push rax\n");
@@ -520,8 +527,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, "push qword[rax]\n");
             break;
         default:
-            printf("Error: unknown token type: %s, %d %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
-            break;
+            printf("Error: unknown token type for generator: %s, %d %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
+            exit(1);
     }
     Expression *right = node_get_neighbour(expr, RIGHT_LINK);
     if(right) translateExpression(f, right, g);

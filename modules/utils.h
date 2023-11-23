@@ -44,6 +44,8 @@ typedef enum {
     CMP_LT,
     BIT_AND,
     BIT_OR,
+    SHIFT_L_TK,
+    SHIFT_R_TK,
     BIT_NOT,
     ASSIGN,
     FUNC,
