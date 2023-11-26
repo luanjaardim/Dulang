@@ -1,0 +1,63 @@
+fn int len: str string|
+   if string|
+      $this will return the first byte at string pointer
+      c = @string band 255
+      $ variable to count the number of chars
+      count = 0
+      while c != 0|
+           count = count + 1
+           string = string + 1
+           c = @string band 255
+
+      back count
+   else
+        warning = "A null string was passed"
+        sys 1 1
+            warning
+            len warning |
+
+        sys 60 1 |
+        $ exit with error code
+
+fn int print: str string|
+   sys 1 1 string len string|
+   back 0
+
+fn int dumpInt: int integerNumber|
+   $ buffer with 32 bytes
+   buffer = "                                "
+   $ this buffer will store a reversed order of numbers
+   bufferToRev = "                                "
+   $ we need a variable to walk through the buffer
+   pnt = buffer
+   secpnt = buffer
+   if integerNumber < 0|
+      @pnt = 45
+      integerNumber = integerNumber * (1-2) $ invert signal
+      secpnt = buffer + 1
+
+   pnt = bufferToRev
+
+   unidade = 0
+   if integerNumber|
+    while integerNumber|
+            unidade = integerNumber % 10
+            integerNumber = integerNumber / 10
+            @pnt = unidade + 48
+            pnt = pnt + 1
+   else
+     zeroAndNewLine = 10
+     zeroAndNewLine = (zeroAndNewLine shl 8) + 48
+     @buffer = zeroAndNewLine
+     back print buffer
+
+   lenBuf = len bufferToRev
+   $ reverting what is in bufferToRev and storing it in buffer
+   while lenBuf|
+      pnt = pnt - 1
+      @secpnt = @pnt
+      secpnt = secpnt + 1
+      lenBuf = lenBuf-1
+
+   @secpnt = 10 $last char to be a new line
+   back print buffer
