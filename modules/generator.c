@@ -153,15 +153,22 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         case ASSIGN:
             fprintf(f, ";; -- assign %ld\n", get_token_to_parse(expr).tk->id);
             translateExpression(f, node_get_neighbour(expr, CHILD(2)), g);
-            Token *tk = get_token_to_parse(node_get_neighbour(expr, CHILD(1))).tk;
+            Expression *firstChild = node_get_neighbour(expr, CHILD(1));
+            Token *tk = get_token_to_parse(firstChild).tk;
             int tmp, ret;
             ret = map_get_value(g.var_map, (void **)&tk, (void *)&tmp);
 
-            if(ret) {
+            if(ret && tk->info.type == NAME_TK) {
                 fprintf(f, "pop rax\n");
                 rsp -= 8;
                 //it can be '+' for arguments and '-' for local variables
                 fprintf(f, "mov [rbp%s%d], rax\n", tmp > 0 ? "-" : "+", abs(tmp));
+            } else if(tk->info.type == DEREF_TK) {
+                translateExpression(f, node_get_neighbour(firstChild, CHILD(1)), g);
+                fprintf(f, "pop rax\n");
+                fprintf(f, "pop rbx\n");
+                rsp -= 16;
+                fprintf(f, "mov [rax], rbx\n");
             }
             else
                 map_insert(g.var_map, (void **)&tk, (void *)&rsp);

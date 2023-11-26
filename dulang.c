@@ -42,7 +42,8 @@ int main(int argc, char **argv) {
     //Every word is turned into Tokens, with informations that helps on parsing
     /* printTokenizedFile(tokFile); */
     ParsedFile pf = createParsedFile(&tokFile);
-    /* printLinkExprs(pf.blocks[0].head, 0); //it will print the main function */
+    for(int i = 0; i < (int)pf.qtdBlocks; i++)
+        printLinkExprs(pf.blocks[i].head, 0);
 
     if(fclose(f)) {
         fprintf(stderr, "Error! Could not close the file\n");

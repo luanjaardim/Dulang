@@ -137,6 +137,7 @@ Expression *parseExprLink(Expression *expr, Map *declaredFuncs) {
                   node_set_double_link_at(tmpExpr, right, CHILD(1), PARENT_LINK);
                   //set as already parsed
                   expr_node_set_value(tmpExpr, (TokenToParse){expr_node_get_value(tmpExpr).tk, 0});
+                  parseExprLink(node_get_neighbour(tmpExpr, RIGHT_LINK), declaredFuncs);
                 }
                 else {
                   fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
