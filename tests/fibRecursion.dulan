@@ -1,0 +1,11 @@
+fn int fib: int n|
+   if n > 2|
+      back
+        (fib n - 1) + (fib n - 2)
+   else
+      back 1
+
+
+fn int main|
+   dump fib 10
+   back 0

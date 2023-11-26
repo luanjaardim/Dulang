@@ -1,0 +1,36 @@
+fn int double: int a| back a+a
+
+fn int square: int a| back a*a
+
+$ the syntax for functions calls does not uses parenthesis
+$ or any other things, the same could be: back square (double a)
+
+fn int doubleAndSquare: int a|
+   back square double a
+
+fn int mdc: int a, int b|
+   $ swap for stay with the greatest at a
+   if a < b|
+      c = a
+      a = b
+      b = c
+
+   while b|
+    tmp = a%b
+    a = b
+    b = tmp
+
+   back a
+
+fn int main|
+   $ a function will take 'n' arguments after it
+   dump double 16
+   dump square 16
+   dump doubleAndSquare 16
+
+   $ here 65+1 is just one argument, so the result is the mdc of 15 and 66
+   dump mdc 15 65 + 1
+
+   $ if you wanted to sum at the result of the function, this is the way
+   dump 1 + (mdc 15 65)
+   back 0

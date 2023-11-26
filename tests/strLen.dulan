@@ -1,0 +1,32 @@
+fn int len: str string|
+   if string|
+      $this will return the first byte at string pointer
+      c = @string band 255
+      $ variable to count the number of chars
+      count = 0
+      while c != 0|
+           count = count + 1
+           string = string + 1
+           c = @string band 255
+
+      back count
+   else
+        warning = "A null string was passed"
+        sys 1 1
+            warning
+            len warning |
+
+        sys 60 1 |
+        $ exit with error code
+
+fn int print: str string|
+   sys 1 1 string len string|
+   back 0
+
+fn int main|
+   print "Hella World"
+   print "Hexlo Uorls"
+   print "Hexlo Worud"
+   print "Hello Warld"
+   print "Hello World"
+   back 0

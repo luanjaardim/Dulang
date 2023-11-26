@@ -1,0 +1,26 @@
+fn int div: int a, int b | back a/b
+
+fn int sum: int a, int b | back a+b
+
+fn int mod: int a, int b | back a%b
+
+fn int main|
+    write = 1
+    STDOUT = 1
+
+    if 1 + 2 / 2 % 5 ==
+       sum 1 mod div 2 2 5 |
+
+       sys write STDOUT
+           "true" 5|
+    else
+       sys write STDOUT
+           "false" 6|
+
+    $ that's how you can read the expression above, so, surely, the
+    $ condition will be satisfied.
+    value = mod (div 2 2) 5
+    value = sum 1 value
+    dump value
+    value = 1 + 2 / 2 % 5
+    dump value

@@ -1,0 +1,28 @@
+fn int main|
+   condition = 1
+   sla = 10
+   dump sla
+   $ if expressions receive a number as a condition, true if it's different than 0
+   if condition |
+      $ dump is a provisory keyword used for debug integer values
+      sla = sla - 5
+      dump sla
+      if sla |
+        sla = sla - 5
+        dump sla
+
+        if sla | sla = 100
+        $ else if works as a typical else if, but they must be side by side, at the same line
+        else if 1 | sla = 6969
+             if 0|
+                dump 1
+             $ this is completely different of a else-if, it's a else that has a if
+             $ inside it's body, so the `dump 3` will execute
+             else
+                if 0|
+                   dump 2
+                dump 3
+        else sla = 500
+
+   dump sla
+   back 0

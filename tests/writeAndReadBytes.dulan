@@ -1,0 +1,35 @@
+fn int writeHello: str pnt|
+   @pnt = 104 $ 'h'
+   pnt = pnt + 1
+   @pnt = 101 $ 'e'
+   pnt = pnt + 1
+   @pnt = 108 $ 'l'
+   pnt = pnt + 1
+   @pnt = 108 $ 'l'
+   pnt = pnt + 1
+   @pnt = 111 $ 'o'
+   pnt = pnt + 1
+   @pnt = 33 $ '!'
+   pnt = pnt + 1
+   @pnt = 10 $ '\n'
+   pnt = pnt + 1
+   @pnt = 0 $ '\0'
+   back 0
+
+fn int main|
+   $ a buffer with 32 bytes to be overwrited
+   buffer = "                                "
+
+   ret = writeHello buffer
+   $ printing hello!
+   sys 1 1 buffer 7|
+
+   $ reading buffer char by char
+   pnt = buffer
+   c = @pnt band 255
+   while c|
+         dump c $ ascii value of every hello! char
+         pnt = pnt + 1
+         c = @pnt band 255
+
+   back 0
