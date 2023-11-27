@@ -51,7 +51,9 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {")", PAR_CLOSE,  SYMBOLS},
   {"|", END_BAR,  SYMBOLS},
   {":", COLON,  SYMBOLS},
-  {",", COMMA,  SYMBOLS}
+  {",", COMMA,  SYMBOLS},
+  {";", SEMICOLON,  SYMBOLS},
+  {";;", DOUBLE_SEMICOLON,  SYMBOLS},
   /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
@@ -376,6 +378,27 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
                 addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
                 cleanWord(word, &sizeWord);
                 break;
+
+              //semicolon and double semicolon
+              case ';':
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                cleanWord(word, &sizeWord);
+                word[0] = c;
+                c = getc(fd);
+                fileCol++;
+                if(c == ';') {
+                  sizeWord = 2;
+                  word[1] = c;
+                  word[2] = 0;
+                  addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
+                  cleanWord(word, &sizeWord);
+                  break;
+                }
+                word[1] = 0;
+                sizeWord = 1;
+                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
+                cleanWord(word, &sizeWord);
+                continue;
 
               default:
                 word[sizeWord++] = c;

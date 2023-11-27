@@ -60,6 +60,8 @@ typedef enum {
     END_BAR,
     COLON,
     COMMA,
+    SEMICOLON,
+    DOUBLE_SEMICOLON,
     COUNT_OF_TK_TYPES
 } TokenType;
 
