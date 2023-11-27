@@ -489,6 +489,35 @@ ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
         /* if(nextToken(tf) == NULL) break; */
         /* else returnToken(tf); */
       }
+      //is the last element of the line
+      else if(currToken(*tf)->info.type == DOUBLE_SEMICOLON || currToken(*tf)->info.type == SEMICOLON) {
+        //if it's a semicolon the last element of the line, this line will be parsed with the next line as a single line
+        if(currToken(*tf)->info.type == SEMICOLON && tf->currElem == tf->lines[tf->currLine].qtdElements - 1) {
+          if(nextToken(tf)) {
+            tmp.head = tmp.tail = createExpression(currToken(*tf));
+            //update lastId
+            lastId = endOfCurrBlock(*tf).lastId;
+          }
+          else {
+            fprintf(stderr, "Unexpected end of file, on line %d\n", currToken(*tf)->l);
+            exit(1);
+          }
+        }
+        //if it's a double semicolon, this line will end here, so we must parse it
+        else {
+          //print the token of the head
+          printf("head 1: %s\n", expr_node_get_value(headExpr).tk->text);
+          headExpr = parseExprLink(headExpr, declaredFuncs);
+          printf("head 2: %s\n", expr_node_get_value(headExpr).tk->text);
+          tailExpr = headExpr;
+          while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
+          if(nextToken(tf)) tmp = createExprBlock(tf, declaredFuncs);
+          else {
+            fprintf(stderr, "Unexpected end of file, on line %d\n", currToken(*tf)->l);
+          }
+
+        }
+      }
       else { tmp.head = tmp.tail = createExpression(currToken(*tf)); }
 
     }
