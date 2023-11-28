@@ -75,9 +75,39 @@ TkInfo typeOfToken(const char *const word, int len) {
   //compile time known values, str or int, has negative predecence: -1
   if(word[0] == '"') return (TkInfo) {STR_TK, COMPTIME_KNOWN};
 
-  int i;
-  for(i = 0; i < len; i++) //number validation
-    if(word[i] > 57 || word[i] < 48) break;
+  //number validation
+  int i = 0;
+  enum numberBase {DEC, HEX, OCT, BIN};
+  enum numberBase base = DEC;
+  if(word[i] == '0') {
+    if(len == 1) return (TkInfo) {INT_TK, COMPTIME_KNOWN};
+    i+=2;
+    if(word[i-1] == 'x') base = HEX;
+    else if(word[i-1] == 'b') base = BIN;
+    else if(word[i-1] == 'o') base = OCT;
+    else i--;
+  }
+
+  switch (base) {
+    case DEC:
+      for(; i < len; i++)
+        if(word[i] > 57 || word[i] < 48) break;
+      break;
+    case HEX:
+      for(; i < len; i++) {
+        if((word[i] < 58 && word[i] > 47) || (word[i] < 71 && word[i] > 64) || (word[i] < 103 && word[i] > 96)) continue;
+        else break;
+      }
+      break;
+    case OCT:
+      for(; i < len; i++)
+        if(word[i] > 55 || word[i] < 48) break;
+      break;
+    case BIN:
+      for(; i < len; i++)
+        if(word[i] == '0' || word[i] == '1') break;
+      break;
+  }
   if(len == i) return (TkInfo) {INT_TK, COMPTIME_KNOWN};
 
   for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
