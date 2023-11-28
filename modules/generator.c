@@ -147,7 +147,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         }
         case INT_TK:
             fprintf(f, ";; -- int %ld\n", get_token_to_parse(expr).tk->id);
-            fprintf(f, "push %d\n", atoi(get_token_to_parse(expr).tk->text));
+            fprintf(f, "push %s\n", get_token_to_parse(expr).tk->text);
+            rsp += 8;
+            break;
+        case NUM_SIGNAL:
+            fprintf(f, ";; -- num_signal %ld\n", get_token_to_parse(expr).tk->id);
+            Token *numberToken = get_token_to_parse(node_get_neighbour(expr, CHILD(1))).tk;
+            fprintf(f, "push -%s\n", numberToken->text);
             rsp += 8;
             break;
         case ASSIGN:

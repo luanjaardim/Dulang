@@ -147,24 +147,41 @@ Expression *parseExprLink(Expression *expr, Map *declaredFuncs) {
             }
             break;
           case BUILTIN_MEDIUM_PREC:
-              if(leftToken && rightToken) {
-                if((!leftIsParsed && leftToken->info.precedence > BUILTIN_MEDIUM_PREC)
-                ||(!rightIsParsed && rightToken->info.precedence > BUILTIN_MEDIUM_PREC)) {
-                    /* printLinkExprs(tmpExpr, 0); */
-                  if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
-                  if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
-                    fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
-                    exit(1);
-                }
+            //NUM_SUB has a particular case, when it has only a arg at right it can act as a signal
+            if(rightToken && tmpToken->info.type == NUM_SUB) {
+              if(!rightIsParsed && rightToken->info.precedence > BUILTIN_MEDIUM_PREC) {
+                fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
               }
               else {
-                  if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
-                  if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
-                  fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                if(leftToken && (leftIsParsed || leftToken->info.precedence <= BUILTIN_MEDIUM_PREC))
+                  goto getLeftAndRightNeighbours;
+
+                tmpToken->info.type = NUM_SIGNAL; //here '-' is acting like a signal
+                tmpToken->info.precedence = SYMBOLS; //change the precedence to SYMBOLS for ignoring it on the next iteration
+                //get the right neighbour and got parsed
+                goto getRightNeighbour;
+              }
+            }
+            //here every MEDIUM_PREC operation must have two args
+            if(leftToken && rightToken) {
+              if((!leftIsParsed && leftToken->info.precedence > BUILTIN_MEDIUM_PREC)
+              ||(!rightIsParsed && rightToken->info.precedence > BUILTIN_MEDIUM_PREC)) {
+                  /* printLinkExprs(tmpExpr, 0); */
+                /* if(right) printf("right: %s\n", expr_node_get_value(right).tk->text); */
+                /* if(left) printf("left: %s\n", expr_node_get_value(left).tk->text); */
+                  fprintf(stderr, "%s operation has invalid operands: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
                   exit(1);
               }
+            }
+            else {
+                if(right) printf("right: %s\n", expr_node_get_value(right).tk->text);
+                if(left) printf("left: %s\n", expr_node_get_value(left).tk->text);
+                fprintf(stderr, "%s insufficient args: %d, %d\n", tmpToken->text, tmpToken->l, tmpToken->c);
+                exit(1);
+            }
 
-              goto getLeftAndRightNeighbours;
+            goto getLeftAndRightNeighbours;
           break;
 
           case USER_FUNCTIONS:
