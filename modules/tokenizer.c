@@ -105,7 +105,7 @@ TkInfo typeOfToken(const char *const word, int len) {
       break;
     case BIN:
       for(; i < len; i++)
-        if(word[i] == '0' || word[i] == '1') break;
+        if(word[i] != '0' && word[i] != '1') break;
       break;
   }
   if(len == i) return (TkInfo) {INT_TK, COMPTIME_KNOWN};

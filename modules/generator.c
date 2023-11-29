@@ -262,7 +262,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 rsp -= 8;
             }
             else
-                fprintf(f, "mov rax, %d\n", atoi(childTk->text));
+                fprintf(f, "mov rax, %s\n", childTk->text);
             if(type == BACK_TK)
                     fprintf(f, "jmp .end_curr_func\n");
             else {
@@ -319,13 +319,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 rsp -= 8;
             }
             else
-                fprintf(f, "mov rax, %d\n", atoi(get_token_to_parse(left).tk->text));
+                fprintf(f, "mov rax, %s\n", get_token_to_parse(left).tk->text);
             if(right_type != INT_TK) {
                 fprintf(f, "pop rbx\n");
                 rsp -= 8;
             }
             else
-                fprintf(f, "mov rbx, %d\n", atoi(get_token_to_parse(right).tk->text));
+                fprintf(f, "mov rbx, %s\n", get_token_to_parse(right).tk->text);
 
             switch(type) {
                 case NUM_ADD:
