@@ -452,7 +452,7 @@ void printLinkExprs(Expression *expr, int layer) {
   printLinkExprs(node_get_neighbour(expr, RIGHT_LINK), layer);
 }
 
-ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType, Map *declaredFuncs) {
+ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType beginType, TokenType endType, Map *declaredFuncs) {
   Expression *headExpr = createExpression(currToken(*tf));
   Expression *tailExpr = headExpr;
   Expression *tmp;
@@ -462,6 +462,13 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType endType, Map *declare
     node_set_double_link_at(tailExpr, tmp, RIGHT_LINK, LEFT_LINK);
     tailExpr = tmp;
     if(nextToken(tf) == NULL) break;
+    else if(currToken(*tf)->info.type == beginType) {
+      if(nextToken(tf) == NULL) break;
+      ExprBlock block = createExprBlockTill(tf, beginType, endType, declaredFuncs);
+      node_set_double_link_at(tailExpr, block.head, RIGHT_LINK, LEFT_LINK);
+      tailExpr = block.tail;
+      if(nextToken(tf) == NULL) break;
+    }
   }
   /* printLinkExprs(headExpr, 0); */
   Expression *parsedExpr = parseExprLink(headExpr, declaredFuncs);
@@ -489,7 +496,8 @@ ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
   do {
     if(currToken(*tf)->info.type == PAR_OPEN) {
       nextToken(tf);
-      tmp = createExprBlockTill(tf, PAR_CLOSE, declaredFuncs);
+      tmp = createExprBlockTill(tf, PAR_OPEN, PAR_CLOSE, declaredFuncs);
+      printLinkExprs(tmp.head, 0);
     }
     else {
 
@@ -511,6 +519,14 @@ ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
         //if it's a semicolon the last element of the line, this line will be parsed with the next line as a single line
         if(currToken(*tf)->info.type == SEMICOLON && tf->currElem == tf->lines[tf->currLine].qtdElements - 1) {
           if(nextToken(tf)) {
+            //if the next token is a PAR_OPEN, we have to return the TokenizedFile
+            //to the PAR_OPEN and then continue
+            if(currToken(*tf)->info.type == PAR_OPEN){
+                returnToken(tf); //to go back to the previous then continue
+                continue;
+
+            }
+
             tmp.head = tmp.tail = createExpression(currToken(*tf));
             //update lastId
             lastId = endOfCurrBlock(*tf).lastId;
