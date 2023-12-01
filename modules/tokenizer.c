@@ -75,6 +75,8 @@ TkInfo typeOfToken(const char *const word, int len) {
   //compile time known values, str or int, has negative predecence: -1
   if(word[0] == '"') return (TkInfo) {STR_TK, COMPTIME_KNOWN};
 
+  if(word[0] == '\'') return (TkInfo) {CHAR_TK, COMPTIME_KNOWN};
+
   //number validation
   int i = 0;
   enum numberBase {DEC, HEX, OCT, BIN};
@@ -257,11 +259,11 @@ struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
 }
 
 void printTokenizedFile(TokenizedFile p) {
-    const char *humanReadableType[4] = {"Word", "Integer Number", "String", "Builtin Word"};
+    const char *humanReadableType[NUM_DIV] = {"Word", "Integer Number", "String", "Char", "Floating Point", "Builtin Word"};
     for(size_t i = 0; i < p.qtdLines; i++) {
         for(size_t j = 0; j < p.lines[i].qtdElements; j++) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
-                  humanReadableType[p.lines[i].tk[j].info.type >= NUM_DIV ? 3 : p.lines[i].tk[j].info.type],
+                  humanReadableType[p.lines[i].tk[j].info.type >= NUM_DIV ? 5 : p.lines[i].tk[j].info.type],
                   p.lines[i].tk[j].info.precedence);
         }
         printf("\n");
@@ -397,6 +399,17 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
           putcharFileReader(&fr, fr.currChar);
           break;
         case '\'': //chars
+          printf("char\n");
+          putcharFileReader(&fr, fr.currChar);
+          char c = readChar(&fr);
+          if(readChar(&fr) == '\'') {
+            putcharFileReader(&fr, c);
+            putcharFileReader(&fr, fr.currChar);
+          } else {
+            fprintf(stderr, "Error! Bad format for char, at: %d %d\n", fr.currLine, fr.currCol);
+            exit(1);
+          }
+          printf("%s\n", fr.word);
           break;
         case '(':
         case ')':

@@ -19,8 +19,10 @@
 typedef enum {
     NAME_TK, //any name created by the user(that does not matches any of the builtin types)
     INT_TK,  //any number (not floating point)
-    NUM_SIGNAL, //used only for '-' when it acts as a signal
     STR_TK,  //string (surrounded by `"`)
+    CHAR_TK,
+    FLOAT_TK,
+    NUM_SIGNAL, //used only for '-' when it acts as a signal
     NUM_DIV, //after this every identifier represents a builtin word, and it must have a representant in the builtinWords array
     NUM_MUL,
     NUM_MOD,

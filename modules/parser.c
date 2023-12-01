@@ -497,7 +497,7 @@ ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
     if(currToken(*tf)->info.type == PAR_OPEN) {
       nextToken(tf);
       tmp = createExprBlockTill(tf, PAR_OPEN, PAR_CLOSE, declaredFuncs);
-      printLinkExprs(tmp.head, 0);
+      /* printLinkExprs(tmp.head, 0); */
     }
     else {
 

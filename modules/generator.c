@@ -145,6 +145,11 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             rsp += 8;
             break;
         }
+        case CHAR_TK:
+            fprintf(f, ";; -- char %ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, "push %s\n", get_token_to_parse(expr).tk->text);
+            rsp += 8;
+            break;
         case INT_TK:
             fprintf(f, ";; -- int %ld\n", get_token_to_parse(expr).tk->id);
             fprintf(f, "push %s\n", get_token_to_parse(expr).tk->text);
