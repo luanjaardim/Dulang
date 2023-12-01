@@ -61,8 +61,8 @@ Token createToken(char *text, size_t len, size_t id, TkInfo info, int l, int c) 
     /* printf("creating token: %s %d\n", text, (int)len); */
     Token tmp = {
       .id = id,
-      .qtdChars = len+1,
-      .text = (char *) calloc(len+1, sizeof(char)),
+      .qtdChars = len,
+      .text = (char *) malloc(len * sizeof(char)),
       .l = l,
       .c = c,
       .info = info,
@@ -134,6 +134,21 @@ TokenizedFile createTokenizedFile() {
       .currElem = 0,
       .lines = (TokenizedLine *) malloc(sizeof(TokenizedLine) * 5)
     };
+}
+
+FileReader createFileReader(FILE *fd) {
+  if(fd == NULL) {
+    fprintf(stderr, "Error when creating FileReader! File does not exists\n");
+    exit(1);
+  }
+  return (FileReader) {
+    .fd = fd,
+    .word = (char *) malloc(sizeof(char) * 100),
+    .wordSize = 0,
+    .wordCap = 100,
+    .l = 1,
+    .c = 0,
+  };
 }
 
 /*
@@ -249,202 +264,179 @@ void printTokenizedFile(TokenizedFile p) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tk[j].id , p.lines[i].tk[j].l, p.lines[i].tk[j].c, p.lines[i].tk[j].text,
                   humanReadableType[p.lines[i].tk[j].info.type >= NUM_DIV ? 3 : p.lines[i].tk[j].info.type],
                   p.lines[i].tk[j].info.precedence);
-//min(p.lines[i].tk[j].info.type, NUM_DIV)
         }
         printf("\n");
     }
 }
 
-void cleanWord(char *word, int *sizeWord) {
-    word[*sizeWord] = 0;
-    memset(word, 0, *sizeWord);
-    *sizeWord = 0;
+int takeWord(FileReader *fr, char *to_cpy);
+
+void appendTokenizedLine(TokenizedFile *tf) {
+  TokenizedLine *lastLine = tf->lines + tf->qtdLines - 1;
+  if(lastLine->qtdElements == 0) return;
+
+  maybeRealloc((void **)&(tf->lines), (int *)&(tf->capLines), tf->qtdLines, sizeof(TokenizedLine));
+  tf->lines[tf->qtdLines++] = createTokenizedLine();
 }
 
-void addWordAsToken(TokenizedLine *lastLine, char *word, int sizeWord, int *numWord, int fileLine, int fileCol) {
-    if(!sizeWord) return;
+void addWordAsToken(TokenizedFile *tf, FileReader *fr, int *numWord) {
+    if(!fr->wordSize) return;
     (*numWord)++; //unique id for each word of the file
 
+    TokenizedLine *lastLine = tf->lines + tf->qtdLines - 1;
     //maybe realloc current line to append the new token
     maybeRealloc((void **)&(lastLine->tk), (int *)&(lastLine->capElements), lastLine->qtdElements, sizeof(Token));
-    lastLine->tk[lastLine->qtdElements++] = createToken(word,
-                                                        sizeWord,
+
+    int len = fr->wordSize+1;
+    char tmp[len];
+    if(takeWord(fr, tmp) == 0) //when the word is taken the wordSize is set to 0
+      return;
+
+    lastLine->tk[lastLine->qtdElements++] = createToken(tmp,
+                                                        len,
                                                         *numWord,
-                                                        typeOfToken(word, sizeWord),
-                                                        fileLine,
-                                                        fileCol-sizeWord);
+                                                        typeOfToken(tmp, len),
+                                                        fr->currLine,
+                                                        fr->currCol);
+}
+
+int notEOF(FileReader *fr) { return fr->currChar != EOF; }
+
+void putcharFileReader(FileReader *fr, char c) {
+  if(!fr->wordSize) {
+    fr->currLine = fr->l;
+    fr->currCol = fr->c;
+  }
+  fr->wordSize++;
+  maybeRealloc((void **) &fr->word, (int *)&fr->wordCap, fr->wordSize, sizeof(char));
+  fr->word[fr->wordSize-1] = c;
+}
+
+char readChar(FileReader *fr) {
+  if(notEOF(fr)) {
+    fr->currChar = getc(fr->fd);
+    if(fr->currChar == '\n') {
+      fr->l++;
+      fr->c = -1;
+    }
+    fr->c++;
+  }
+  return fr->currChar;
+}
+
+/*
+ * Buffers used to copy the word value must have at least lenWord(fr) + 1 bytes
+ */
+int takeWord(FileReader *fr, char *to_cpy) {
+  if(fr->wordSize) {
+    memcpy(to_cpy, fr->word, fr->wordSize);
+    to_cpy[fr->wordSize] = 0;
+    fr->wordSize = 0;
+    memset(fr->word, 0, fr->wordCap);
+    return 1;
+  }
+  else return 0;
 }
 
 TokenizedFile readToTokenizedFile(FILE *fd) {
-    int fileLine = 0, fileCol = 0, numWord = 0; //file informations
-    int sizeWord = 0, capWord = 10; //word informations
-    char *word = (char *) calloc(10, sizeof(char));
+  TokenizedFile tf = createTokenizedFile();
+  tf.lines[0] = createTokenizedLine();
+  tf.qtdLines++;
 
-    TokenizedFile p = createTokenizedFile();
-    p.lines[p.qtdLines++] = createTokenizedLine();
-    TokenizedLine *lastLine = p.lines + 0;
+  FileReader fr = createFileReader(fd);
+  int numWord = 0, comments = 0;
 
-    char c = getc(fd);
-    while(c != EOF) {
-
-        if(c == ' ' || c == '\n' || c == '\t') {
-            if(!sizeWord) { //len of the current word is 0
-                if(c == '\n') {
-                    fileCol = -1;
-                    fileLine++;
-
-                    if(lastLine->qtdElements) {//if the line has elements create a new line
-                      maybeRealloc((void **)&(p.lines), (int *)&(p.capLines), p.qtdLines, sizeof(TokenizedLine));
-                      p.lines[p.qtdLines] = createTokenizedLine();
-
-                      lastLine = p.lines + p.qtdLines;
-                      p.qtdLines++;
-                    }
-                }
-                goto end; //discarting empty words
-            }
-
-            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-
-            if(c == '\n') {
-                fileCol = -1;
-                fileLine++;
-                maybeRealloc((void **)&(p.lines), (int *)&(p.capLines), p.qtdLines, sizeof(TokenizedLine));
-                p.lines[p.qtdLines] = createTokenizedLine();
-
-                lastLine = p.lines + p.qtdLines;
-                p.qtdLines++;
-            }
-
-            cleanWord(word, &sizeWord);
+  while(notEOF(&fr)) {
+    readChar(&fr);
+    if(comments) {
+      if(comments == 1 && fr.currChar == '\n') comments = 0;
+      else if(comments == 2 && fr.currChar == '$') {
+        readChar(&fr);
+        if(fr.currChar == '$') comments = 0;
+      }
+      //end of the comment
+      if(!comments) {
+        TokenizedLine *lastLine = tf.lines + tf.qtdLines - 1;
+        printf("lastLine->qtdElements: %ld\n", lastLine->qtdElements);
+        if(lastLine->qtdElements) {
+          if(lastLine->tk[0].l != fr.l) //add a new TokenizedLine if needed
+            appendTokenizedLine(&tf);
+          //print the lines
         }
-        else if(c == '"') {
-            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-            cleanWord(word, &sizeWord);
-
-            do {
-                maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-                word[sizeWord++] = c;
-                c = getc(fd);
-                fileCol++;
-            } while(c != '"' && c != EOF && c != '\n');
-            if(c == EOF || c == '\n') {
-                printf("Error: missing \"\n");
-                exit(1);
-            }
-            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-            word[sizeWord++] = c;
-            fileCol++;
-            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-            cleanWord(word, &sizeWord);
-        }
-        else if(c == '$') { //comments
-            //adding the word before the comment
-            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-            cleanWord(word, &sizeWord);
-
-            c = getc(fd);
-            fileCol++;
-            char end = c == '(' ? ')' : '\n';
-            while(c != end && c != EOF) {
-                c = getc(fd);
-                fileCol++;
-            }
-            if(c == '\n') continue;
-        }
-        else if(c == '(' || c == ')') {
-            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-            cleanWord(word, &sizeWord);
-
-            //add a size one word with just '(' or ')'
-            sizeWord = 1;
-            word[0] = c;
-            word[1] = 0;
-            addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
-            cleanWord(word, &sizeWord);
-        }
-        else{
-            maybeRealloc((void **)&word, &capWord, sizeWord, sizeof(char));
-            switch (c) { //for reserved symbols that can be used in expressions withouth spaces
-              //every symbol that can precede a '='
-              case '=':
-              case '>':
-              case '<':
-              case '!':
-              case '+':
-              case '-':
-              case '*':
-              case '/':
-              case '%':
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-                cleanWord(word, &sizeWord);
-                word[0] = c;
-                c = getc(fd);
-                fileCol++;
-                if(c == '=') {
-                  sizeWord = 2;
-                  word[1] = c;
-                  word[2] = 0;
-                  addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
-                  cleanWord(word, &sizeWord);
-                  break;
-                }
-                word[1] = 0;
-                sizeWord = 1;
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-                cleanWord(word, &sizeWord);
-                continue;
-
-              case '@':
-              //symbols
-              case ':':
-              case '|':
-              case ',':
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-                cleanWord(word, &sizeWord);
-                word[0] = c;
-                word[1] = 0;
-                sizeWord = 1;
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
-                cleanWord(word, &sizeWord);
-                break;
-
-              //semicolon and double semicolon
-              case ';':
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-                cleanWord(word, &sizeWord);
-                word[0] = c;
-                c = getc(fd);
-                fileCol++;
-                if(c == ';') {
-                  sizeWord = 2;
-                  word[1] = c;
-                  word[2] = 0;
-                  addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol+1);
-                  cleanWord(word, &sizeWord);
-                  break;
-                }
-                word[1] = 0;
-                sizeWord = 1;
-                addWordAsToken(lastLine, word, sizeWord, &numWord, fileLine, fileCol);
-                cleanWord(word, &sizeWord);
-                continue;
-
-              default:
-                word[sizeWord++] = c;
-            }
-        }
-
-        end:
-        fileCol++;
-        c = getc(fd);
+      }
     }
-
-    free(word);
-    if(!p.lines[p.qtdLines-1].qtdElements) //empty last line
-      free(p.lines[--p.qtdLines].tk);
-
-    return p;
+    else {
+      switch_begin:
+      switch(fr.currChar) {
+        case '\n': //between words
+          addWordAsToken(&tf, &fr, &numWord);
+          appendTokenizedLine(&tf);
+          /* printf("newline\n"); */
+          break;
+        case '\t':
+        case ' ':
+          addWordAsToken(&tf, &fr, &numWord);
+          /* printf("space\n"); */
+          break;
+        case '$': //comments
+          //comment the rest of the line if read only a '$'
+          //comment a block if read double '$', till the next double '$'
+          addWordAsToken(&tf, &fr, &numWord);
+          readChar(&fr);
+          comments = (fr.currChar == '$') ? 2 : 1; //2 for block comments and 1 for line comments
+          break;
+        case '"': //strings
+          break;
+        case '\'': //chars
+          break;
+        case '(':
+        case ')':
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case '@':
+        case '#':
+        case ':':
+        case '|':
+        case ',':
+        case ';':
+        case '.':
+        case '?':
+          addWordAsToken(&tf, &fr, &numWord);
+          putcharFileReader(&fr, fr.currChar);
+          addWordAsToken(&tf, &fr, &numWord);
+          /* printf("symbol: %c\n", fr.currChar); */
+          break;
+        case '=':
+        case '>':
+        case '<':
+        case '!':
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '%':
+          addWordAsToken(&tf, &fr, &numWord);
+          putcharFileReader(&fr, fr.currChar);
+          readChar(&fr);
+          if(fr.currChar == '=') {
+            putcharFileReader(&fr, fr.currChar);
+            addWordAsToken(&tf, &fr, &numWord);
+          }
+          else {
+            addWordAsToken(&tf, &fr, &numWord);
+            goto switch_begin; //if it is not a '=' then we need to search for the case of the char read
+          }
+          /* printf("symbol: %c\n", fr.currChar); */
+          break;
+        default:
+          putcharFileReader(&fr, fr.currChar);
+          break;
+      }
+    }
+  }
+  return tf;
 }
 
 void destroyTokenizdFile(TokenizedFile *tp) {

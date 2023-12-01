@@ -34,6 +34,15 @@ typedef struct TokenizedFile {
     TokenizedLine *lines;
 } TokenizedFile;
 
+typedef struct FileReader {
+    FILE *fd;
+    char *word;
+    size_t wordSize, wordCap;
+    char currChar;
+    int currLine, currCol; //specific to the current word
+    int l, c;
+} FileReader;
+
 void printTokenizedFile(TokenizedFile p);
 TokenizedFile readToTokenizedFile(FILE *fd);
 void destroyTokenizdFile(TokenizedFile *tp);
