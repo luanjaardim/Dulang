@@ -244,7 +244,6 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
  * Return the id of the last word of the block and it's line
 */
 struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
-  /* printf("first word: %s\n", currToken(tf)->text); */
   int identationBlock = currToken(tf)->c;
   int firstLine = currToken(tf)->l;
   do {
@@ -295,7 +294,7 @@ void addWordAsToken(TokenizedFile *tf, FileReader *fr, int *numWord) {
     lastLine->tk[lastLine->qtdElements++] = createToken(tmp,
                                                         len,
                                                         *numWord,
-                                                        typeOfToken(tmp, len),
+                                                        typeOfToken(tmp, len-1), //len-1 to not count the '\0'
                                                         fr->currLine,
                                                         fr->currCol);
 }
@@ -357,7 +356,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
       //end of the comment
       if(!comments) {
         TokenizedLine *lastLine = tf.lines + tf.qtdLines - 1;
-        printf("lastLine->qtdElements: %ld\n", lastLine->qtdElements);
         if(lastLine->qtdElements) {
           if(lastLine->tk[0].l != fr.l) //add a new TokenizedLine if needed
             appendTokenizedLine(&tf);
@@ -386,6 +384,17 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
           comments = (fr.currChar == '$') ? 2 : 1; //2 for block comments and 1 for line comments
           break;
         case '"': //strings
+          putcharFileReader(&fr, fr.currChar);
+          readChar(&fr);
+          while(fr.currChar != '"') {
+            if(fr.currChar == '\n') {
+              fprintf(stderr, "Error! String not closed, at line: %d\n", fr.currLine);
+              exit(1);
+            }
+            putcharFileReader(&fr, fr.currChar);
+            readChar(&fr);
+          }
+          putcharFileReader(&fr, fr.currChar);
           break;
         case '\'': //chars
           break;
@@ -435,6 +444,11 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
           break;
       }
     }
+  }
+  TokenizedLine *lastLine = tf.lines + tf.qtdLines - 1;
+  if(lastLine->qtdElements == 0) {
+    tf.qtdLines--;
+    free(lastLine->tk);
   }
   return tf;
 }

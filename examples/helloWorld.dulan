@@ -5,11 +5,12 @@ fn int main|
    $ len of the string to print
    len = 16-4
 
-   $( sys is a reserved word to use syscall
-   it can receive a variable number of parameters
-   from 0 to 7, but if there's a '|' it will stop
-   to read any other parameter, using just the already read
-   )
+   $$
+    sys is a reserved word to use syscall
+    it can receive a variable number of parameters
+    from 0 to 7, but if there's a '|' it will stop
+    to read any other parameter, using just the already read
+   $$
    sys
     write STDOUT "Hello World" 16-4|
 

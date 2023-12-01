@@ -1,13 +1,13 @@
 fn int len: str string|
    if string|
       $this will return the first byte at string pointer
-      c = @string band 255
+      c = @string band 0xFF
       $ variable to count the number of chars
       count = 0
       while c != 0|
            count = count + 1
            string = string + 1
-           c = @string band 255
+           c = @string band 0xFF
 
       back count
    else
