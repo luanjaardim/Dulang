@@ -658,6 +658,35 @@ void checkHighLevelBlock(TokenizedFile *tokFile, ParsedFile *pf) {
         fileName[len-2] = '\0';
         /* printf("loading file: %s\n", fileName); */
         FILE *file = fopen(fileName, "r");
+        if(file == NULL) {
+          char dir[1024] = {0};
+          sprintf(dir, "%s", getenv("HOME"));
+          int len = strlen(dir);
+          memcpy(dir+len, "/.dir_dulang", 12);
+
+          file = fopen(dir, "r");
+          /* printf("dir: %s\n", dir); */
+          memset(dir, 0, len+13);
+
+          if(file == NULL) {
+            fprintf(stderr, "Could not find dulang dir\n");
+            exit(1);
+          }
+          fscanf(file, "%s", dir);
+          fclose(file);
+
+          len = strlen(dir);
+          memcpy(dir+len, "/std/", 5);
+          len += 5;
+          memcpy(dir+len, fileName, strlen(fileName));
+          /* printf("dir: %s\n", dir); */
+
+          file = fopen(dir, "r");
+          if(file == NULL) {
+            fprintf(stderr, "Could not open loaded file: %s\n", fileName);
+            exit(1);
+          }
+        }
 
         TokenizedFile loadedFile = readToTokenizedFile(file);
 
