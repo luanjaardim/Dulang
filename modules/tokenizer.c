@@ -402,7 +402,11 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
           printf("char\n");
           putcharFileReader(&fr, fr.currChar);
           char c = readChar(&fr);
-          if(readChar(&fr) == '\'') {
+          if(readChar(&fr) == '\'' || c == '\\') {
+            if(c == '\\') {
+              c = fr.currChar;
+              readChar(&fr);
+            }
             putcharFileReader(&fr, c);
             putcharFileReader(&fr, fr.currChar);
           } else {

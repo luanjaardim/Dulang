@@ -118,41 +118,90 @@ void getConditionAndBody(FILE *f, Expression *expr, Generator *g) {
     }
 }
 
+int numberOfSpecialChar(char c) {
+    switch(c) {
+        case 'n':
+            return 0xA;
+        case 't':
+            return 0x9;
+        case 'r':
+            return 0xD;
+        case '0':
+            return 0x0;
+        default:
+            return -1;
+    }
+}
+
 void translateExpression(FILE *f, Expression *expr, Generator g) {
     TokenType type = get_token_to_parse(expr).tk->info.type;
+    Token *tk = get_token_to_parse(expr).tk;
     int backUpRsp;
     /* fprintf(f, ";; -- instruction %ld\n", get_token_to_parse(expr).tk->id); */
     switch(type) {
         case STR_TK:
         {
-            fprintf(f, ";; -- string %ld\n", get_token_to_parse(expr).tk->id);
-            Token *tk = get_token_to_parse(expr).tk;
+            fprintf(f, ";; -- string %ld\n", tk->id);
+            char tmp[tk->qtdChars*2];
+            int len = 0, definingSpecialChar = 0;
+            //copy the string without and change the special chars to their respective numbers
+            for(int i = 0; i < (int)tk->qtdChars-1; i++) {
+                if(tk->text[i] == '\\') {
+                    int number = numberOfSpecialChar(tk->text[++i]);
+                    if(number == -1) {
+                        fprintf(stderr, "Error: unknown special char: \\%c, at %d %d\n", tk->text[i], tk->l, tk->c);
+                        exit(1);
+                    }
+                    if(!definingSpecialChar) {
+                        tmp[len++] = '"';
+                        tmp[len++] = ',';
+                    }
+                    if(number > 9) tmp[len++] = number/10 + '0'; //maximum two digits numbers
+                    tmp[len++] = number%10 + '0';
+                    tmp[len++] = ',';
+                    definingSpecialChar = 1;
+                }
+                else {
+                    if(definingSpecialChar) {
+                        tmp[len++] = '"';
+                        definingSpecialChar = 0;
+                    }
+                    tmp[len++] = tk->text[i];
+                }
+            }
+            tmp[len] = '\0';
             /*
              * The structure of a string in the data segment is:
              * str_<id>:db"<string>",10,0(\n implicit) (TODO: REMOVE ,10)
              */
             int possibleSizeToAddToDataSegment =
-                tk->qtdChars //size of the string
-                + 4 //null terminator ('0'), new_line=10(TODO: REMOVE IT) and the '\n' of the line itself
-                + 9 // undescore, "str", 2 colon(TODO: REMOVE THE SECOND ONE), "db" and comma
+                len //size of the string
+                + 9 //size of the str_ and the :db and ,0\n
                 + 16; //a suposition of the maximum len of the id
-            char tmp[tk->qtdChars+1];
-            memcpy(tmp, tk->text, tk->qtdChars); //copy the string without the quotes
-            tmp[tk->qtdChars] = 0;
             maybeRealloc((void **)&dataSegment, &dataSegmentCap, dataSegmentSize+possibleSizeToAddToDataSegment, sizeof(char));
-            dataSegmentSize += sprintf(dataSegment+dataSegmentSize, "str_%ld:db%s,10,0\n", tk->id, tmp);
+            dataSegmentSize += sprintf(dataSegment+dataSegmentSize, "str_%ld:db%s%s\n", tk->id, tmp, definingSpecialChar ? "0" : ",0");
             fprintf(f, "push str_%ld\n", tk->id);
             rsp += 8;
             break;
         }
         case CHAR_TK:
-            fprintf(f, ";; -- char %ld\n", get_token_to_parse(expr).tk->id);
-            fprintf(f, "push %s\n", get_token_to_parse(expr).tk->text);
+            fprintf(f, ";; -- char %ld\n", tk->id);
+            if(tk->text[1] == '\\') {
+                int number = numberOfSpecialChar(tk->text[2]);
+                if(number == -1) {
+                    fprintf(stderr, "Error: unknown special char: \\%c\n", tk->text[2]);
+                    exit(1);
+                }
+                fprintf(f, "push %d\n", number);
+            }
+            else
+                fprintf(f, "push %s\n", tk->text);
+
             rsp += 8;
             break;
         case INT_TK:
-            fprintf(f, ";; -- int %ld\n", get_token_to_parse(expr).tk->id);
-            fprintf(f, "push %s\n", get_token_to_parse(expr).tk->text);
+            fprintf(f, ";; -- int %ld\n", tk->id);
+            fprintf(f, "push %s\n", tk->text);
             rsp += 8;
             break;
         case NUM_SIGNAL:
