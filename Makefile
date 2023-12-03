@@ -5,11 +5,15 @@ SRC=$(wildcard $(SRC_DIR)/*.c)
 OBJS_DIR=objs
 OBJS=$(SRC:$(SRC_DIR)/%.c=$(OBJS_DIR)/%.o)
 TARGET=dulang
+PROJ_DIR=$(HOME)/.dir_dulang
 
-all: $(OBJS_DIR) $(OBJS) $(SRC_DIR)/modules.o $(TARGET)
+all: $(OBJS_DIR) $(PROJ_DIR) $(OBJS) $(SRC_DIR)/modules.o $(TARGET)
 
 $(OBJS_DIR):
 	mkdir $(OBJS_DIR)
+
+$(PROJ_DIR):
+	pwd > $(PROJ_DIR)
 
 $(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
