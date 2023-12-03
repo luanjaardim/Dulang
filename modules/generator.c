@@ -206,9 +206,17 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             break;
         case NUM_SIGNAL:
             fprintf(f, ";; -- num_signal %ld\n", tk->id);
-            Token *numberToken = get_token_to_parse(node_get_neighbour(expr, CHILD(1))).tk;
-            fprintf(f, "push -%s\n", numberToken->text);
-            rsp += 8;
+            Token *valueToken = get_token_to_parse(node_get_neighbour(expr, CHILD(1))).tk;
+            if(valueToken->info.type == INT_TK) {
+                fprintf(f, "push -%s\n", valueToken->text);
+                rsp += 8;
+            }
+            else {
+                translateExpression(f, node_get_neighbour(expr, CHILD(1)), g);
+                fprintf(f, "pop rax\n");
+                fprintf(f, "neg rax\n");
+                fprintf(f, "push rax\n");
+            }
             break;
         case ASSIGN:
             fprintf(f, ";; -- assign %ld\n", tk->id);
