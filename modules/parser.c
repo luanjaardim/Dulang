@@ -468,17 +468,18 @@ ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType beginType, TokenType 
   Expression *tmp;
   nextToken(tf);
   while(currToken(*tf)->info.type != endType) {
-    tmp = createExpression(currToken(*tf));
-    node_set_double_link_at(tailExpr, tmp, RIGHT_LINK, LEFT_LINK);
-    tailExpr = tmp;
-    if(nextToken(tf) == NULL) break;
-    else if(currToken(*tf)->info.type == beginType) {
+    if(currToken(*tf)->info.type == beginType) {
       if(nextToken(tf) == NULL) break;
       ExprBlock block = createExprBlockTill(tf, beginType, endType, declaredFuncs);
       node_set_double_link_at(tailExpr, block.head, RIGHT_LINK, LEFT_LINK);
       tailExpr = block.tail;
       if(nextToken(tf) == NULL) break;
+      continue;
     }
+    tmp = createExpression(currToken(*tf));
+    node_set_double_link_at(tailExpr, tmp, RIGHT_LINK, LEFT_LINK);
+    tailExpr = tmp;
+    if(nextToken(tf) == NULL) break;
   }
   /* printLinkExprs(headExpr, 0); */
   Expression *parsedExpr = parseExprLink(headExpr, declaredFuncs);
