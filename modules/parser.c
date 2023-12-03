@@ -453,8 +453,18 @@ void printLinkExprs(Expression *expr, int layer) {
 }
 
 ExprBlock createExprBlockTill(TokenizedFile *tf, TokenType beginType, TokenType endType, Map *declaredFuncs) {
-  Expression *headExpr = createExpression(currToken(*tf));
-  Expression *tailExpr = headExpr;
+
+  Expression *headExpr, *tailExpr;
+  if(currToken(*tf)->info.type == beginType) {
+    nextToken(tf);
+    ExprBlock block = createExprBlockTill(tf, beginType, endType, declaredFuncs);
+    headExpr = block.head;
+    tailExpr = block.tail;
+  }
+  else {
+    headExpr = createExpression(currToken(*tf));
+    tailExpr = headExpr;
+  }
   Expression *tmp;
   nextToken(tf);
   while(currToken(*tf)->info.type != endType) {
