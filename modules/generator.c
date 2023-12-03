@@ -205,25 +205,25 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             rsp += 8;
             break;
         case NUM_SIGNAL:
-            fprintf(f, ";; -- num_signal %ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- num_signal %ld\n", tk->id);
             Token *numberToken = get_token_to_parse(node_get_neighbour(expr, CHILD(1))).tk;
             fprintf(f, "push -%s\n", numberToken->text);
             rsp += 8;
             break;
         case ASSIGN:
-            fprintf(f, ";; -- assign %ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- assign %ld\n", tk->id);
             translateExpression(f, node_get_neighbour(expr, CHILD(2)), g);
             Expression *firstChild = node_get_neighbour(expr, CHILD(1));
-            Token *tk = get_token_to_parse(firstChild).tk;
+            Token *tmpTk = get_token_to_parse(firstChild).tk;
             int tmp, ret;
-            ret = map_get_value(g.var_map, (void **)&tk, (void *)&tmp);
+            ret = map_get_value(g.var_map, (void **)&tmpTk, (void *)&tmp);
 
-            if(ret && tk->info.type == NAME_TK) {
+            if(ret && tmpTk->info.type == NAME_TK) {
                 fprintf(f, "pop rax\n");
                 rsp -= 8;
                 //it can be '+' for arguments and '-' for local variables
                 fprintf(f, "mov [rbp%s%d], rax\n", tmp > 0 ? "-" : "+", abs(tmp));
-            } else if(tk->info.type == DEREF_TK) {
+            } else if(tmpTk->info.type == DEREF_TK) {
                 translateExpression(f, node_get_neighbour(firstChild, CHILD(1)), g);
                 fprintf(f, "pop rax\n");
                 fprintf(f, "pop rbx\n");
@@ -231,11 +231,11 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(f, "mov [rax], rbx\n");
             }
             else
-                map_insert(g.var_map, (void **)&tk, (void *)&rsp);
+                map_insert(g.var_map, (void **)&tmpTk, (void *)&rsp);
             g.prev_rsp = rsp;
             break;
         case SYSCALL_TK:
-            fprintf(f, ";; -- syscall %ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- syscall %ld\n", tk->id);
             if(node_get_num_neighbours(expr) == CHILD(1)) {
                printf("Empty syscall\n");
                break;
@@ -307,7 +307,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         case BIT_NOT:
         case BACK_TK:
         {
-            fprintf(f, ";; -- %s %ld\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- %s %ld\n", tk->text, tk->id);
             Expression *child = node_get_neighbour(expr, CHILD(1));
             Token *childTk = get_token_to_parse(child).tk;
             if(childTk->info.type != INT_TK) {
@@ -359,7 +359,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         case SHIFT_L_TK:
         case SHIFT_R_TK:
         {
-            fprintf(f, ";; -- operation %s\n", get_token_to_parse(expr).tk->text);
+            fprintf(f, ";; -- operation %s\n", tk->text);
             Expression *left = node_get_neighbour(expr, CHILD(1));
             Expression *right = node_get_neighbour(expr, CHILD(2));
             TokenType left_type = get_token_to_parse(left).tk->info.type;
@@ -438,7 +438,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                             fprintf(f, "%s al\n", (type == CMP_GE) ? "setge" : "setle"); break;
                         default:
                             //error of unhandled comparison, tell the line and column
-                            printf("Error: unhandled comparison: %d, %d\n", get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
+                            printf("Error: unhandled comparison: %d, %d\n", tk->l, tk->c);
                             exit(1);
                             break;
                     }
@@ -453,7 +453,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         }
             break;
         case IF_TK:
-            fprintf(f, ";; -- if %ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- if %ld\n", tk->id);
             g.prev_rsp = rsp;
             getConditionAndBody(f, expr, &g);
             if(g.prev_rsp != rsp)
@@ -469,7 +469,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             g.prev_rsp = rsp;
             //only an else, without if at right
             if(node_get_num_neighbours(expr) == CHILD(2)) {
-                fprintf(f, ";; -- else %ld\n", get_token_to_parse(expr).tk->id);
+                fprintf(f, ";; -- else %ld\n", tk->id);
                 Expression *child = node_get_neighbour(expr, CHILD(1));
                 if(child == NULL) {
                     fprintf(stderr, "Error: else without body\n");
@@ -480,7 +480,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             }
             //this is an else if
             else {
-                fprintf(f, ";; -- else if %ld\n", get_token_to_parse(expr).tk->id);
+                fprintf(f, ";; -- else if %ld\n", tk->id);
                 getConditionAndBody(f, expr, &g);
                 Expression *right = node_get_neighbour(expr, RIGHT_LINK);
                 //if there is not an else after this else if, we need to put the end of the if here
@@ -493,7 +493,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             g.prev_rsp = backUpRsp;
             break;
         case WHILE_TK:
-            fprintf(f, ";; -- while %ld\n", get_token_to_parse(expr).tk->id);
+            fprintf(f, ";; -- while %ld\n", tk->id);
             Expression *condition = node_get_neighbour(expr, CHILD(1)), *body = node_get_neighbour(expr, CHILD(2));
             if(condition == NULL || body == NULL) {
                 fprintf(stderr, "Error: not enough arguments for while\n");
@@ -533,14 +533,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 fprintf(f, ";; -- %s\n", (type == STOP_TK) ? "stop" : "skip");
                 fprintf(f, "jmp .%s_%d\n", (type == STOP_TK) ? "end_while" : "while", g.currLoop);
             } else {
-                fprintf(stderr, "Error: %s outside loop: %d, %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
+                fprintf(stderr, "Error: %s outside loop: %d, %d\n", tk->text, tk->l, tk->c);
                 exit(1);
             }
             break;
         case NAME_TK:
         {
             fprintf(f, ";; -- user variable\n");
-            Token *tk = get_token_to_parse(expr).tk;
             if(tk->info.precedence == USER_DEFINITIONS) {
                 int tmp;
                 if(map_get_value(g.var_map, (void **)&tk, (void *)&tmp)) {
@@ -594,7 +593,7 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
             fprintf(f, "push qword[rax]\n");
             break;
         default:
-            printf("Error: unknown token type for generator: %s, %d %d\n", get_token_to_parse(expr).tk->text, get_token_to_parse(expr).tk->l, get_token_to_parse(expr).tk->c);
+            printf("Error: unknown token type for generator: %s, %d %d\n", tk->text, tk->l, tk->c);
             exit(1);
     }
     Expression *right = node_get_neighbour(expr, RIGHT_LINK);
