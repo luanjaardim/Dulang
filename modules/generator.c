@@ -186,8 +186,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         }
         case CHAR_TK:
             fprintf(f, ";; -- char %ld\n", tk->id);
-            if(tk->text[1] == '\\') {
-                int number = numberOfSpecialChar(tk->text[2]);
+            if(tk->text[0] == '\'') {
+                int number = numberOfSpecialChar(tk->text[1]);
                 if(number == -1) {
                     fprintf(stderr, "Error: unknown special char: \\%c\n", tk->text[2]);
                     exit(1);
