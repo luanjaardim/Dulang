@@ -539,9 +539,7 @@ ExprBlock createExprBlock(TokenizedFile *tf, Map *declaredFuncs) {
         //if it's a double semicolon, this line will end here, so we must parse it
         else {
           //print the token of the head
-          printf("head 1: %s\n", expr_node_get_value(headExpr).tk->text);
           headExpr = parseExprLink(headExpr, declaredFuncs);
-          printf("head 2: %s\n", expr_node_get_value(headExpr).tk->text);
           tailExpr = headExpr;
           while(node_get_neighbour(tailExpr, RIGHT_LINK)) tailExpr = node_get_neighbour(tailExpr, RIGHT_LINK);
           if(nextToken(tf)) tmp = createExprBlock(tf, declaredFuncs);

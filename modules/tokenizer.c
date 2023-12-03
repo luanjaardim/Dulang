@@ -399,7 +399,6 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
           putcharFileReader(&fr, fr.currChar);
           break;
         case '\'': //chars
-          printf("char\n");
           putcharFileReader(&fr, fr.currChar);
           char c = readChar(&fr);
           if(readChar(&fr) == '\'' || c == '\\') {
@@ -413,7 +412,19 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
             fprintf(stderr, "Error! Bad format for char, at: %d %d\n", fr.currLine, fr.currCol);
             exit(1);
           }
-          printf("%s\n", fr.word);
+          break;
+        case ';':
+          addWordAsToken(&tf, &fr, &numWord);
+          putcharFileReader(&fr, fr.currChar);
+          readChar(&fr);
+          if(fr.currChar == ';') {
+            putcharFileReader(&fr, fr.currChar);
+            addWordAsToken(&tf, &fr, &numWord);
+          }
+          else {
+            addWordAsToken(&tf, &fr, &numWord);
+            goto switch_begin; //if it is not a ';' then we need to search for the case of the char read
+          }
           break;
         case '(':
         case ')':
@@ -426,13 +437,11 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
         case ':':
         case '|':
         case ',':
-        case ';':
         case '.':
         case '?':
           addWordAsToken(&tf, &fr, &numWord);
           putcharFileReader(&fr, fr.currChar);
           addWordAsToken(&tf, &fr, &numWord);
-          /* printf("symbol: %c\n", fr.currChar); */
           break;
         case '=':
         case '>':
