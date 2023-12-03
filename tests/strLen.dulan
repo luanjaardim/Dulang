@@ -11,7 +11,7 @@ fn int len: str string|
 
       back count
    else
-        warning = "A null string was passed"
+        warning = "A null string was passed\n"
         sys 1 1
             warning
             len warning |
@@ -24,9 +24,9 @@ fn int print: str string|
    back 0
 
 fn int main|
-   print "Hella World"
-   print "Hexlo Uorls"
-   print "Hexlo Worud"
-   print "Hello Warld"
-   print "Hello World"
+   print "Hella World\n"
+   print "Hexlo Uorls\n"
+   print "Hexlo Worud\n"
+   print "Hello Warld\n"
+   print "Hello World\n"
    back 0

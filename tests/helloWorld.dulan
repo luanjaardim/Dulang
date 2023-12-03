@@ -12,7 +12,7 @@ fn int main|
     to read any other parameter, using just the already read
    $$
    sys
-    write STDOUT "Hello World" 16-4|
+    write STDOUT "Hello World\n" 16-4|
 
    $ return 0 at the end
    back 0

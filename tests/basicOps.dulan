@@ -1,5 +1,5 @@
 fn int main|
-   sys 1 1 "aritmethics: " 25-11|
+   sys 1 1 "aritmethics: \n" 25-11|
 
    dump 38 + 31
    dump 100 - 31
@@ -7,7 +7,7 @@ fn int main|
    dump 138 / 2
    dump 169 % 100
 
-   sys 1 1 "bitwise ops: " 25-11|
+   sys 1 1 "bitwise ops: \n" 25-11|
    dump 197 band 127
    dump 1 bor 4 bor 64
    dump (1 shl 11) + (1 shl 12) + 825
@@ -16,11 +16,11 @@ fn int main|
    sys
         1
         1
-        "what a coincidence..."
+        "what a coincidence...\n"
         26-4 |
 
 
-   sys 1 1 "logical: " 21-11|
+   sys 1 1 "logical: \n" 21-11|
    dump 1 == 1
    dump 1 == 2
    dump 1 != 2

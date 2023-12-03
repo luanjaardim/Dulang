@@ -12,10 +12,10 @@ fn int main|
        sum 1 mod div 2 2 5 |
 
        sys write STDOUT
-           "true" 5|
+           "true\n" 5|
     else
        sys write STDOUT
-           "false" 6|
+           "false\n" 6|
 
     $ that's how you can read the expression above, so, surely, the
     $ condition will be satisfied.

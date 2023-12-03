@@ -10,7 +10,7 @@ fn int main|
          if sla == 10| stop
          dump sla
    sys
-    1 1 "exited the while with stop!" (39-11) |
+    1 1 "exited the while with stop!\n" (39-11) |
 
    while sla > 0|
          sla = sla -1
@@ -19,6 +19,6 @@ fn int main|
             skip
          dump sla
    sys
-    1 1 "skiped some odd dumps with skip!" (41-8) |
+    1 1 "skiped some odd dumps with skip!\n" (41-8) |
 
    back 0
