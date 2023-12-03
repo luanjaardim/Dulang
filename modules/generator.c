@@ -401,18 +401,20 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                     break;
                 case NUM_DIV:
                     fprintf(f, "xor rdx, rdx\n");
-                    fprintf(f, "div rbx\n");
+                    fprintf(f, "idiv rbx\n"); //TODO: when we have unsigned numbers, change this
                     break;
                 case NUM_MOD:
                     fprintf(f, "xor rdx, rdx\n");
-                    fprintf(f, "div rbx\n");
+                    fprintf(f, "div rbx\n"); //TODO: when we have unsigned numbers, change this
                     fprintf(f, "mov rax, rdx\n");
                     break;
                 //bitwise operations
                 case SHIFT_L_TK:
                 case SHIFT_R_TK:
                     fprintf(f, "mov cl, bl\n"); //HERE WE ARE USING CL, CHANGE THIS WHEN REFACTORING REGISTERS USE
-                    fprintf(f, "%s rax, cl\n", (type == SHIFT_L_TK) ? "shl" : "shr");
+
+                    //changed to sar because of the signal. TODO: when we have unsigned numbers, change this
+                    fprintf(f, "%s rax, cl\n", (type == SHIFT_L_TK) ? "sal" : "sar");
                     break;
                 case BIT_OR:
                 case BIT_AND:
