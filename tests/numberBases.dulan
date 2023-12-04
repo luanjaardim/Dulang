@@ -1,0 +1,17 @@
+fn int mul: int a, int b|back a * b
+fn int add: int a, int b|back a + b
+
+fn int main|
+   $ representation of the number 255 in 4 different number base
+   dec = 255
+   bin = 0b1 shl 8 - 1
+   oct = 0o377
+   hex = 0xFF
+   dump ( (dec == bin) == (oct == hex) )
+   $ same as: dump dec == bin == (oct == hex)
+
+   dump bin + dec == 2*hex
+   dump bin shr 2 == oct/4
+   dump (add 1 mul -0xFF (-1)) == (dec + 1)
+
+   back 0

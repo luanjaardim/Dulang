@@ -1,0 +1,19 @@
+fn int add: int a, int b|
+	back a + b
+
+fn int main |
+	dump 0xFF == 255
+	dump 0b11111111 == 255
+	dump 0o377 == 255
+	dump 0b1 shl 10
+	$ ; means that the expression continues at the next line
+	dump add 9 ;
+	add 0o77 (-0b11) ;; sys 1 1 "\noi\n\n" 5|
+	$ ;; means end of the expression
+
+	$ special chars: \r, \n, \0 and \t, can be found inside strings or as single chars
+	c = '\n'
+	sla = "\n"
+	dump c == @sla band 0xFF
+
+	back 0

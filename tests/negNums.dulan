@@ -1,0 +1,34 @@
+load "std.dulan"
+
+fn int mul:int a, int b|back a * b
+fn int neg:int a|back -a
+
+fn int main|
+	dumpInt -1
+	dumpInt 1-2
+	dumpInt -0x100 shl 1
+	dumpInt -0x100 shr 1
+
+	cnt = -1
+	if cnt|
+		cnt = cnt + 1
+		print "inside if\n"
+	
+	$ will exit the loop when it becomes -1
+	while not cnt|
+		cnt = cnt - 1
+		print "inside while\n"
+
+	dumpInt -(mul 1 (-1))
+	dumpInt mul -1 1
+	dumpInt mul -(mul 1 1) 2
+	dumpInt -2-2
+	dumpInt -2+2
+	dumpInt -(2+2)
+	dumpInt 1 - 2*4 - 8/( neg 2)
+	dumpInt 1 - (neg
+			100)
+	dumpInt neg - 69
+	dumpInt neg neg - 69
+
+	back 0
