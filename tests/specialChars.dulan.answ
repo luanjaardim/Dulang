@@ -1,0 +1,10 @@
+\n tem o valor 10 na tabela ascii
+\r tem o valor 13 na tabela ascii
+\0 tem o valor 0 na tabela ascii
+\ tem o valor 92 na tabela ascii
+testing special chars inside string:
+\t 	
+\n 
+
+\r 
+\0 

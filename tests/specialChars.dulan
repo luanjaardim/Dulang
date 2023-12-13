@@ -1,0 +1,30 @@
+load "std.dulan"
+
+fn int main|
+  c = '\n'
+  if c == 10|
+     print "\\n tem o valor 10 na tabela ascii\n"
+  c = '\r'
+  if c == 13|
+     oi = 1
+     print "\\r tem o valor 13 na tabela ascii\n"
+
+  c = '\0'
+  if c == 0|
+     print "\\0 tem o valor 0 na tabela ascii\n"
+
+  c = '\t'
+  if c == 11|
+      print "\\r tem o valor 11 na tabela ascii\n"
+
+  c = '\\'
+  if c == 92|
+      print "\\ tem o valor 92 na tabela ascii\n"
+
+  print "testing special chars inside string:\n"
+  print "\\t \t\n"
+  print "\\n \n\n"
+  print "\\r \r\n"
+  print "\\0 \n\0"
+
+  back 0
