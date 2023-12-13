@@ -149,8 +149,13 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 if(tk->text[i] == '\\') {
                     int number = numberOfSpecialChar(tk->text[++i]);
                     if(number == -1) {
-                        fprintf(stderr, "Error: unknown special char: \\%c, at %d %d\n", tk->text[i], tk->l, tk->c);
-                        exit(1);
+                        if(tk->text[i] != '\\') {
+                            fprintf(stderr, "Error: unknown special char: \\%c, at %d %d\n", tk->text[i], tk->l, tk->c);
+                            exit(1);
+                        } else {
+                            tmp[len++] = '\\';
+                            continue;
+                        }
                     }
                     if(!definingSpecialChar) {
                         tmp[len++] = '"';
@@ -186,11 +191,18 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
         }
         case CHAR_TK:
             fprintf(f, ";; -- char %ld\n", tk->id);
-            if(tk->text[0] == '\'') {
-                int number = numberOfSpecialChar(tk->text[1]);
+            if(tk->text[1] == '\\') {
+                int number = numberOfSpecialChar(tk->text[2]);
                 if(number == -1) {
-                    fprintf(stderr, "Error: unknown special char: \\%c\n", tk->text[2]);
-                    exit(1);
+                    if(tk->text[2] == '\\') {
+                        fprintf(f, "push '%c'\n", '\\');
+                        rsp += 8;
+                        break;
+                    }
+                    else {
+                        fprintf(stderr, "Error: unknown special char: \\%c\n", tk->text[2]);
+                        exit(1);
+                    }
                 }
                 fprintf(f, "push %d\n", number);
             }

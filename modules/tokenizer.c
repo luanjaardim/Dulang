@@ -75,7 +75,7 @@ TkInfo typeOfToken(const char *const word, int len) {
   //compile time known values, str or int, has negative predecence: -1
   if(word[0] == '"') return (TkInfo) {STR_TK, COMPTIME_KNOWN};
 
-  if(word[0] == '\'') return (TkInfo) {CHAR_TK, COMPTIME_KNOWN};
+  if(word[0] == '\'' && len > 2) return (TkInfo) {CHAR_TK, COMPTIME_KNOWN};
 
   //number validation
   int i = 0;
@@ -403,6 +403,7 @@ TokenizedFile readToTokenizedFile(FILE *fd) {
           char c = readChar(&fr);
           if(readChar(&fr) == '\'' || c == '\\') {
             if(c == '\\') {
+              putcharFileReader(&fr, c);
               c = fr.currChar;
               readChar(&fr);
             }
