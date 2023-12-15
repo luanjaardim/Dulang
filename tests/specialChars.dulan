@@ -6,7 +6,6 @@ fn int main|
      print "\\n tem o valor 10 na tabela ascii\n"
   c = '\r'
   if c == 13|
-     oi = 1
      print "\\r tem o valor 13 na tabela ascii\n"
 
   c = '\0'

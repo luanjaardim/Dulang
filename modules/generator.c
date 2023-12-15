@@ -12,7 +12,7 @@ int dataSegmentSize = 0, dataSegmentCap = 0;
 /* char *bssSegment = NULL; */
 
 int rsp = 0;
-int conditionals = -1, loops = -1, insideLoop = 0;
+int conditionals = -1, loops = -1, insideLoop = 0, str_id = 0;
 
 void generateDulangFile(FILE *f, ParsedFile *pf) {
     Generator g = {
@@ -184,8 +184,8 @@ void translateExpression(FILE *f, Expression *expr, Generator g) {
                 + 9 //size of the str_ and the :db and ,0\n
                 + 16; //a suposition of the maximum len of the id
             maybeRealloc((void **)&dataSegment, &dataSegmentCap, dataSegmentSize+possibleSizeToAddToDataSegment, sizeof(char));
-            dataSegmentSize += sprintf(dataSegment+dataSegmentSize, "str_%ld:db%s%s\n", tk->id, tmp, definingSpecialChar ? "0" : ",0");
-            fprintf(f, "push str_%ld\n", tk->id);
+            dataSegmentSize += sprintf(dataSegment+dataSegmentSize, "str_%d:db%s%s\n", str_id, tmp, definingSpecialChar ? "0" : ",0");
+            fprintf(f, "push str_%d\n", str_id++);
             rsp += 8;
             break;
         }
