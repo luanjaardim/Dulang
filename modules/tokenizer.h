@@ -1,50 +1,39 @@
 #ifndef TOK_H_
 #define TOK_H_
 
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <assert.h>
-
 #include "utils.h"
 
 typedef struct {
     TokenType type;
-    Precedence precedence;
+    TokenPrecedence precedence;
 } TkInfo;
 
 typedef struct Token {
-    size_t id, qtdChars;
-    char *text;
-    int l, c; //line and column
-    TkInfo info;
+    size_t id;
+    size_t l, c; //line and column
+    string text;
+    TokenType type;
+    TokenPrecedence precedence;
 } Token;
 
 typedef struct TokenizedLine {
-    size_t qtdElements, capElements;
-    Token *tk;
+    vector<Token> tokens;
 } TokenizedLine;
 
 typedef struct TokenizedFile {
-    size_t qtdLines, capLines;
     size_t currLine, currElem; //used for navigation
-    TokenizedLine *lines;
+    vector<TokenizedLine> lines;
 } TokenizedFile;
 
 typedef struct FileReader {
-    FILE *fd;
-    char *word;
-    size_t wordSize, wordCap;
-    char currChar;
-    int currLine, currCol; //specific to the current word
-    int l, c;
+    ifstream file;
+    string content;
+    string word;
+    size_t currPos, currEndOfWord, currLine, currCol; //specific to the current word
 } FileReader;
 
 void printTokenizedFile(TokenizedFile p);
-TokenizedFile readToTokenizedFile(FILE *fd);
+TokenizedFile readToTokenizedFile(const char *file);
 void destroyTokenizdFile(TokenizedFile *tp);
 TokenizedFile cloneTokenizedFile(const TokenizedFile tf);
 Token *currToken(TokenizedFile tf);

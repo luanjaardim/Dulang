@@ -8,6 +8,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <assert.h>
+#include <stdint.h>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <fstream>
+#include <limits>
+
+using namespace std;
 
 #define PARENT_LINK 0//convention, NULL if does not have
 #define LEFT_LINK 1  //represents the expression at the right of some expression
@@ -78,7 +86,7 @@ typedef enum {
   BUILTIN_HIGH_PREC,
   SYMBOLS,
   PRECEDENCE_COUNT
-} Precedence;
+} TokenPrecedence;
 
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);
