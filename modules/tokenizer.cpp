@@ -72,12 +72,26 @@ Token createToken(string text, size_t id, TkInfo info, size_t l, size_t c) {
     };
 }
 
+bool isValidChar(string word) {
+  if(word.size() > 2 && word[0] == '\'' && word[word.size()-1] == '\'') {
+    if(word[1] == '\\' && word.size() == 4) {
+      string validChars = "rnt0\\\'\"";
+      for ( char c : validChars) {
+        if(word[2] == c) return true;
+      }
+    }
+    if(word.size() == 3 && word[1] != '\\') 
+      return true;
+  }
+  return false;
+}
+
 TkInfo typeOfToken(string word) {
   int len = word.size();
   //compile time known values, str or int, has negative predecence: -1
   if(word[0] == '"') return {STR_TK, COMPTIME_KNOWN};
 
-  if(word[0] == '\'' && len > 2) return {CHAR_TK, COMPTIME_KNOWN};
+  if(word[0] == '\'' && isValidChar(word)) return {CHAR_TK, COMPTIME_KNOWN};
 
   //number validation
   int i = 0;
@@ -342,8 +356,8 @@ TokenizedFile readToTokenizedFile(const char *file) {
   // chars that can be concatenated with themselves
   // everyone besides the ';' can be concatenated with '=', and the ';' can be concatenated with itself
   const string doubleEspChars = ";=-+*/%<!>"; 
-  const string singleEspChars = "()[]{}@#|,:.";
-  const string specialChars = doubleEspChars + singleEspChars + "$"; //'$' for comments
+  const string singleEspChars = "()[]{}@#|,:.\'\"";
+  const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
   #define ADD_WORD_TILL(pos) fr.word = fr.word.substr(0, pos); \
                                    addWordAsToken(&tf, &fr, &numWord); \
@@ -390,6 +404,22 @@ TokenizedFile readToTokenizedFile(const char *file) {
          exit(1);
        }
        advanceCurrPosTill(&fr, substrPos + toFind.size());
+    } else if(fr.word[0] == '\"' || fr.word[0] == '\'') {
+      //finding the next " that is not after a '\'
+      substrPos = fr.currPos + 1;
+      while((substrPos = fr.content.find(fr.word[0], substrPos)) 
+            && fr.content[substrPos - 1] == '\\'
+            && fr.content[substrPos - 2] != '\\' // if has 2 '\' in sequence pass
+      ) {
+        substrPos++;
+      }
+      if(substrPos == string::npos || fr.content.find('\n', fr.currPos + 1) < substrPos) {
+        fprintf(stderr, "Error! String not closed, at line: %d\n", (int)fr.currLine);
+        exit(1);
+      }
+      fr.word = fr.content.substr(fr.currPos, substrPos - fr.currPos + 1);
+      addWordAsToken(&tf, &fr, &numWord);
+      advanceCurrPosTill(&fr, substrPos + 1);
     } else { //other special chars
       fr.word = fr.word.substr(0, 1);
       addWordAsToken(&tf, &fr, &numWord);
