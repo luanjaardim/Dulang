@@ -115,7 +115,7 @@ TkInfo typeOfToken(string word) {
   if(len == i) return {INT_TK, COMPTIME_KNOWN};
 
   for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
-    if(word.compare(builtinWords[i].symbol))
+    if(!word.compare(builtinWords[i].symbol)) 
       return { builtinWords[i].tokenType, builtinWords[i].precedence };
   }
 
@@ -579,7 +579,6 @@ TokenizedFile readToTokenizedFile(const char *file) {
        }
        advanceCurrPosTill(&fr, substrPos + toFind.size());
     } else { //other special chars
-      printf("word: %c\n", fr.word[0]);
       fr.word = fr.word.substr(0, 1);
       addWordAsToken(&tf, &fr, &numWord);
       advanceCurrPos(&fr);
