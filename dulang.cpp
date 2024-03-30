@@ -30,10 +30,10 @@ int main(int argc, char **argv) {
 
     string fileName = file.substr(0, pos);
 
-    TokenizedFile tokFile = readToTokenizedFile(file.c_str());
+    TokenizedFile *tokFile = readToTokenizedFile(file.c_str());
     //Every word is turned into Tokens, with informations that helps on parsing
     printf("Tokenized file:\n");
-    printTokenizedFile(tokFile);
+    printTokenizedFile(*tokFile);
     exit(1);
     // ParsedFile pf = createParsedFile(&tokFile);
     /* for(int i = 0; i < (int)pf.qtdBlocks; i++) */
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
    /*
     * Free mem
     */
-    destroyTokenizdFile(&tokFile);
+    destroyTokenizdFile(tokFile);
     // destroyParsedFile(&pf);
 
     //Compiling the nasm file
