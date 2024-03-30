@@ -60,16 +60,8 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   /* {"struct", BUILTIN_HIGH_PREC}, */
 };
 
-Token createToken(string text, size_t id, TkInfo info, size_t l, size_t c) {
-    /* printf("creating token: %s %d\n", text, (int)len); */
-    return {
-      .id = id,
-      .l = l,
-      .c = c,
-      .text = string(text),
-      .type = info.type,
-      .precedence = info.precedence
-    };
+Token *createToken(string text, size_t id, TkInfo info, size_t l, size_t c) {
+    return new Token(text, id, info, l, c);
 }
 
 bool isValidChar(string word) {
@@ -136,18 +128,12 @@ TkInfo typeOfToken(string word) {
   return {NAME_TK, USER_DEFINITIONS};
 }
 
-TokenizedLine createTokenizedLine() {
-    return {
-      .tokens = vector<Token>()
-    };
+TokenizedLine *createTokenizedLine() {
+  return new TokenizedLine();
 }
 
-TokenizedFile createTokenizedFile() {
-    return {
-      .currLine = 0,
-      .currElem = 0,
-      .lines = vector<TokenizedLine>()
-    };
+TokenizedFile *createTokenizedFile() {
+  return new TokenizedFile();
 }
 
 FileReader createFileReader(const char *file) {
@@ -168,21 +154,21 @@ FileReader createFileReader(const char *file) {
  * They will share the same memmory alocated for Tokenize the file, you
  * must not free a clone if you already freed the original one, or the opposite
 */
-TokenizedFile cloneTokenizedFile(const TokenizedFile tf) {
-  return {
-    .currLine = tf.currLine,
-    .currElem = tf.currElem,
-    .lines = tf.lines,
-  };
+TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
+  TokenizedFile *clone = new TokenizedFile();
+  clone->currLine = tf.currLine;
+  clone->currElem = tf.currElem;
+  clone->lines = tf.lines;
+  return clone;
 }
 
 /*
  * This function is used to get the current Token
 */
 Token *currToken(TokenizedFile tf) {
-  if(tf.lines.size() == tf.currLine || tf.lines[tf.lines.size()-1].tokens.size() == tf.currElem)
+  if(tf.lines.size() == tf.currLine || tf.lines[tf.lines.size()-1]->tokens.size() == tf.currElem)
     return NULL;
-  return tf.lines[tf.currLine].tokens.data() + tf.currElem;
+  return tf.lines[tf.currLine]->tokens[tf.currElem];
 }
 
 /*
@@ -190,9 +176,9 @@ Token *currToken(TokenizedFile tf) {
  * Will return NULL at the end of all Tokens
 */
 Token *nextToken(TokenizedFile *tf) {
-  if(tf->lines[tf->currLine].tokens.size() == ++tf->currElem) {
+  if(tf->lines[tf->currLine]->tokens.size() == ++tf->currElem) {
     //if there are no more lines to iterate over or the line is empty, then return NULL
-    if(tf->lines.size() == tf->currLine+1 || tf->lines[tf->currLine+1].tokens.size() == 0) {
+    if(tf->lines.size() == tf->currLine+1 || tf->lines[tf->currLine+1]->tokens.size() == 0) {
       tf->currElem--;
       return NULL;
     }
@@ -220,7 +206,7 @@ Token *returnToken(TokenizedFile *tf) {
     if(!tf->currLine) //if it is the first line
       return NULL;
     tf->currLine--;
-    tf->currElem = tf->lines[tf->currLine].tokens.size();
+    tf->currElem = tf->lines[tf->currLine]->tokens.size();
   }
   tf->currElem--;
   return currToken(*tf);
@@ -241,7 +227,7 @@ Token *peekBackTokenizedFile(TokenizedFile tf) {
 */
 int advanceLineTokenizdFile(TokenizedFile *tf) {
   if(tf->currLine == tf->lines.size() - 1) {
-    tf->currElem = tf->lines[tf->currLine].tokens.size() - 1;
+    tf->currElem = tf->lines[tf->currLine]->tokens.size() - 1;
     return 0;
   }
   tf->currLine++;
@@ -268,10 +254,10 @@ struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
 void printTokenizedFile(TokenizedFile p) {
     const char *humanReadableType[NUM_DIV] = {"Word", "Integer Number", "String", "Char", "Floating Point", "Builtin Word"};
     for(size_t i = 0; i < p.lines.size(); i++) {
-        for(size_t j = 0; j < p.lines[i].tokens.size(); j++) {
-            printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i].tokens[j].id , (int)p.lines[i].tokens[j].l, (int)p.lines[i].tokens[j].c, p.lines[i].tokens[j].text.c_str(),
-                  humanReadableType[p.lines[i].tokens[j].type >= NUM_DIV ? (NUM_DIV - 1) : p.lines[i].tokens[j].type],
-                  p.lines[i].tokens[j].precedence);
+        for(size_t j = 0; j < p.lines[i]->tokens.size(); j++) {
+            printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i]->tokens[j]->id , (int)p.lines[i]->tokens[j]->l, (int)p.lines[i]->tokens[j]->c, p.lines[i]->tokens[j]->text.c_str(),
+                  humanReadableType[p.lines[i]->tokens[j]->type >= NUM_DIV ? (NUM_DIV - 1) : p.lines[i]->tokens[j]->type],
+                  p.lines[i]->tokens[j]->precedence);
         }
         printf("\n");
     }
@@ -286,18 +272,23 @@ void addWordAsToken(TokenizedFile *tf, FileReader *fr, size_t *numWord) {
     if(!fr->word.size()) return;
     (*numWord)++; //unique id for each word of the file
 
-    TokenizedLine *lastLine = &tf->lines[tf->lines.size() - 1];
+    TokenizedLine *lastLine = tf->lines[tf->lines.size() - 1];
     //if the last line is not empty and the line of the last token is different from the current line
-    if(lastLine->tokens.size() != 0 && lastLine->tokens[0].l != fr->currLine) {
+    if(lastLine->tokens.size() != 0 && lastLine->tokens[0]->l != fr->currLine) {
       tf->lines.push_back(createTokenizedLine());
-      lastLine = &tf->lines[tf->lines.size() - 1];
+      lastLine = tf->lines[tf->lines.size() - 1];
+    }
+    if(fr->word == ";;") { //forced end of the line
+      tf->lines.push_back(createTokenizedLine());
+      fr->word.clear();
+      return;
     }
 
     lastLine->tokens.push_back(
       createToken(
         fr->word, //WARNING: maybe a bug here, the word is not being copied
         *numWord,
-        typeOfToken(fr->word), //len-1 to not count the '\0'
+        typeOfToken(fr->word),
         fr->currLine,
         fr->currCol
     ));
@@ -345,9 +336,28 @@ int getNextWord(FileReader *fr) {
   return fr->word == "";
 }
 
-TokenizedFile readToTokenizedFile(const char *file) {
-  TokenizedFile tf = createTokenizedFile();
-  tf.lines.push_back(createTokenizedLine()); //add the first line
+void lineJoinBySemicolon(TokenizedFile *tf) {
+  size_t len = tf->lines.size();
+  for(size_t i = 0; i < len; i++) {
+    TokenizedLine *line = tf->lines[i];
+    Token *lastToken = line->tokens[line->tokens.size() - 1];
+    if(lastToken->text == ";") {
+      if(len - 1 == i) {
+        printf("There is no line to join with ';', at line: %zu\n", lastToken->l);
+        exit(1);
+      }
+      TokenizedLine *nextLine = tf->lines[i+1];
+      line->tokens.pop_back(); //removin the ';'
+      line->tokens.insert(line->tokens.end(), nextLine->tokens.begin(), nextLine->tokens.end());
+      tf->lines.erase(tf->lines.begin() + i+1);
+      len--; i--;
+    }
+  }
+}
+
+TokenizedFile *readToTokenizedFile(const char *file) {
+  TokenizedFile *tf = createTokenizedFile();
+  tf->lines.push_back(createTokenizedLine()); //add the first line
 
   FileReader fr = createFileReader(file);
   readFile(&fr);
@@ -360,7 +370,7 @@ TokenizedFile readToTokenizedFile(const char *file) {
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
   #define ADD_WORD_TILL(pos) fr.word = fr.word.substr(0, pos); \
-                                   addWordAsToken(&tf, &fr, &numWord); \
+                                   addWordAsToken(tf, &fr, &numWord); \
                                    advanceCurrPosTill(&fr, fr.currPos + pos); \
                                    getNextWord(&fr);
 
@@ -377,7 +387,7 @@ TokenizedFile readToTokenizedFile(const char *file) {
 
     // If there is no special char in the word
     if(firstSpecialCharPos == numeric_limits<size_t>::max()) {
-      addWordAsToken(&tf, &fr, &numWord);
+      addWordAsToken(tf, &fr, &numWord);
       advanceCurrPosTill(&fr, fr.currEndOfWord);
       continue;
     }
@@ -389,11 +399,11 @@ TokenizedFile readToTokenizedFile(const char *file) {
     if(doubleEspChars.find(fr.word[0]) != string::npos) { //is a double special char
       if(fr.word.size() > 1 && ((fr.word[0] == ';' && fr.word[1] == ';') || (fr.word[0] != ';' && fr.word[1] == '='))) {
         fr.word = fr.word.substr(0, 2);
-        addWordAsToken(&tf, &fr, &numWord);
+        addWordAsToken(tf, &fr, &numWord);
         advanceCurrPosTill(&fr, fr.currPos + 2);
       } else {
         fr.word = fr.word.substr(0, 1);
-        addWordAsToken(&tf, &fr, &numWord);
+        addWordAsToken(tf, &fr, &numWord);
         advanceCurrPosTill(&fr, fr.currPos + 1);
       }
     } else if(fr.word[0] == '$') { //comments
@@ -418,30 +428,28 @@ TokenizedFile readToTokenizedFile(const char *file) {
         exit(1);
       }
       fr.word = fr.content.substr(fr.currPos, substrPos - fr.currPos + 1);
-      addWordAsToken(&tf, &fr, &numWord);
+      addWordAsToken(tf, &fr, &numWord);
       advanceCurrPosTill(&fr, substrPos + 1);
     } else { //other special chars
       fr.word = fr.word.substr(0, 1);
-      addWordAsToken(&tf, &fr, &numWord);
+      addWordAsToken(tf, &fr, &numWord);
       advanceCurrPos(&fr);
     }
   }
+  lineJoinBySemicolon(tf); //join lines that ends with ';'
+  printf("Number of lines: %zu\n", tf->lines.size());
 
   return tf;
 }
 
 void destroyTokenizdFile(TokenizedFile *tf) {
-  // for(size_t i = 0; i < tf->qtdLines; i ++) {
-  //   for(size_t j = 0; j < tf->lines[i].qtdElements; j++) {
-  //     free(tf->lines[i].tk[j].text);
-  //     tf->lines[i].tk[j].text = NULL;
-  //   }
-  //   free(tf->lines[i].tk);
-  //   tf->lines[i].tk = NULL;
-  // }
-  // free(tf->lines);
-  // tf->lines = NULL;
-  (void) tf;
+  for( auto line : tf->lines) {
+    for( auto token : line->tokens) {
+      delete token;
+    }
+    delete line;
+  }
+  delete tf;
 }
 
 #endif

@@ -14,15 +14,24 @@ typedef struct Token {
     string text;
     TokenType type;
     TokenPrecedence precedence;
+
+    Token(string text, size_t id, TkInfo info, size_t l, size_t c) : id(id), l(l), c(c), text(text) {
+        type = info.type;
+        precedence = info.precedence;
+    }
 } Token;
 
 typedef struct TokenizedLine {
-    vector<Token> tokens;
+    vector<Token *> tokens;
+
+    TokenizedLine() {}
 } TokenizedLine;
 
 typedef struct TokenizedFile {
     size_t currLine, currElem; //used for navigation
-    vector<TokenizedLine> lines;
+    vector<TokenizedLine *> lines;
+
+    TokenizedFile() : currLine(0), currElem(0) {}
 } TokenizedFile;
 
 typedef struct FileReader {
@@ -33,9 +42,9 @@ typedef struct FileReader {
 } FileReader;
 
 void printTokenizedFile(TokenizedFile p);
-TokenizedFile readToTokenizedFile(const char *file);
+TokenizedFile *readToTokenizedFile(const char *file);
 void destroyTokenizdFile(TokenizedFile *tp);
-TokenizedFile cloneTokenizedFile(const TokenizedFile tf);
+TokenizedFile *cloneTokenizedFile(const TokenizedFile tf);
 Token *currToken(TokenizedFile tf);
 Token *nextToken(TokenizedFile *tf);
 Token *peekToken(TokenizedFile tf);
