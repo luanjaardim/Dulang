@@ -166,7 +166,7 @@ TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
  * This function is used to get the current Token
 */
 Token *currToken(TokenizedFile tf) {
-  if(tf.lines.size() == tf.currLine || tf.lines[tf.lines.size()-1]->tokens.size() == tf.currElem)
+  if(tf.lines.size() == tf.currLine || tf.lines[tf.currLine]->tokens.size() == tf.currElem)
     return NULL;
   return tf.lines[tf.currLine]->tokens[tf.currElem];
 }
@@ -175,40 +175,44 @@ Token *currToken(TokenizedFile tf) {
  * This function is used to get the next Token of the file advancing TokenizedFile
  * Will return NULL at the end of all Tokens
 */
-Token *nextToken(TokenizedFile *tf) {
-  if(tf->lines[tf->currLine]->tokens.size() == ++tf->currElem) {
-    //if there are no more lines to iterate over or the line is empty, then return NULL
-    if(tf->lines.size() == tf->currLine+1 || tf->lines[tf->currLine+1]->tokens.size() == 0) {
-      tf->currElem--;
-      return NULL;
-    }
+Token *nextToken(TokenizedFile *tf, size_t n) {
+  for(size_t i = 0; i < n; i++)
+    if(tf->lines[tf->currLine]->tokens.size() == ++tf->currElem) {
+      //if there are no more lines to iterate over or the line is empty, then return NULL
+      if(tf->lines.size() == tf->currLine+1 || tf->lines[tf->currLine+1]->tokens.size() == 0) {
+        tf->currElem--;
+        return NULL;
+      }
 
-    tf->currElem = 0;
-    tf->currLine++;
-  }
+      tf->currElem = 0;
+      tf->currLine++;
+    }
   return currToken(*tf);
 }
 
 /*
  * This function is used to get the next Token of the file without advancing TokenizedFile
 */
-Token *peekToken(TokenizedFile tf) {
+Token *peekToken(TokenizedFile tf, size_t n) {
   TokenizedFile tmp = tf;
-  return nextToken(&tmp);
+  return nextToken(&tmp, n);
+}
 }
 
 /*
  * This function is used to get the previous Token of the file returning TokenizedFile
  * Will return NULL at the begin of all Tokens
 */
-Token *returnToken(TokenizedFile *tf) {
-  if(!tf->currElem) { //if it is the first element of the line
-    if(!tf->currLine) //if it is the first line
-      return NULL;
-    tf->currLine--;
-    tf->currElem = tf->lines[tf->currLine]->tokens.size();
+Token *returnToken(TokenizedFile *tf, size_t n) {
+  for(size_t i = 0; i < n; i++) {
+    if(!tf->currElem) { //if it is the first element of the line
+      if(!tf->currLine) //if it is the first line
+        return NULL;
+      tf->currLine--;
+      tf->currElem = tf->lines[tf->currLine]->tokens.size();
+    }
+    tf->currElem--;
   }
-  tf->currElem--;
   return currToken(*tf);
 }
 
@@ -216,7 +220,10 @@ Token *returnToken(TokenizedFile *tf) {
  * This function is used to get the previous Token of the file without returning TokenizedFile
  * Will return NULL at the begin of all Tokens
 */
-Token *peekBackTokenizedFile(TokenizedFile tf) {
+Token *peekBackTokenizedFile(TokenizedFile tf, size_t n) {
+  TokenizedFile tmp = tf;
+  return returnToken(&tmp, n);
+}
   TokenizedFile tmp = tf;
   return returnToken(&tmp);
 }
@@ -245,7 +252,7 @@ struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
     if(!advanceLineTokenizdFile(&tf)) break;
   } while(identationBlock < currToken(tf)->c);
   if(currToken(tf)->c <= identationBlock && firstLine != currToken(tf)->l)
-    returnToken(&tf);
+    returnToken(&tf, 1);
   /* printf("last word: %s\n", currToken(tf)->text); */
 
   return { currToken(tf)->id, currToken(tf)->l };
