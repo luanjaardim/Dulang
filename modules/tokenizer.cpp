@@ -246,12 +246,12 @@ Token *returnLineToken(TokenizedFile *tf, size_t n) {
  * This function is used to get the previous Token of the file without returning TokenizedFile
  * Will return NULL at the begin of all Tokens
 */
-Token *peekBackTokenizedFile(TokenizedFile tf, size_t n) {
+Token *peekBackToken(TokenizedFile tf, size_t n) {
   TokenizedFile tmp = tf;
   return returnToken(&tmp, n);
 }
 // the same as above, but searching only in the current line
-Token *peekBackLineTokenizedFile(TokenizedFile tf, size_t n) {
+Token *peekBackLineToken(TokenizedFile tf, size_t n) {
   TokenizedFile tmp = tf;
   return returnLineToken(&tmp, n);
 }
