@@ -137,6 +137,12 @@ TokenizedFile *createTokenizedFile() {
 }
 
 FileReader createFileReader(const char *file) {
+  FILE *f = fopen(file, "r");
+  if(!f) {
+    fprintf(stderr, "Error! Could not open file %s\n", file);
+    exit(1);
+  }
+  fclose(f);
   return {
     .file = ifstream(file),
     .content = string(),
