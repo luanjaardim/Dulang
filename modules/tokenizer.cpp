@@ -403,7 +403,7 @@ TokenizedFile *readToTokenizedFile(const char *file) {
   // chars that can be concatenated with themselves
   // everyone besides the ';' can be concatenated with '=', and the ';' can be concatenated with itself
   const string doubleEspChars = ";=-+*/%<!>"; 
-  const string singleEspChars = "()[]{}@#|,:.\'\"";
+  const string singleEspChars = "()[]{}@#|?,:.\'\"";
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
   #define ADD_WORD_TILL(pos) fr.word = fr.word.substr(0, pos); \
