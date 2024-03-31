@@ -46,10 +46,14 @@ TokenizedFile *readToTokenizedFile(const char *file);
 void destroyTokenizdFile(TokenizedFile *tp);
 TokenizedFile *cloneTokenizedFile(const TokenizedFile tf);
 Token *currToken(TokenizedFile tf);
-Token *nextToken(TokenizedFile *tf);
-Token *peekToken(TokenizedFile tf);
-Token *returnToken(TokenizedFile *tf);
-Token *peekBackToken(TokenizedFile tf);
+Token *nextToken(TokenizedFile *tf, size_t n);
+Token *nextLineToken(TokenizedFile *tf, size_t n);
+Token *peekToken(TokenizedFile tf, size_t n);
+Token *peekLineToken(TokenizedFile tf, size_t n);
+Token *returnToken(TokenizedFile *tf, size_t n);
+Token *returnLineToken(TokenizedFile *tf, size_t n);
+Token *peekBackToken(TokenizedFile tf, size_t n);
+Token *peekBackLineToken(TokenizedFile tf, size_t n);
 int advanceLineTokenizdFile(TokenizedFile *tf);
 
 struct endOfBlock {

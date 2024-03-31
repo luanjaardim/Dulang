@@ -195,6 +195,14 @@ Token *nextToken(TokenizedFile *tf, size_t n) {
     }
   return currToken(*tf);
 }
+// same as above, but searching only in the current line
+Token *nextLineToken(TokenizedFile *tf, size_t n) {
+  size_t currLine = tf->currLine;
+  if(nextToken(tf, n) && tf->currLine == currLine) 
+    return currToken(*tf);
+  else 
+    return NULL;
+}
 
 /*
  * This function is used to get the next Token of the file without advancing TokenizedFile
@@ -203,6 +211,10 @@ Token *peekToken(TokenizedFile tf, size_t n) {
   TokenizedFile tmp = tf;
   return nextToken(&tmp, n);
 }
+// same as above, but searching only in the current line
+Token *peekLineToken(TokenizedFile tf, size_t n) {
+  TokenizedFile tmp = tf;
+  return nextLineToken(&tmp, n);
 }
 
 /*
@@ -221,6 +233,14 @@ Token *returnToken(TokenizedFile *tf, size_t n) {
   }
   return currToken(*tf);
 }
+// the same as above, but searching only in the current line
+Token *returnLineToken(TokenizedFile *tf, size_t n) {
+  size_t currLine = tf->currLine;
+  if(returnToken(tf, n) && tf->currLine == currLine) 
+    return currToken(*tf);
+  else 
+    return NULL;
+}
 
 /*
  * This function is used to get the previous Token of the file without returning TokenizedFile
@@ -230,8 +250,10 @@ Token *peekBackTokenizedFile(TokenizedFile tf, size_t n) {
   TokenizedFile tmp = tf;
   return returnToken(&tmp, n);
 }
+// the same as above, but searching only in the current line
+Token *peekBackLineTokenizedFile(TokenizedFile tf, size_t n) {
   TokenizedFile tmp = tf;
-  return returnToken(&tmp);
+  return returnLineToken(&tmp, n);
 }
 
 /*
@@ -450,7 +472,6 @@ TokenizedFile *readToTokenizedFile(const char *file) {
     }
   }
   lineJoinBySemicolon(tf); //join lines that ends with ';'
-  printf("Number of lines: %zu\n", tf->lines.size());
 
   return tf;
 }

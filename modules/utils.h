@@ -14,6 +14,8 @@
 #include <vector>
 #include <fstream>
 #include <limits>
+#include <map>
+#include <utility>
 
 using namespace std;
 
@@ -22,7 +24,7 @@ using namespace std;
 #define RIGHT_LINK 2 //represents the expression at the left of some expression
 #define CHILD(pos) (RIGHT_LINK + pos)
 //any other number for links are it's childs
-#define SYSCALL_ARGS 7
+#define SYSCALL_ARGS 7 // TODO: search how to get the return of a syscall
 
 typedef enum {
     NAME_TK, //any name created by the user(that does not matches any of the builtin types)
