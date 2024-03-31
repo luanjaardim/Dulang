@@ -13,14 +13,16 @@ Element *getNextElement(TokenizedFile *tf) {
     currToken(*tf) && currToken(*tf)->type == NAME_TK && 
     peekLineToken(*tf, 1) && peekLineToken(*tf, 1)->type == COLON
   ) {
-    return new Element(ElementKey(currToken(*tf)->text));
+    nextToken(tf, 1);
+    return new Element(ElementKey(peekBackLineToken(*tf, 1)->text));
   }
   if( //if the pattern is: <name>
     currToken(*tf) && currToken(*tf)->type == CMP_LT &&
     peekLineToken(*tf, 1) && peekLineToken(*tf, 1)->type == NAME_TK &&
     peekLineToken(*tf, 2) && peekLineToken(*tf, 2)->type == CMP_GT
   ) {
-    return new Element(InnerElement(peekLineToken(*tf, 1)->text));
+    nextToken(tf, 2);
+    return new Element(InnerElement(peekBackLineToken(*tf, 1)->text));
   }
   if( //if the pattern is: "name"
     currToken(*tf) && currToken(*tf)->type == STR_TK
@@ -60,13 +62,11 @@ void Grammar::extractPatterns(TokenizedFile *tf) {
 
     if(e) {
       if(e->type == KEY) {
-        // printf("Key: %s\n", e->key.key.c_str());
         curKey = e->key.key;
         this->patterns[curKey] = {Pattern(curId++)};
-        printf("Current key: %s\n", curKey.c_str());
+        // printf("Current key: %s\n", curKey.c_str());
         appendPattern = false;
         delete e;
-        nextToken(tf, 1); // skip the colon
         continue; // skip the appendPattern = true
       }
       if(e->type == INNER_ELEMENT || e->type == TEXT || e->type == VALUE) {
@@ -76,24 +76,27 @@ void Grammar::extractPatterns(TokenizedFile *tf) {
           appendPattern = false;
         }
         this->patterns[curKey].back().elements.push_back(e);
-        printf("inserting at: %s, with type %d\n", curKey.c_str(), e->type);
-        if(e->type == INNER_ELEMENT) {
-          nextLineToken(tf, 2);
-        }
       }
     }
     if(currToken(*tf) && currToken(*tf)->text == "[") { // if the pattern is: [ elem : "separator"]
-      while(currToken(*tf) && currToken(*tf)->text != "]") {
+      // printf("Separator\n");
+      nextToken(tf, 1);
+      Element *e = getNextElement(tf);
+      if(e && nextToken(tf, 1) && currToken(*tf)->type == COLON) {
         nextToken(tf, 1);
+        Element *s = getNextElement(tf); //separator
+        if(s && nextToken(tf, 1) && currToken(*tf)->text == "]") {
+          this->patterns[curKey].back().elements.push_back(new Element(ElementList(e, s)));
+        }
+        else {
+          printf("Grammar Error at line, list separator: %d\n", (int)currToken(*tf)->l);
+          exit(1);
+        }
       }
-      // nextToken(tf, 1);
-      // Element *e = getNextElement(tf);
-      // if(e && nextToken(tf, 1) && currToken(*tf)->text == ":") {
-      //   nextToken(tf, 1);
-      //   Element *s = getNextElement(tf);
-      //   if(s) {
-      //   }
-      // }
+      else {
+        printf("Grammar Error at line: %d\n", (int)currToken(*tf)->l);
+        exit(1);
+      }
     }
     if(currToken(*tf) && currToken(*tf)->text == "?") { // if the pattern is: ?( elems... )
       while(currToken(*tf) && currToken(*tf)->text != ")") {

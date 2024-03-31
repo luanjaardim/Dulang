@@ -47,8 +47,8 @@ $$
   DEDENT -> returns to the previous identation
 $$
 body:
-  stmt
-  NEW_LINE INDENT [stmt:NEW_LINE] DEDENT
+  <stmt>
+  NEW_LINE INDENT [<stmt>:NEW_LINE] DEDENT
 
 expr:
   <expr> "?" <expr> ":" <expr>

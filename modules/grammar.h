@@ -37,7 +37,7 @@ struct ElementValue {
     ElementValue(ElementValueType type) : type(type) {}
 };
 
-// the text of this element is a hardcoded string, the word written itself, 'text'
+// the text of this element is a hardcoded string, the word written itself, "text"
 struct ElementText {
     string text;
     ElementText(string text) : text(text) {}
@@ -62,8 +62,8 @@ struct OptionalElement {
 
 // a list of elements, separated by a separator, [text:'separator']
 struct ElementList {
-    string separator;
-    Element *e;
+    Element *e, *separator;
+    ElementList(Element *e, Element *separator) : e(e), separator(separator) {}
 };
 
 struct Element {
