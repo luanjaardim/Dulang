@@ -1,0 +1,119 @@
+$ the whole program is a list of statements ended with NEW_LINE('\n')
+root:
+  [<stmt>:NEW_LINE]
+
+$ can be used inside the scope was defined, and in inner scopes
+stmt:
+  <func_def>
+  <var_def>
+  <assignment>
+  <type_def>
+  <if_stmt>
+  <while_stmt>
+  "back" <expr>                                    $ return point of a function
+  "stop"                                           $ break point of a loop
+  "skip"                                           $ restart point of a loop
+
+func_def:
+  "fn" <type> NAME "|" <body>                      $ creating a function without args
+  "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
+
+arg: 
+  <type> NAME ?("=" COMP_VAL)
+
+var_def:
+  "var" <type> NAME "=" <expr>                     $ creating a variable
+  ?("const") ?(<type>) NAME "=" <expr>             $ creating a constant, the type can be infered
+
+assignment:
+  <primary> "=" <expr>
+
+type_def:
+  "type" NAME "|" <user_type>                      $ defining a user type, a name to be used to refer that type
+  "type" NAME "|" <type>                           $ defining an alias to a type
+
+if_stmt:
+  "if" <expr> "|" <body>
+  "if" <expr> "|" <body> (!idented) else <body>
+
+while_stmt:
+  "while" <expr> "|" <body>
+
+$ for_stmt:
+
+$$
+  body is a list of indented new_line separated statements or a just a single statement
+  INDENT -> verifies if the first element collumn of each statement is indented
+  DEDENT -> returns to the previous identation
+$$
+body:
+  stmt
+  NEW_LINE INDENT [stmt:NEW_LINE] DEDENT
+
+expr:
+  <expr> "?" <expr> ":" <expr>
+  "(" expr ")"
+  NAME [<expr>:" "]                                $ function call
+  <bitwise>
+
+bitwise:
+  <bitwise> "band" <bitwise>
+  <bitwise> "bor" <bitwise>
+  <bitwise> "bnot" <bitwise>
+  <bitwise> "shl" <num>
+  <bitwise> "shr" <num>
+  <boolean>
+  $ continue...
+
+boolean:
+  <boolean> "and" <boolean>
+  <boolean> "or" <boolean>
+  <boolean> "not" <boolean>
+  <num>
+  $ continue...
+
+num:
+  <num> "+" <term>
+  <num> "-" <term>
+  <term>
+
+term:
+  <term> "*" <factor>
+  <term> "/" <factor>
+  <term> "%" <factor>
+  <factor>
+
+factor:
+  "-" <factor>
+  <primary>
+  <atom>
+
+primary:
+  <primary> "." <primary>
+  "@" NAME
+  NAME "@" <num>
+
+atom:
+  ?("#") NAME
+  NUMBER
+  CHAR
+  STRING
+
+$$
+  A compound type that must have a name to it's fields and possibly a default value
+$$
+user_type:
+  "{" [<arg>:";"] "}"
+
+type:
+  "{" [<type>:";"] "}"    $ compound type, a type that is a 
+  "#" <type>              $ pointer to a type
+  "?" <type>              $ nullable pointer to a type
+  "#[<number>]" <type>    $ array of <number> elements
+  "#*" <type>             $ pointer to an array null terminated
+  <type> "^" <type>       $ tagged union types
+  <type> "->" <type>      $ functions types
+  "byte"                  $ signed 1-byte
+  "ubyte"                 $ unsigned 1-byte
+  "int"                   $ signed 4-bytes
+  "uint"                  $ unsigned 4-bytes
