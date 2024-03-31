@@ -48,6 +48,41 @@ Element *getNextElement(TokenizedFile *tf) {
     if(text == "DEDENT")
       return new Element(ElementValue(VAL_DEDENT));
   }
+  if(currToken(*tf) && currToken(*tf)->text == "[") { // if the pattern is: [ elem : "separator"]
+    // printf("Separator\n");
+    nextToken(tf, 1);
+    Element *e = getNextElement(tf);
+    if(e && nextToken(tf, 1) && currToken(*tf)->type == COLON) {
+      nextToken(tf, 1);
+      Element *s = getNextElement(tf); //separator
+      if(s && nextToken(tf, 1) && currToken(*tf)->text == "]") {
+        return new Element(ElementList(e, s));
+      }
+      else {
+        printf("Grammar Error at line, list separator: %d\n", (int)currToken(*tf)->l);
+        exit(1);
+      }
+    }
+    else {
+      printf("Grammar Error at line: %d\n", (int)currToken(*tf)->l);
+      exit(1);
+    }
+  }
+  if(currToken(*tf) && currToken(*tf)->type == QUESTION_TK) { // if the pattern is: ?( elems... )
+    nextLineToken(tf, 1); //skip the "?"
+    OptionalElement e = OptionalElement();
+    while(nextLineToken(tf, 1) && currToken(*tf)->text != ")") {
+      Element *inner_elem = getNextElement(tf);
+      if(inner_elem) {
+        e.elements.push_back(inner_elem);
+      }
+      else {
+        printf("Grammar Error, optional value, at line: %d\n", (int)currToken(*tf)->l);
+        exit(1);
+      }
+    }
+    return new Element(e);
+  }
 
   return NULL;
 }
@@ -69,39 +104,11 @@ void Grammar::extractPatterns(TokenizedFile *tf) {
         delete e;
         continue; // skip the appendPattern = true
       }
-      if(e->type == INNER_ELEMENT || e->type == TEXT || e->type == VALUE) {
-        // printf("Inner: %s\n", e->inner.elem.c_str());
-        if(appendPattern) {
-          this->patterns[curKey].push_back(Pattern(curId++));
-          appendPattern = false;
-        }
-        this->patterns[curKey].back().elements.push_back(e);
+      if(appendPattern) {
+        this->patterns[curKey].push_back(Pattern(curId++));
+        appendPattern = false;
       }
-    }
-    if(currToken(*tf) && currToken(*tf)->text == "[") { // if the pattern is: [ elem : "separator"]
-      // printf("Separator\n");
-      nextToken(tf, 1);
-      Element *e = getNextElement(tf);
-      if(e && nextToken(tf, 1) && currToken(*tf)->type == COLON) {
-        nextToken(tf, 1);
-        Element *s = getNextElement(tf); //separator
-        if(s && nextToken(tf, 1) && currToken(*tf)->text == "]") {
-          this->patterns[curKey].back().elements.push_back(new Element(ElementList(e, s)));
-        }
-        else {
-          printf("Grammar Error at line, list separator: %d\n", (int)currToken(*tf)->l);
-          exit(1);
-        }
-      }
-      else {
-        printf("Grammar Error at line: %d\n", (int)currToken(*tf)->l);
-        exit(1);
-      }
-    }
-    if(currToken(*tf) && currToken(*tf)->text == "?") { // if the pattern is: ?( elems... )
-      while(currToken(*tf) && currToken(*tf)->text != ")") {
-        nextToken(tf, 1);
-      }
+      this->patterns[curKey].back().elements.push_back(e);
     }
 
     if(!peekLineToken(*tf, 1)) { //check if the next token is at new line
@@ -109,4 +116,48 @@ void Grammar::extractPatterns(TokenizedFile *tf) {
     }
   } while(nextToken(tf, 1));
   printf("End of file\n");
+}
+
+void printType(Element *e, size_t tab) {
+  printf("%*s", (int)tab, "");
+  if(e->type == KEY) {
+    printf("Key: %s\n", e->key.key.c_str());
+  }
+  else if(e->type == VALUE) {
+    vector<string> humanReadable = { "NUMBER", "CHAR", "STRING", "NAME", "INDENT", "DEDENT", "NEW_LINE" };
+    printf("Value: %s\n", humanReadable[(int)e->value.type].c_str());
+  }
+  else if(e->type == TEXT) {
+    printf("Text: %s\n", e->text.text.c_str());
+  }
+  else if(e->type == INNER_ELEMENT) {
+    printf("Inner element: %s\n", e->innerElement.elem.c_str());
+  }
+  else if(e->type == OPTIONAL) {
+    printf("Optional\n");
+    for(auto elem : e->optionalElement.elements) {
+      printType(elem, tab + 2);
+    }
+  }
+  else if(e->type == LIST) {
+    printf("Element to repeat\n");
+    printType(e->list.e, tab + 2);
+    printf("%*s", (int)tab, "");
+    printf("Separator\n");
+    printType(e->list.separator, tab + 2);
+  }
+}
+
+void Grammar::printPatterns() {
+  vector<string> humanReadable = { "KEY", "VALUE", "TEXT", "INNER_ELEMENT", "OPTIONAL", "LIST" };
+  for( auto key : this->patterns ) {
+    printf("Key: %s\n", key.first.c_str());
+    for( auto pattern : key.second ) {
+      printf("\tPattern id: %d\n", (int)pattern.id);
+      for( auto elem : pattern.elements ) {
+        printf("\t\tElement type: %s\n", humanReadable[(int)elem->type].c_str());
+        printType(elem, 20);
+      }
+    }
+  }
 }

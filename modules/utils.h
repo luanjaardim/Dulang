@@ -73,6 +73,8 @@ typedef enum {
     END_BAR,
     COLON,
     COMMA,
+    QUESTION_TK, 
+    EXCLAMATION_TK,
     SEMICOLON,
     DOUBLE_SEMICOLON,
     COUNT_OF_TK_TYPES

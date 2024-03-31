@@ -55,6 +55,8 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"|", END_BAR,  SYMBOLS},
   {":", COLON,  SYMBOLS},
   {",", COMMA,  SYMBOLS},
+  {"?", QUESTION_TK,  SYMBOLS},
+  {"!", EXCLAMATION_TK,  SYMBOLS},
   {";", SEMICOLON,  SYMBOLS},
   {";;", DOUBLE_SEMICOLON,  SYMBOLS},
   /* {"struct", BUILTIN_HIGH_PREC}, */

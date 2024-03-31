@@ -101,4 +101,5 @@ struct Grammar {
     ~Grammar() { }
     void loadGrammar(Grammar *gm);
     void extractPatterns(TokenizedFile *tk);
+    void printPatterns();
 };

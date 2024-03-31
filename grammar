@@ -19,7 +19,7 @@ func_def:
   "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
 
 arg: 
-  <type> NAME ?("=" COMP_VAL)
+  <type> NAME ?("=" <comptime_val>)
 
 var_def:
   "var" <type> NAME "=" <expr>                     $ creating a variable
@@ -34,7 +34,7 @@ type_def:
 
 if_stmt:
   "if" <expr> "|" <body>
-  "if" <expr> "|" <body> (!idented) else <body>
+  "if" <expr> "|" <body> "else" "|" <body>
 
 while_stmt:
   "while" <expr> "|" <body>
@@ -95,6 +95,9 @@ primary:
 
 atom:
   ?("#") NAME
+  <comptime_val>
+
+comptime_val:
   NUMBER
   CHAR
   STRING
