@@ -1,6 +1,6 @@
 $ the whole program is a list of statements ended with NEW_LINE('\n')
 root:
-  [<stmt>:NEW_LINE]
+  [<stmt>:BLOCK]
 
 $ can be used inside the scope was defined, and in inner scopes
 stmt:
@@ -15,7 +15,6 @@ stmt:
   "skip"                                           $ restart point of a loop
 
 func_def:
-  "fn" <type> NAME "|" <body>                      $ creating a function without args
   "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
 
 arg: 
@@ -44,15 +43,14 @@ $ for_stmt:
 $$
   body is a list of indented new_line separated statements or a just a single statement
   INDENT -> verifies if the first element collumn of each statement is indented
-  DEDENT -> returns to the previous identation
 $$
 body:
   <stmt>
-  NEW_LINE INDENT [<stmt>:NEW_LINE] DEDENT
+  NEW_LINE INDENT [<stmt>:NEW_LINE]
 
 expr:
   <expr> "?" <expr> ":" <expr>
-  "(" expr ")"
+  "(" <expr> ")"
   NAME [<expr>:" "]                                $ function call
   <bitwise>
 
@@ -109,14 +107,15 @@ user_type:
   "{" [<arg>:";"] "}"
 
 type:
-  "{" [<type>:";"] "}"    $ compound type, a type that is a 
-  "#" <type>              $ pointer to a type
-  "?" <type>              $ nullable pointer to a type
-  "#[<number>]" <type>    $ array of <number> elements
-  "#*" <type>             $ pointer to an array null terminated
-  <type> "^" <type>       $ tagged union types
-  <type> "->" <type>      $ functions types
-  "byte"                  $ signed 1-byte
-  "ubyte"                 $ unsigned 1-byte
-  "int"                   $ signed 4-bytes
-  "uint"                  $ unsigned 4-bytes
+  "(" <type> ")"
+  "{" [<type>:";"] "}"       $ compound type, a type that is a 
+  "#" <type>                 $ pointer to a type
+  "?" <type>                 $ nullable pointer to a type
+  "#" "[" NUMBER "]" <type>  $ array of NUMBER elements
+  "#" "*" <type>             $ pointer to an array null terminated
+  <type> "^" <type>          $ tagged union types
+  <type> "->" <type>         $ functions types
+  "byte"                     $ signed 1-byte
+  "ubyte"                    $ unsigned 1-byte
+  "int"                      $ signed 4-bytes
+  "uint"                     $ unsigned 4-bytes
