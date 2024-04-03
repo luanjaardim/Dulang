@@ -159,8 +159,7 @@ FileReader createFileReader(const char *file) {
 /*
  * This function can be used to save the curr state of the TokenizedFile
  * this way you can two or more cursors to walk over the Tokens
- * They will share the same memmory alocated for Tokenize the file, you
- * must not free a clone if you already freed the original one, or the opposite
+ * You must dealocate the copy too
 */
 TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
   TokenizedFile *clone = new TokenizedFile();
