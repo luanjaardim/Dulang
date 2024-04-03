@@ -1,14 +1,20 @@
 #include "utils.h"
 #include "tokenizer.h"
 
-struct TokenInterval {
-    size_t start, end;
+struct PatternStep {
+    string key;
+    size_t line, start, end;
+    PatternStep(string key, size_t line, size_t start, size_t end) 
+        : key(key), line(line), start(start), end(end) {}
+    ~PatternStep() {}
 };
 
-struct PatternStep {
-    string parent;
-    size_t id;
-    vector<TokenInterval> positions;
+struct PatternSteps {
+    string parentPatternKey;
+    size_t patternIdx;
+    vector<PatternStep> steps;
+    PatternSteps() : parentPatternKey("") {}
+    ~PatternSteps() {}
 };
 
 struct Element;
@@ -28,8 +34,8 @@ enum ElementValueType {
     VAL_STRING,
     VAL_NAME,
     VAL_INDENT,
-    VAL_DEDENT,
     VAL_NEW_LINE,
+    VAL_BLOCK,
 };
 // uppercase text, it represents a type of a token: NUMBER, STRING, NAME, etc, or a marker: INDENT, DEDENT, NEW_LINE
 struct ElementValue {
@@ -86,20 +92,24 @@ struct Element {
 };
 
 struct Pattern {
-    size_t id;
     vector<Element *> elements;
-    Pattern(size_t id) : id(id) {}
+    Pattern() {}
 };
 
 struct Grammar {
     const string filePath = "grammar";
     map<string, vector<Pattern>> patterns;
+    vector<PatternStep> steps;
 
     Grammar() {
         loadGrammar(this);
     }
     ~Grammar() { }
     void loadGrammar(Grammar *gm);
-    void extractPatterns(TokenizedFile *tk);
+    void extractPatterns(TokenizedFile *tf);
+    bool parseFile(TokenizedFile *tf, PatternStep ps);
     void printPatterns();
 };
+
+void printType(Element *e, size_t tab);
+bool handleElementType(struct handleElemType h);
