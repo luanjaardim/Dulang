@@ -13,7 +13,7 @@ struct PatternSteps {
     string parentPatternKey;
     size_t patternIdx;
     vector<PatternStep> steps;
-    PatternSteps() : parentPatternKey("") {}
+    PatternSteps(string key) : parentPatternKey(key) {}
     ~PatternSteps() {}
 };
 

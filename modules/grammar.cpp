@@ -121,8 +121,52 @@ Token *getTokenIfBeforeAndAdvance(TokenizedFile *tf, size_t end) {
   if(tf->currElem >= end) {
     return NULL;
   }
+  Token *tk = currToken(*tf);
   nextLineToken(tf, 1);
-  return peekBackLineToken(*tf, 1);
+  return tk;
+}
+
+bool handleElementType(
+  TokenizedFile *tf, 
+  Pattern p,
+  Element *e,
+  PatternSteps *steps,
+  size_t elem_idx, 
+  size_t *end
+);
+
+/*
+* Returns the index of the next element, if it fails, returns 0
+* If there is no next element, returns the size of the line
+*/
+size_t findStartOfNextElement(
+  TokenizedFile *tf,
+  Pattern p,
+  PatternSteps *steps,
+  size_t elemIdx, 
+  size_t *end
+) {
+  TokenizedFile *copy = cloneTokenizedFile(*tf);
+  size_t currElem = tf->currElem;
+  bool failed = true;
+  size_t nextElemIdx = elemIdx + 1;
+  if(nextElemIdx >= p.elements.size()) return tf->lines[tf->currLine]->tokens.size();
+  Element *nextElem = p.elements[nextElemIdx];
+
+  // printf("curToken: %s\n", currToken(*copy)->text.c_str());
+  while(nextLineToken(copy, 1)) {
+    // printf("curToken: %s\n", currToken(*copy)->text.c_str());
+    currElem++;
+    if(handleElementType(
+      copy, p, nextElem, steps, nextElemIdx, end // WARNING: maybe pass this end as ref cause bugs
+    )) {
+      failed = false;
+      break;
+    } else copy->currElem = currElem;
+  }
+  delete copy;
+  if(failed) return 0;
+  return currElem;
 }
 
 bool handleElementType(
@@ -131,49 +175,38 @@ bool handleElementType(
   Element *e,
   PatternSteps *steps,
   size_t elem_idx, 
-  size_t pat_idx, 
   size_t *end
 ) {
   if(e->type == TEXT) {
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     if(!tk || e->text.text != tk->text) return false;
   } else if(e->type == INNER_ELEMENT) {
-    if(elem_idx == p.elements.size()-1) //the element will get everything till the end of the line
-      steps->steps.push_back( 
-        PatternStep(e->innerElement.elem, tf->currLine, tf->currElem, tf->lines[tf->currLine]->tokens.size())
-      );
-    else {
-      Element *nextElem = p.elements[elem_idx + 1]; //the next element must be a text or a value
-      if(nextElem->type != TEXT && nextElem->type != VALUE) {
-        printf("Grammar Error, inner element must be followed by a text or a value, at line: %d\n", (int)currToken(*tf)->l);
-        exit(1);
-      }
-      TokenizedFile *copy = cloneTokenizedFile(*tf);
-      size_t currElem = tf->currElem;
-      // WARNING: Don't know if this works
-      while(nextLineToken(copy, 1)) {
-        currElem++;
-        if(handleElementType(
-          copy, p, nextElem, steps, elem_idx + 1, pat_idx, end // WARNING: maybe pass this end as ref cause bugs
-        )) {
-          copy->currElem--;
-          steps->steps.push_back( 
-            PatternStep(e->innerElement.elem, tf->currLine, tf->currElem, copy->currElem)
-          );
-          break;
-        } else copy->currElem = currElem;
-      }
-      bool failed = !currToken(*copy);
-      tf->currElem = copy->currElem;
-      delete copy;
-      if(failed) return false;
-    }
+
+    PatternSteps tmp = PatternSteps(steps->parentPatternKey);
+    size_t endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
+    if(endOfCurrent == 0) return false;
+    steps->steps.push_back( 
+      PatternStep(e->innerElement.elem, tf->currLine, tf->currElem, endOfCurrent)
+    );
+    tf->currElem = endOfCurrent;
+
   } else if(e->type == OPTIONAL) {
     //verifies the next element, if it does not match, check for this element first
     printf("Optional not implemented!!!!\n");
   } else if(e->type == LIST) {
-    //check for every inner element till a separator, stops when the separator is not found more
-    printf("List not implemented!!!!\n");
+
+    PatternSteps tmp = PatternSteps(steps->parentPatternKey);
+    size_t endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
+    if(endOfCurrent == 0) return false;
+
+    while(tf->currElem < endOfCurrent) {
+      if(!handleElementType(tf, p, e->list.e, steps, elem_idx, end)) return false;
+      if(tf->currElem < endOfCurrent) {
+        if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
+      }
+    }
+    tf->currElem = endOfCurrent;
+
   } else if(e->type == VALUE){
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     switch(e->value.type) {
@@ -222,7 +255,7 @@ bool handleElementType(
 
 bool Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
   vector<Pattern> patterns = this->patterns[ps.key];
-  PatternSteps bestSteps = PatternSteps(), tmpSteps = PatternSteps();
+  PatternSteps bestSteps = PatternSteps(ps.key), tmpSteps = PatternSteps(ps.key);
   size_t pat_idx = 0, elem_idx = 0, end = ps.end;
 
   for( Pattern p : patterns ) {
@@ -231,13 +264,14 @@ bool Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     tf->currElem = ps.start;
 
     for( Element *e : p.elements ) {
-      if(!handleElementType(tf, p, e, &tmpSteps, elem_idx, pat_idx, &end)) {
+      tmpSteps.patternIdx = pat_idx;
+      if(!handleElementType(tf, p, e, &tmpSteps, elem_idx, &end)) {
         tmpSteps.steps.clear();
         break;
       }
       elem_idx++;
     }
-    // TODO: compare tmpSteps with bestSteps
+
     if(tmpSteps.steps.size() >= bestSteps.steps.size()) {
       if(tmpSteps.steps.size() == bestSteps.steps.size()) {
         for(int i = 0; i < (int)bestSteps.steps.size(); i++) {
