@@ -71,14 +71,14 @@ boolean:
   $ continue...
 
 num:
-  <num> "+" <term>
-  <num> "-" <term>
+  <term> "+" <num>
+  <term> "-" <num>
   <term>
 
 term:
-  <term> "*" <factor>
-  <term> "/" <factor>
-  <term> "%" <factor>
+  <factor> "*" <term>
+  <factor> "/" <term>
+  <factor> "%" <term>
   <factor>
 
 factor:
