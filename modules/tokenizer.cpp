@@ -19,6 +19,7 @@ static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = {
   {"not", LOG_NOT,    BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
   {"bnot", BIT_NOT,   BUILTIN_SINGLE_OPERAND},
   {"var", VARIABLE,   BUILTIN_SINGLE_OPERAND},
+  {"const", CONSTANT,   BUILTIN_SINGLE_OPERAND},
   {"int", TYPE_INT,   BUILTIN_SINGLE_OPERAND},
   {"str", TYPE_STR,   BUILTIN_SINGLE_OPERAND},
   {"load", LOAD_TK, BUILTIN_SINGLE_OPERAND},

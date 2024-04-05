@@ -38,6 +38,7 @@ typedef enum {
     NUM_MOD,
     LOG_NOT,
     VARIABLE,
+    CONSTANT,
     TYPE_INT,
     TYPE_STR,
     SKIP_TK,

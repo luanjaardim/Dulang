@@ -139,7 +139,7 @@ bool handleElementType(
 * Returns the index of the next element, if it fails, returns 0
 * If there is no next element, returns the size of the line
 */
-size_t findStartOfNextElement(
+int findStartOfNextElement(
   TokenizedFile *tf,
   Pattern p,
   PatternSteps *steps,
@@ -153,19 +153,17 @@ size_t findStartOfNextElement(
   if(nextElemIdx >= p.elements.size()) return tf->lines[tf->currLine]->tokens.size();
   Element *nextElem = p.elements[nextElemIdx];
 
-  // printf("curToken: %s\n", currToken(*copy)->text.c_str());
-  while(nextLineToken(copy, 1)) {
-    // printf("curToken: %s\n", currToken(*copy)->text.c_str());
-    currElem++;
+  do {
     if(handleElementType(
       copy, p, nextElem, steps, nextElemIdx, end // WARNING: maybe pass this end as ref cause bugs
     )) {
       failed = false;
       break;
     } else copy->currElem = currElem;
-  }
+    currElem++;
+  } while(nextLineToken(copy, 1));
   delete copy;
-  if(failed) return 0;
+  if(failed) return -1;
   return currElem;
 }
 
@@ -183,25 +181,43 @@ bool handleElementType(
   } else if(e->type == INNER_ELEMENT) {
 
     PatternSteps tmp = PatternSteps(steps->parentPatternKey);
-    size_t endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
-    if(endOfCurrent == 0) return false;
+    int endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
+    if(endOfCurrent == -1) return false;
     steps->steps.push_back( 
       PatternStep(e->innerElement.elem, tf->currLine, tf->currElem, endOfCurrent)
     );
     tf->currElem = endOfCurrent;
 
   } else if(e->type == OPTIONAL) {
-    //verifies the next element, if it does not match, check for this element first
-    printf("Optional not implemented!!!!\n");
+
+    PatternSteps tmp = PatternSteps(steps->parentPatternKey);
+    size_t idx = elem_idx;
+    for(int ith_elem = idx + 1; ith_elem < (int)p.elements.size(); ith_elem++ ) {
+      //find the element right behind the one that is not optional
+      if(p.elements[ith_elem]->type != OPTIONAL) {
+        idx = ith_elem - 1;
+        break;
+      }
+    }
+    int endOfCurrent = findStartOfNextElement(tf, p, &tmp, idx, end);
+    if(endOfCurrent == -1) return false;
+    if(endOfCurrent == (int)tf->lines[tf->currLine]->tokens.size()) return true;
+
+    if((int) tf->currElem != endOfCurrent) {
+      for(auto elem : e->optionalElement.elements) {
+        if(!handleElementType(tf, p, elem, steps, elem_idx, end)) return false;
+      }
+    }
+
   } else if(e->type == LIST) {
 
     PatternSteps tmp = PatternSteps(steps->parentPatternKey);
-    size_t endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
-    if(endOfCurrent == 0) return false;
+    int endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
+    if(endOfCurrent == -1) return false;
 
-    while(tf->currElem < endOfCurrent) {
+    while((int) tf->currElem < endOfCurrent) {
       if(!handleElementType(tf, p, e->list.e, steps, elem_idx, end)) return false;
-      if(tf->currElem < endOfCurrent) {
+      if((int) tf->currElem < endOfCurrent) {
         if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
       }
     }
