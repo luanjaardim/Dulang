@@ -142,16 +142,15 @@ bool handleElementType(
 int findStartOfNextElement(
   TokenizedFile *tf,
   Pattern p,
+  Element *nextElem,
   PatternSteps *steps,
-  size_t elemIdx, 
+  size_t nextElemIdx,
   size_t *end
 ) {
   TokenizedFile *copy = cloneTokenizedFile(*tf);
   size_t currElem = tf->currElem;
   bool failed = true;
-  size_t nextElemIdx = elemIdx + 1;
   if(nextElemIdx >= p.elements.size()) return tf->lines[tf->currLine]->tokens.size();
-  Element *nextElem = p.elements[nextElemIdx];
 
   do {
     if(handleElementType(
@@ -181,7 +180,7 @@ bool handleElementType(
   } else if(e->type == INNER_ELEMENT) {
 
     PatternSteps tmp = PatternSteps(steps->parentPatternKey);
-    int endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
+    int endOfCurrent = findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
     if(endOfCurrent == -1) return false;
     steps->steps.push_back( 
       PatternStep(e->innerElement.elem, tf->currLine, tf->currElem, endOfCurrent)
@@ -199,29 +198,48 @@ bool handleElementType(
         break;
       }
     }
-    int endOfCurrent = findStartOfNextElement(tf, p, &tmp, idx, end);
+    int endOfCurrent = findStartOfNextElement(tf, p, p.elements[idx+1], &tmp, idx+1, end);
     if(endOfCurrent == -1) return false;
     if(endOfCurrent == (int)tf->lines[tf->currLine]->tokens.size()) return true;
 
+    size_t start = tf->currElem;
     if((int) tf->currElem != endOfCurrent) {
       for(auto elem : e->optionalElement.elements) {
-        if(!handleElementType(tf, p, elem, steps, elem_idx, end)) return false;
+        if(!handleElementType(tf, p, elem, steps, elem_idx, end)) {
+          Element *nextElem = p.elements[elem_idx+1];
+          if(nextElem->type == OPTIONAL) {
+            tf->currElem = start;
+            break; //the next optional can take what was not accepted here
+          }
+          return false;
+        }
       }
     }
 
   } else if(e->type == LIST) {
 
     PatternSteps tmp = PatternSteps(steps->parentPatternKey);
-    int endOfCurrent = findStartOfNextElement(tf, p, &tmp, elem_idx, end);
-    if(endOfCurrent == -1) return false;
+    int nextElementStart = findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
+    if(nextElementStart == -1) return false;
 
-    while((int) tf->currElem < endOfCurrent) {
-      if(!handleElementType(tf, p, e->list.e, steps, elem_idx, end)) return false;
-      if((int) tf->currElem < endOfCurrent) {
-        if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
+    int sep_idx = 0;
+    while((int) tf->currElem < nextElementStart) { //iterate over the list
+      if((sep_idx = findStartOfNextElement(tf, p, e->list.separator, &tmp, elem_idx, end)) >= nextElementStart - 1) {
+        break;
       }
+      if(sep_idx == -1) {
+        steps->steps.push_back(
+          PatternStep(e->list.e->innerElement.elem, tf->currLine, tf->currElem, nextElementStart)
+        );
+        tf->currElem = nextElementStart;
+        return true;
+      }
+      steps->steps.push_back(
+        PatternStep(e->list.e->innerElement.elem, tf->currLine, tf->currElem, sep_idx)
+      );
+      tf->currElem = sep_idx;
+      if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
     }
-    tf->currElem = endOfCurrent;
 
   } else if(e->type == VALUE){
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
