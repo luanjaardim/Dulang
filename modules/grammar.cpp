@@ -1,6 +1,5 @@
 #include "grammar.h"
 #include "tokenizer.h"
-#include "utils.h"
 
 void Grammar::loadGrammar(Grammar *gm) {
   TokenizedFile *tf = readToTokenizedFile(this->filePath.c_str());
@@ -287,8 +286,9 @@ bool handleElementType(
   return true;
 }
 
-bool Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
+Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
   vector<Pattern> patterns = this->patterns[ps.key];
+  vector<PatternSteps> possibleSteps;
   PatternSteps bestSteps = PatternSteps(ps.key), tmpSteps = PatternSteps(ps.key);
   size_t pat_idx = 0, elem_idx = 0, end = ps.end;
 
@@ -296,6 +296,7 @@ bool Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     elem_idx = 0;
     tf->currLine = ps.line;
     tf->currElem = ps.start;
+    tmpSteps.steps.clear();
 
     for( Element *e : p.elements ) {
       tmpSteps.patternIdx = pat_idx;
@@ -312,10 +313,16 @@ bool Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
           if(bestSteps.steps[i].end - bestSteps.steps[i].start >
              tmpSteps.steps[i].end - tmpSteps.steps[i].start) {
             bestSteps = tmpSteps;
+            possibleSteps.clear();
             break;
           }
         }
-      } else bestSteps = tmpSteps;
+        possibleSteps.push_back(tmpSteps);
+      } else {
+        bestSteps = tmpSteps;
+        possibleSteps.clear();
+        possibleSteps.push_back(bestSteps);
+      }
     }
 
     pat_idx++;
@@ -330,7 +337,7 @@ bool Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     printf("End: %d\n", (int)step.end);
   }
 
-  return true;
+  return NULL;
 }
 
 void printType(Element *e, size_t tab) {

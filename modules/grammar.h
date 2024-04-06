@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "tokenizer.h"
+#include "node.h"
 
 struct PatternStep {
     string key;
@@ -107,7 +108,7 @@ struct Grammar {
     ~Grammar() { }
     void loadGrammar(Grammar *gm);
     void extractPatterns(TokenizedFile *tf);
-    bool parseFile(TokenizedFile *tf, PatternStep ps);
+    Node<Token *> *parseFile(TokenizedFile *tf, PatternStep ps);
     void printPatterns();
 };
 
