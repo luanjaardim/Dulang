@@ -340,7 +340,7 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
       if(curIntervalIdx < steps.steps.size()) {
         if(tf->currLine == steps.steps[curIntervalIdx].lineStart &&
            tf->currElem == steps.steps[curIntervalIdx].start) {
-          auto child = this->parseFile(tf, bestSteps.steps[curIntervalIdx]);
+          auto child = this->parseFile(tf, steps.steps[curIntervalIdx]);
           if(!child) { answer = NULL; break; }
           Node<Token *>::linkFatherAndChild(answer, child);
 
