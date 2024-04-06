@@ -149,7 +149,7 @@ int findStartOfNextElement(
   TokenizedFile *copy = cloneTokenizedFile(*tf);
   size_t currElem = tf->currElem;
   bool failed = true;
-  if(nextElemIdx >= p.elements.size()) return tf->lines[tf->currLine]->tokens.size();
+  if(nextElemIdx >= p.elements.size()) return *end;
 
   do {
     if(handleElementType(
@@ -159,7 +159,7 @@ int findStartOfNextElement(
       break;
     } else copy->currElem = currElem;
     currElem++;
-  } while(nextLineToken(copy, 1));
+  } while(nextLineToken(copy, 1) && currElem < *end);
   delete copy;
   if(failed) return -1;
   return currElem;
@@ -173,6 +173,7 @@ bool handleElementType(
   size_t elem_idx, 
   size_t *end
 ) {
+  size_t startLine = tf->currLine;
   if(e->type == TEXT) {
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     if(!tk || e->text.text != tk->text) return false;
@@ -182,7 +183,7 @@ bool handleElementType(
     int endOfCurrent = findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
     if(endOfCurrent == -1) return false;
     steps->steps.push_back( 
-      PatternStep(e->innerElement.elem, tf->currLine, tf->currElem, endOfCurrent)
+      PatternStep(e->innerElement.elem, startLine, tf->currElem, tf->currLine, endOfCurrent)
     );
     tf->currElem = endOfCurrent;
 
@@ -228,13 +229,13 @@ bool handleElementType(
       }
       if(sep_idx == -1) {
         steps->steps.push_back(
-          PatternStep(e->list.e->innerElement.elem, tf->currLine, tf->currElem, nextElementStart)
+          PatternStep(e->list.e->innerElement.elem, startLine, tf->currElem, tf->currLine, nextElementStart)
         );
         tf->currElem = nextElementStart;
         return true;
       }
       steps->steps.push_back(
-        PatternStep(e->list.e->innerElement.elem, tf->currLine, tf->currElem, sep_idx)
+        PatternStep(e->list.e->innerElement.elem, startLine, tf->currElem, tf->currLine, sep_idx)
       );
       tf->currElem = sep_idx;
       if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
@@ -291,23 +292,24 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
   vector<PatternSteps> possibleSteps;
   PatternSteps bestSteps = PatternSteps(ps.key), tmpSteps = PatternSteps(ps.key);
   size_t pat_idx = 0, elem_idx = 0, end = ps.end;
+  bool failed = false;
 
   for( Pattern p : patterns ) {
     elem_idx = 0;
-    tf->currLine = ps.line;
+    tf->currLine = ps.lineStart;
     tf->currElem = ps.start;
     tmpSteps.steps.clear();
+    tmpSteps.patternIdx = pat_idx;
 
     for( Element *e : p.elements ) {
-      tmpSteps.patternIdx = pat_idx;
-      if(!handleElementType(tf, p, e, &tmpSteps, elem_idx, &end)) {
+      if((failed = !handleElementType(tf, p, e, &tmpSteps, elem_idx, &end))) {
         tmpSteps.steps.clear();
         break;
       }
       elem_idx++;
     }
 
-    if(tmpSteps.steps.size() >= bestSteps.steps.size()) {
+    if(!failed) {
       if(tmpSteps.steps.size() == bestSteps.steps.size()) {
         for(int i = 0; i < (int)bestSteps.steps.size(); i++) {
           if(bestSteps.steps[i].end - bestSteps.steps[i].start >
@@ -318,7 +320,7 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
           }
         }
         possibleSteps.push_back(tmpSteps);
-      } else {
+      } else if(tmpSteps.steps.size() > bestSteps.steps.size()) {
         bestSteps = tmpSteps;
         possibleSteps.clear();
         possibleSteps.push_back(bestSteps);
@@ -328,14 +330,54 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     pat_idx++;
   }
   //choose the steps to take and make the recursion for the inner elements
+  for( auto steps : possibleSteps ) {
 
-  //print current steps
-  for(auto step : bestSteps.steps) {
-    printf("Key: %s\n", step.key.c_str());
-    printf("Line: %d\n", (int)step.line);
-    printf("Start: %d\n", (int)step.start);
-    printf("End: %d\n", (int)step.end);
+    Node<Token *> *answer = new Node<Token *>(NULL), *first = answer;
+    tf->currLine = ps.lineStart;
+    tf->currElem = ps.start;
+    size_t curIntervalIdx = 0;
+    while(tf->currLine <= ps.lineEnd && tf->currElem < ps.end) {
+      if(curIntervalIdx < steps.steps.size()) {
+        if(tf->currLine == steps.steps[curIntervalIdx].lineStart &&
+           tf->currElem == steps.steps[curIntervalIdx].start) {
+          auto child = this->parseFile(tf, bestSteps.steps[curIntervalIdx]);
+          if(!child) { answer = NULL; break; }
+          Node<Token *>::linkFatherAndChild(answer, child);
+
+          tf->currLine = steps.steps[curIntervalIdx].lineEnd;
+          tf->currElem = steps.steps[curIntervalIdx].end;
+          curIntervalIdx++;
+          // if(tf->currElem == steps.steps[curIntervalIdx].end) {
+          //   curIntervalIdx++;
+          // } else printf("what the heck\n"); // WARNING: this should not happen, maybe remove this
+          continue;
+        }
+      }
+      if(answer->get_data() == NULL) {
+        answer->set_data(currToken(*tf));
+        Node<Token *> *newNode = new Node<Token *>(NULL);
+        Node<Token *>::linkNodeNextTo(answer, newNode);
+        answer = newNode;
+      } else {
+        printf("Error: the answer node is not NULL\n"); // WARNING: this should not happen, maybe remove this
+      }
+      if(nextToken(tf, 1) == NULL) break;
+    }
+    if(answer) {
+      if(answer->get_neighbor(LEFT_LINK) != NULL)
+        answer->unlink(answer->get_neighbor(LEFT_LINK));
+      //delete answer; TODO: free memory
+      return first;
+    } //else delete first; TODO: free memory
   }
+
+  // print current steps
+  // for(auto step : bestSteps.steps) {
+  //   printf("Key: %s\n", step.key.c_str());
+  //   printf("Line: %d\n", (int)step.lineStart);
+  //   printf("Start: %d\n", (int)step.start);
+  //   printf("End: %d\n", (int)step.end);
+  // }
 
   return NULL;
 }
