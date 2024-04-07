@@ -312,8 +312,7 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     if(!failed) {
       if(tmpSteps.steps.size() == bestSteps.steps.size()) {
         for(int i = 0; i < (int)bestSteps.steps.size(); i++) {
-          if(bestSteps.steps[i].end - bestSteps.steps[i].start >
-             tmpSteps.steps[i].end - tmpSteps.steps[i].start) {
+          if(bestSteps.steps[i].end < tmpSteps.steps[i].end) {
             bestSteps = tmpSteps;
             possibleSteps.clear();
             break;
@@ -342,7 +341,15 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
            tf->currElem == steps.steps[curIntervalIdx].start) {
           auto child = this->parseFile(tf, steps.steps[curIntervalIdx]);
           if(!child) { answer = NULL; break; }
-          Node<Token *>::linkFatherAndChild(answer, child);
+          if(!child->get_data()) {
+            for(int i = CHILD(1); i < (int)child->get_neighbors_size(); i++) {
+              if(child->get_neighbor(i) == NULL) continue;
+              Node<Token *> *tmp = child->get_neighbor(i);
+              child->unlink(tmp);
+              Node<Token *>::linkFatherAndChild(answer, tmp);
+            }
+            delete child;
+          } else Node<Token *>::linkFatherAndChild(answer, child);
 
           tf->currLine = steps.steps[curIntervalIdx].lineEnd;
           tf->currElem = steps.steps[curIntervalIdx].end;
@@ -353,19 +360,17 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
           continue;
         }
       }
-      if(answer->get_data() == NULL) {
+      if(answer->get_data() == NULL)
         answer->set_data(currToken(*tf));
+      else {
         Node<Token *> *newNode = new Node<Token *>(NULL);
         Node<Token *>::linkNodeNextTo(answer, newNode);
+        newNode->set_data(currToken(*tf));
         answer = newNode;
-      } else {
-        printf("Error: the answer node is not NULL\n"); // WARNING: this should not happen, maybe remove this
       }
       if(nextToken(tf, 1) == NULL) break;
     }
     if(answer) {
-      if(answer->get_neighbor(LEFT_LINK) != NULL)
-        answer->unlink(answer->get_neighbor(LEFT_LINK));
       //delete answer; TODO: free memory
       return first;
     } //else delete first; TODO: free memory
@@ -423,4 +428,17 @@ void Grammar::printPatterns() {
       }
     }
   }
+}
+
+//traversing the AST and printing the tokens
+void Grammar::printAST(Node<Token *> *node, string tab) {
+  if(node == NULL) return;
+  printf("%sToken: %s\n", tab.c_str(), node->get_data() ? node->get_data()->text.c_str() : "NULL");
+  for(int i = CHILD(1); i < (int)node->get_neighbors_size(); i++) {
+    if(node->get_neighbor(i) == NULL) continue;
+    string child_tab = tab + "  ";
+    printf("%s%dth child:\n", child_tab.c_str(), i - RIGHT_LINK);
+    printAST(node->get_neighbor(i), child_tab + "  ");
+  }
+  printAST(node->get_neighbor(RIGHT_LINK), tab);
 }

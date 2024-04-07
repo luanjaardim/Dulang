@@ -111,6 +111,7 @@ struct Grammar {
     void extractPatterns(TokenizedFile *tf);
     Node<Token *> *parseFile(TokenizedFile *tf, PatternStep ps);
     void printPatterns();
+    void printAST(Node<Token *> *ast, string tab);
 };
 
 void printType(Element *e, size_t tab);

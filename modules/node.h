@@ -65,13 +65,13 @@ public:
   void unlink(Node<T>* neighbor) {
     for (size_t i = 0; i < neighbors.size(); i++) {
       if (neighbors[i] == neighbor) {
-        neighbors.erase(neighbors.begin() + i);
+        neighbors[i] = NULL;
         break;
       }
     }
     for (size_t i = 0; i < neighbor->neighbors.size(); i++) {
       if (neighbor->neighbors[i] == this) {
-        neighbor->neighbors.erase(neighbor->neighbors.begin() + i);
+        neighbor->neighbors[i] = NULL;
         break;
       }
     }
