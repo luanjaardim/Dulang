@@ -3,22 +3,13 @@
 
 #include "utils.h"
 
-typedef struct {
-    TokenType type;
-    TokenPrecedence precedence;
-} TkInfo;
-
 typedef struct Token {
     size_t id;
     size_t l, c; //line and column
     string text;
     TokenType type;
-    TokenPrecedence precedence;
 
-    Token(string text, size_t id, TkInfo info, size_t l, size_t c) : id(id), l(l), c(c), text(text) {
-        type = info.type;
-        precedence = info.precedence;
-    }
+    Token(string text, size_t id, TokenType type, size_t l, size_t c) : id(id), l(l), c(c), text(text), type(type) {}
 } Token;
 
 typedef struct TokenizedLine {

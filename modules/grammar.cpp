@@ -9,27 +9,27 @@ void Grammar::loadGrammar(Grammar *gm) {
 Element *getNextElement(TokenizedFile *tf) {
 
   if( //if the pattern is: name:
-    currToken(*tf) && currToken(*tf)->type == NAME_TK && 
-    peekLineToken(*tf, 1) && peekLineToken(*tf, 1)->type == COLON
+    currToken(*tf) && currToken(*tf)->type == TK_NAME && 
+    peekLineToken(*tf, 1) && peekLineToken(*tf, 1)->type == TK_COLON
   ) {
     nextToken(tf, 1);
     return new Element(ElementKey(peekBackLineToken(*tf, 1)->text));
   }
   if( //if the pattern is: <name>
-    currToken(*tf) && currToken(*tf)->type == CMP_LT &&
-    peekLineToken(*tf, 1) && peekLineToken(*tf, 1)->type == NAME_TK &&
-    peekLineToken(*tf, 2) && peekLineToken(*tf, 2)->type == CMP_GT
+    currToken(*tf) && currToken(*tf)->type == TK_LOG_LT &&
+    peekLineToken(*tf, 1) && peekLineToken(*tf, 1)->type == TK_NAME &&
+    peekLineToken(*tf, 2) && peekLineToken(*tf, 2)->type == TK_LOG_GT
   ) {
     nextToken(tf, 2);
     return new Element(InnerElement(peekBackLineToken(*tf, 1)->text));
   }
   if( //if the pattern is: "name"
-    currToken(*tf) && currToken(*tf)->type == STR_TK
+    currToken(*tf) && currToken(*tf)->type == TK_STR
   ) {
     return new Element(ElementText(currToken(*tf)->text.substr(1, currToken(*tf)->text.size()-2)));
   }
   if(
-    currToken(*tf) && currToken(*tf)->type == NAME_TK
+    currToken(*tf) && currToken(*tf)->type == TK_NAME
   ) {
     string text = currToken(*tf)->text;
     if(text == "NAME")
@@ -51,7 +51,7 @@ Element *getNextElement(TokenizedFile *tf) {
     // printf("Separator\n");
     nextToken(tf, 1);
     Element *e = getNextElement(tf);
-    if(e && e->type == INNER_ELEMENT && nextToken(tf, 1) && currToken(*tf)->type == COLON) {
+    if(e && e->type == INNER_ELEMENT && nextToken(tf, 1) && currToken(*tf)->type == TK_COLON) {
       nextToken(tf, 1);
       Element *s = getNextElement(tf); //separator
       if(s && nextToken(tf, 1) && currToken(*tf)->text == "]") {
@@ -63,11 +63,11 @@ Element *getNextElement(TokenizedFile *tf) {
       }
     }
     else {
-      printf("Grammar Error at line: %d\n", (int)currToken(*tf)->l);
+      printf("Grammar Error at: %d %d\n", (int)currToken(*tf)->l, (int)currToken(*tf)->c);
       exit(1);
     }
   }
-  if(currToken(*tf) && currToken(*tf)->type == QUESTION_TK) { // if the pattern is: ?( elems... )
+  if(currToken(*tf) && currToken(*tf)->type == TK_QUEST) { // if the pattern is: ?( elems... )
     nextLineToken(tf, 1); //skip the "?"
     OptionalElement e = OptionalElement();
     while(nextLineToken(tf, 1) && currToken(*tf)->text != ")") {
@@ -245,16 +245,16 @@ bool handleElementType(
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     switch(e->value.type) {
       case VAL_NAME:
-        if(tk->type != NAME_TK) return false;
+        if(tk->type != TK_NAME) return false;
         break;
       case VAL_NUMBER:
-        if(tk->type != INT_TK) return false;
+        if(tk->type != TK_INT) return false;
         break;
       case VAL_STRING:
-        if(tk->type != STR_TK) return false;
+        if(tk->type != TK_STR) return false;
         break;
       case VAL_CHAR:
-        if(tk->type != CHAR_TK) return false;
+        if(tk->type != TK_CHAR) return false;
         break;
       case VAL_NEW_LINE:
         if(advanceLineTokenizdFile(tf) == 0) return false;

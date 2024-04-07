@@ -16,6 +16,7 @@
 #include <limits>
 #include <map>
 #include <utility>
+#include <algorithm>
 
 using namespace std;
 
@@ -27,71 +28,90 @@ using namespace std;
 #define SYSCALL_ARGS 7 // TODO: search how to get the return of a syscall
 
 typedef enum {
-    NAME_TK, //any name created by the user(that does not matches any of the builtin types)
-    INT_TK,  //any number (not floating point)
-    STR_TK,  //string (surrounded by `"`)
-    CHAR_TK,
-    FLOAT_TK,
-    NUM_SIGNAL, //used only for '-' when it acts as a signal
-    NUM_DIV, //after this every identifier represents a builtin word, and it must have a representant in the builtinWords array
-    NUM_MUL,
-    NUM_MOD,
-    LOG_NOT,
-    VARIABLE,
-    CONSTANT,
-    TYPE_INT,
-    TYPE_STR,
-    SKIP_TK,
-    STOP_TK,
-    LOAD_TK,
-    DEREF_TK,
-    BACK_TK,
-    CMP_EQ,
-    CMP_NE,
-    NUM_ADD,
-    NUM_SUB,
-    LOG_OR,
-    LOG_AND,
-    CMP_GE, //greater or equal
-    CMP_LE,
-    CMP_GT, //greater than
-    CMP_LT,
-    BIT_AND,
-    BIT_OR,
-    SHIFT_L_TK,
-    SHIFT_R_TK,
-    BIT_NOT,
-    ASSIGN,
-    FUNC,
-    IF_TK,
-    ELSE_TK,
-    WHILE_TK,
-    FOR_TK,
-    SYSCALL_TK,
-    PRINT_INT,
-    PAR_OPEN,
-    PAR_CLOSE,
-    END_BAR,
-    COLON,
-    COMMA,
-    QUESTION_TK, 
-    EXCLAMATION_TK,
-    SEMICOLON,
-    DOUBLE_SEMICOLON,
-    COUNT_OF_TK_TYPES
-} TokenType;
+  TK_NAME, //any name created by the user(that does not matches any of the builtin types)
+  TK_INT,  //any number (not floating point)
+  TK_STR,  //string (surrounded by `"`)
+  TK_CHAR,
+  TK_FLOAT,
 
-typedef enum {
-  COMPTIME_KNOWN = -1,
-  USER_DEFINITIONS,
-  BUILTIN_LOW_PREC,
-  BUILTIN_SINGLE_OPERAND,
-  BUILTIN_MEDIUM_PREC,
-  USER_FUNCTIONS,
-  BUILTIN_HIGH_PREC,
-  SYMBOLS,
-  PRECEDENCE_COUNT
-} TokenPrecedence;
+  MARKER, //used only for divide the generic tokens(above) from the builtin words(below)
+
+  //numeric operations
+  TK_NUM_ADD,
+  TK_NUM_SUB,
+  TK_NUM_DIV,
+  TK_NUM_MUL,
+  TK_NUM_MOD,
+
+  //logical operations
+  TK_LOG_NOT,
+  TK_LOG_OR,
+  TK_LOG_AND,
+  TK_LOG_EQ,
+  TK_LOG_NE,
+  TK_LOG_GE,
+  TK_LOG_LE,
+  TK_LOG_GT,
+  TK_LOG_LT,
+
+  //bitwise operations
+  TK_BIT_NOT,
+  TK_BIT_OR,
+  TK_BIT_AND,
+  TK_BIT_SHIFT_L,
+  TK_BIT_SHIFT_R,
+  TK_BIT_XOR,
+
+  //types
+  TK_TYPE_BYTE,
+  TK_TYPE_UBYTE, 
+  TK_TYPE_INT,
+  TK_TYPE_UINT,
+  TK_TYPE_FLOAT,
+  TK_TYPE_CHAR,
+  TK_TYPE_NONE,
+  TK_TYPE_REF,
+  TK_TYPE_DEREF,
+  TK_TYPE_FN_ARROW,
+  TK_TYPE_TAG_UNION,
+
+  //statements
+  TK_BLOCK_FUNC,
+  TK_BLOCK_IF,
+  TK_BLOCK_ELSE,
+  TK_BLOCK_WHILE,
+  TK_BLOCK_FOR,
+  TK_BLOCK_LOAD,
+  TK_BLOCK_SKIP,
+  TK_BLOCK_STOP,
+  TK_BLOCK_BACK,
+
+  //assignment keywords
+  TK_ASSIGN,
+  TK_VARIABLE,
+  TK_CONSTANT,
+
+  //symbols
+  TK_CUR_BRA_OPEN,
+  TK_CUR_BRA_CLOSE,
+  TK_SQR_BRA_OPEN,
+  TK_SQR_BAR_CLOSE,
+  TK_ROU_BRA_OPEN,
+  TK_ROU_BRA_CLOSE,
+  TK_END_BAR,
+  TK_COLON,
+  TK_COMMA,
+  TK_QUEST,
+  TK_EXCLA,
+  TK_SEMICOLON,
+  TK_DOUB_SEMICOLON,
+
+  //special tokens
+  SYSCALL_TK,
+  PRINT_INT, 
+
+  COUNT_OF_TK_TYPES
+} TokenType;
 
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);

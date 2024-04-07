@@ -3,68 +3,89 @@
 
 #include "tokenizer.h"
 #include "utils.h"
-#include <stddef.h>
-#include <string>
 
-struct SymbPrecedence {
+struct Symb {
   const char *symbol;
   TokenType tokenType;
-  TokenPrecedence precedence;
 };
 
-static const struct SymbPrecedence builtinWords[COUNT_OF_TK_TYPES - NUM_DIV] = { //NUM_DIV is the first builtin word
-  {"/", NUM_DIV, BUILTIN_LOW_PREC},
-  {"*", NUM_MUL, BUILTIN_LOW_PREC},
-  {"%", NUM_MOD, BUILTIN_LOW_PREC}, //the first three builtin words are binary operators with precedence
-  {"not", LOG_NOT,    BUILTIN_SINGLE_OPERAND}, //precedence 1 to unary operations
-  {"bnot", BIT_NOT,   BUILTIN_SINGLE_OPERAND},
-  {"var", VARIABLE,   BUILTIN_SINGLE_OPERAND},
-  {"const", CONSTANT,   BUILTIN_SINGLE_OPERAND},
-  {"int", TYPE_INT,   BUILTIN_SINGLE_OPERAND},
-  {"str", TYPE_STR,   BUILTIN_SINGLE_OPERAND},
-  {"load", LOAD_TK, BUILTIN_SINGLE_OPERAND},
-  /* float */
-  /* char */
-  {"skip", SKIP_TK,  BUILTIN_SINGLE_OPERAND},
-  {"stop", STOP_TK,  BUILTIN_SINGLE_OPERAND},
-  {"@", DEREF_TK,  BUILTIN_SINGLE_OPERAND},
-  {"+", NUM_ADD,    BUILTIN_MEDIUM_PREC},
-  {"-", NUM_SUB,    BUILTIN_MEDIUM_PREC},
-  {"==", CMP_EQ,    BUILTIN_MEDIUM_PREC},
-  {"!=", CMP_NE,    BUILTIN_MEDIUM_PREC},
-  {">=", CMP_GE,    BUILTIN_MEDIUM_PREC},
-  {"<=", CMP_LE,    BUILTIN_MEDIUM_PREC},
-  {">", CMP_GT,     BUILTIN_MEDIUM_PREC},
-  {"<", CMP_LT,     BUILTIN_MEDIUM_PREC},
-  {"or", LOG_OR,    BUILTIN_MEDIUM_PREC},
-  {"and", LOG_AND,  BUILTIN_MEDIUM_PREC},
-  {"band", BIT_AND, BUILTIN_MEDIUM_PREC},
-  {"bor", BIT_OR,   BUILTIN_MEDIUM_PREC},
-  {"shl", SHIFT_L_TK,   BUILTIN_MEDIUM_PREC},
-  {"shr", SHIFT_R_TK,   BUILTIN_MEDIUM_PREC},
-  {"=", ASSIGN,     BUILTIN_HIGH_PREC},
-  {"if", IF_TK,        BUILTIN_HIGH_PREC},
-  {"else", ELSE_TK,    BUILTIN_HIGH_PREC},
-  {"while", WHILE_TK,  BUILTIN_HIGH_PREC},
-  {"for", FOR_TK,      BUILTIN_HIGH_PREC},
-  {"sys", SYSCALL_TK,      BUILTIN_HIGH_PREC},
-  {"back", BACK_TK,  BUILTIN_HIGH_PREC},
-  {"dump", PRINT_INT, BUILTIN_HIGH_PREC},
-  {"fn", FUNC,      BUILTIN_HIGH_PREC},
-  {"(", PAR_OPEN,   SYMBOLS},
-  {")", PAR_CLOSE,  SYMBOLS},
-  {"|", END_BAR,  SYMBOLS},
-  {":", COLON,  SYMBOLS},
-  {",", COMMA,  SYMBOLS},
-  {"?", QUESTION_TK,  SYMBOLS},
-  {"!", EXCLAMATION_TK,  SYMBOLS},
-  {";", SEMICOLON,  SYMBOLS},
-  {";;", DOUBLE_SEMICOLON,  SYMBOLS},
-  /* {"struct", BUILTIN_HIGH_PREC}, */
+#define LEN_BUILTIN_WORDS (COUNT_OF_TK_TYPES - (MARKER + 1))
+static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
+  //numeric operations
+  {"+",     TK_NUM_ADD},
+  {"-",     TK_NUM_SUB},
+  {"/",     TK_NUM_DIV},
+  {"*",     TK_NUM_MUL},
+  {"%",     TK_NUM_MOD},
+  //logic operations
+  {"not",   TK_LOG_NOT},
+  {"or",    TK_LOG_OR},
+  {"and",   TK_LOG_AND},
+  {"==",    TK_LOG_EQ},
+  {"!=",    TK_LOG_NE},
+  {">=",    TK_LOG_GE},
+  {"<=",    TK_LOG_LE},
+  {">",     TK_LOG_GT},
+  {"<",     TK_LOG_LT},
+  //bitwise TK_operations
+  {"bnot",  TK_BIT_NOT},
+  {"bor",   TK_BIT_OR},
+  {"band",  TK_BIT_AND},
+  {"shl",   TK_BIT_SHIFT_L},
+  {"shr",   TK_BIT_SHIFT_R},
+  {"bxor",  TK_BIT_XOR},
+  //types
+  {"byte",  TK_TYPE_BYTE},
+  {"ubyte", TK_TYPE_UBYTE}, 
+  {"int",   TK_TYPE_INT},
+  {"uint",  TK_TYPE_UINT},
+  {"float", TK_TYPE_FLOAT},
+  {"char",  TK_TYPE_CHAR},
+  {"none",  TK_TYPE_NONE},
+  {"#",     TK_TYPE_REF},
+  {"@",     TK_TYPE_DEREF},
+  {"->",    TK_TYPE_FN_ARROW},
+  {"^",     TK_TYPE_TAG_UNION},
+  
+  //stmt blocks
+  {"fn",    TK_BLOCK_FUNC},
+  {"if",    TK_BLOCK_IF},
+  {"else",  TK_BLOCK_ELSE},
+  {"while", TK_BLOCK_WHILE},
+  {"for",   TK_BLOCK_FOR},
+  {"load",  TK_BLOCK_LOAD},
+  {"skip",  TK_BLOCK_SKIP},
+  {"stop",  TK_BLOCK_STOP},
+  {"back",  TK_BLOCK_BACK},
+
+  //assignment keywords
+  {"var",   TK_VARIABLE},
+  {"const", TK_CONSTANT},
+  {"=",     TK_ASSIGN},
+  // TODO: add here assigns with operations: +=, -=, *=, /=, %=...
+
+  //symbols
+  {"{",     TK_CUR_BRA_OPEN},
+  {"}",     TK_CUR_BRA_CLOSE},
+  {"[",     TK_SQR_BRA_OPEN},
+  {"]",     TK_SQR_BAR_CLOSE},
+  {"(",     TK_ROU_BRA_OPEN},
+  {")",     TK_ROU_BRA_CLOSE},
+  {"|",     TK_END_BAR},
+  {":",     TK_COLON},
+  {",",     TK_COMMA},
+  {"?",     TK_QUEST},
+  {"!",     TK_EXCLA},
+  {";",     TK_SEMICOLON},
+  {";;",    TK_DOUB_SEMICOLON},
+
+  //special tokens
+  {"sys",   SYSCALL_TK},
+  {"dump",  PRINT_INT}, // TODO: remove this
 };
 
-Token *createToken(string text, size_t id, TkInfo info, size_t l, size_t c) {
-    return new Token(text, id, info, l, c);
+Token *createToken(string text, size_t id, TokenType type, size_t l, size_t c) {
+    return new Token(text, id, type, l, c);
 }
 
 bool isValidChar(string word) {
@@ -81,19 +102,18 @@ bool isValidChar(string word) {
   return false;
 }
 
-TkInfo typeOfToken(string word) {
+TokenType typeOfToken(string word) {
   int len = word.size();
-  //compile time known values, str or int, has negative predecence: -1
-  if(word[0] == '"') return {STR_TK, COMPTIME_KNOWN};
+  if(word[0] == '"') return TK_STR;
 
-  if(word[0] == '\'' && isValidChar(word)) return {CHAR_TK, COMPTIME_KNOWN};
+  if(word[0] == '\'' && isValidChar(word)) return TK_CHAR;
 
   //number validation
   int i = 0;
   enum numberBase {DEC, HEX, OCT, BIN};
   enum numberBase base = DEC;
   if(word[i] == '0') {
-    if(len == 1) return {INT_TK, COMPTIME_KNOWN};
+    if(len == 1) return TK_INT;
     i+=2;
     if(word[i-1] == 'x') base = HEX;
     else if(word[i-1] == 'b') base = BIN;
@@ -121,14 +141,14 @@ TkInfo typeOfToken(string word) {
         if(word[i] != '0' && word[i] != '1') break;
       break;
   }
-  if(len == i) return {INT_TK, COMPTIME_KNOWN};
+  if(len == i) return TK_INT;
 
-  for(i = 0; i < COUNT_OF_TK_TYPES - NUM_DIV; i++) {
+  for(i = 0; i < LEN_BUILTIN_WORDS; i++) {
     if(!word.compare(builtinWords[i].symbol)) 
-      return { builtinWords[i].tokenType, builtinWords[i].precedence };
+      return  builtinWords[i].tokenType;
   }
 
-  return {NAME_TK, USER_DEFINITIONS};
+  return TK_NAME;
 }
 
 TokenizedLine *createTokenizedLine() {
@@ -289,12 +309,11 @@ struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
 }
 
 void printTokenizedFile(TokenizedFile p) {
-    const char *humanReadableType[NUM_DIV] = {"Word", "Integer Number", "String", "Char", "Floating Point", "Builtin Word"};
+    const char *humanReadableType[MARKER+1] = {"Word", "Integer Number", "String", "Char", "Floating Point", "Builtin Word"};
     for(size_t i = 0; i < p.lines.size(); i++) {
         for(size_t j = 0; j < p.lines[i]->tokens.size(); j++) {
-            printf("[id: %d line: %d, col: %d, item: %s, type: %s and prec: %d]\n", (int)p.lines[i]->tokens[j]->id , (int)p.lines[i]->tokens[j]->l, (int)p.lines[i]->tokens[j]->c, p.lines[i]->tokens[j]->text.c_str(),
-                  humanReadableType[p.lines[i]->tokens[j]->type >= NUM_DIV ? (NUM_DIV - 1) : p.lines[i]->tokens[j]->type],
-                  p.lines[i]->tokens[j]->precedence);
+            printf("[id: %d line: %d, col: %d, item: %s, type: %s]\n", (int)p.lines[i]->tokens[j]->id , (int)p.lines[i]->tokens[j]->l, (int)p.lines[i]->tokens[j]->c, p.lines[i]->tokens[j]->text.c_str(),
+                  humanReadableType[p.lines[i]->tokens[j]->type > MARKER ? MARKER : p.lines[i]->tokens[j]->type]);
         }
         printf("\n");
     }
@@ -329,7 +348,7 @@ void addWordAsToken(TokenizedFile *tf, FileReader *fr, size_t *numWord) {
         fr->currLine,
         fr->currCol
     ));
-    fr->word = string(); //clear the word
+    fr->word.clear();
 }
 
 void advanceCurrPos(FileReader *fr) {
@@ -403,6 +422,9 @@ TokenizedFile *readToTokenizedFile(const char *file) {
   // chars that can be concatenated with themselves
   // everyone besides the ';' can be concatenated with '=', and the ';' can be concatenated with itself
   const string doubleEspChars = ";=-+*/%<!>"; 
+  const vector<string> possibleCombinations = {
+    "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>"
+  };
   const string singleEspChars = "()[]{}@#|?,:.\'\"";
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
@@ -434,7 +456,7 @@ TokenizedFile *readToTokenizedFile(const char *file) {
     }
 
     if(doubleEspChars.find(fr.word[0]) != string::npos) { //is a double special char
-      if(fr.word.size() > 1 && ((fr.word[0] == ';' && fr.word[1] == ';') || (fr.word[0] != ';' && fr.word[1] == '='))) {
+      if(fr.word.size() > 1 && count(possibleCombinations.begin(), possibleCombinations.end(), fr.word.substr(0, 2)) != 0) {
         fr.word = fr.word.substr(0, 2);
         addWordAsToken(tf, &fr, &numWord);
         advanceCurrPosTill(&fr, fr.currPos + 2);
