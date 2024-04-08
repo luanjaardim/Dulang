@@ -4,10 +4,8 @@
 
 struct PatternStep {
     string key;
-    size_t lineStart, start;
-    size_t lineEnd, end;
-    PatternStep(string key, size_t lineStart, size_t start, size_t lineEnd, size_t end) 
-        : key(key), lineStart(lineStart), start(start), lineEnd(lineEnd), end(end) {}
+    Position start, end;
+    PatternStep(string key, Position start, Position end) : key(key), start(start), end(end) {}
     ~PatternStep() {}
 };
 
