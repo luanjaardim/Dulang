@@ -113,6 +113,18 @@ typedef enum {
   COUNT_OF_TK_TYPES
 } TokenType;
 
+struct Position {
+  size_t l, c;
+  bool found;
+  Position(size_t l, size_t c) : l(l), c(c) { found = true; }
+  Position() { found = false; }
+
+  bool sameLine(Position p) { return l == p.l; }
+  bool equals(Position p) { return l == p.l && c == p.c; }
+  bool isBefore(Position p) { return l < p.l || (l == p.l && c < p.c); }
+  bool isAfter(Position p) { return l > p.l || (l == p.l && c > p.c); }
+};
+
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);
 size_t lenStr(const char *const str);
 int cmpStr(const char *const str1, const char *const str2);
