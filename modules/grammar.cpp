@@ -117,7 +117,7 @@ void Grammar::extractPatterns(TokenizedFile *tf) {
 }
 
 Token *getTokenIfBeforeAndAdvance(TokenizedFile *tf, size_t end) {
-  if(tf->currElem >= end) {
+  if(tf->pos.c >= end) {
     return NULL;
   }
   Token *tk = currToken(*tf);
@@ -147,7 +147,7 @@ int findStartOfNextElement(
   size_t *end
 ) {
   TokenizedFile *copy = cloneTokenizedFile(*tf);
-  size_t currElem = tf->currElem;
+  size_t currElem = tf->pos.c;
   bool failed = true;
   if(nextElemIdx >= p.elements.size()) return *end;
 
@@ -157,7 +157,7 @@ int findStartOfNextElement(
     )) {
       failed = false;
       break;
-    } else copy->currElem = currElem;
+    } else copy->pos.c = currElem;
     currElem++;
   } while(nextLineToken(copy, 1) && currElem < *end);
   delete copy;
@@ -173,7 +173,7 @@ bool handleElementType(
   size_t elem_idx, 
   size_t *end
 ) {
-  size_t startLine = tf->currLine;
+  size_t startLine = tf->pos.l;
   if(e->type == TEXT) {
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     if(!tk || e->text.text != tk->text) return false;
@@ -183,9 +183,9 @@ bool handleElementType(
     int endOfCurrent = findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
     if(endOfCurrent == -1) return false;
     steps->steps.push_back( 
-      PatternStep(e->innerElement.elem, startLine, tf->currElem, tf->currLine, endOfCurrent)
+      PatternStep(e->innerElement.elem, startLine, tf->pos.c, tf->pos.l, endOfCurrent)
     );
-    tf->currElem = endOfCurrent;
+    tf->pos.c = endOfCurrent;
 
   } else if(e->type == OPTIONAL) {
 
@@ -200,15 +200,15 @@ bool handleElementType(
     }
     int endOfCurrent = findStartOfNextElement(tf, p, p.elements[idx+1], &tmp, idx+1, end);
     if(endOfCurrent == -1) return false;
-    if(endOfCurrent == (int)tf->lines[tf->currLine]->tokens.size()) return true;
+    if(endOfCurrent == (int)tf->lines[tf->pos.l]->tokens.size()) return true;
 
-    size_t start = tf->currElem;
-    if((int) tf->currElem != endOfCurrent) {
+    size_t start = tf->pos.c;
+    if((int) tf->pos.c != endOfCurrent) {
       for(auto elem : e->optionalElement.elements) {
         if(!handleElementType(tf, p, elem, steps, elem_idx, end)) {
           Element *nextElem = p.elements[elem_idx+1];
           if(nextElem->type == OPTIONAL) {
-            tf->currElem = start;
+            tf->pos.c = start;
             break; //the next optional can take what was not accepted here
           }
           return false;
@@ -223,21 +223,21 @@ bool handleElementType(
     if(nextElementStart == -1) return false;
 
     int sep_idx = 0;
-    while((int) tf->currElem < nextElementStart) { //iterate over the list
+    while((int) tf->pos.c < nextElementStart) { //iterate over the list
       if((sep_idx = findStartOfNextElement(tf, p, e->list.separator, &tmp, elem_idx, end)) >= nextElementStart - 1) {
         break;
       }
       if(sep_idx == -1) {
         steps->steps.push_back(
-          PatternStep(e->list.e->innerElement.elem, startLine, tf->currElem, tf->currLine, nextElementStart)
+          PatternStep(e->list.e->innerElement.elem, startLine, tf->pos.c, tf->pos.l, nextElementStart)
         );
-        tf->currElem = nextElementStart;
+        tf->pos.c = nextElementStart;
         return true;
       }
       steps->steps.push_back(
-        PatternStep(e->list.e->innerElement.elem, startLine, tf->currElem, tf->currLine, sep_idx)
+        PatternStep(e->list.e->innerElement.elem, startLine, tf->pos.c, tf->pos.l, sep_idx)
       );
-      tf->currElem = sep_idx;
+      tf->pos.c = sep_idx;
       if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
     }
 
@@ -258,25 +258,25 @@ bool handleElementType(
         break;
       case VAL_NEW_LINE:
         if(advanceLineTokenizdFile(tf) == 0) return false;
-        *end = tf->lines[tf->currLine]->tokens.size();
+        *end = tf->lines[tf->pos.l]->tokens.size();
         break;
       case VAL_INDENT:
-        if(tf->lines[tf->currLine]->tokens[0]->c <= tf->lines[tf->currLine-1]->tokens[0]->c) return false;
-        for(int i = tf->currLine + 1; i < (int)tf->lines.size(); i++) {
+        if(tf->lines[tf->pos.l]->tokens[0]->c <= tf->lines[tf->pos.l-1]->tokens[0]->c) return false;
+        for(int i = tf->pos.l + 1; i < (int)tf->lines.size(); i++) {
           //verifies if the identation is respected, if a line after the current has a smaller identation and
           //is diferent of the previous line, it's an error
-          if(tf->lines[i]->tokens[0]->c < tf->lines[tf->currLine]->tokens[0]->c &&
-            tf->lines[i]->tokens[0]->c != tf->lines[tf->currLine-1]->tokens[0]->c)
+          if(tf->lines[i]->tokens[0]->c < tf->lines[tf->pos.l]->tokens[0]->c &&
+            tf->lines[i]->tokens[0]->c != tf->lines[tf->pos.l-1]->tokens[0]->c)
               return false;
         }
         break;
       case VAL_BLOCK:
         //iterate over lines till find a line that has the same identation, if EOF is find, return false
-        size_t c = tf->lines[tf->currLine]->tokens[0]->c;
+        size_t c = tf->lines[tf->pos.l]->tokens[0]->c;
         do 
           if(advanceLineTokenizdFile(tf) == 0) return false; 
-        while(tf->lines[tf->currLine]->tokens[0]->c != c);
-        *end = tf->lines[tf->currLine]->tokens.size();
+        while(tf->lines[tf->pos.l]->tokens[0]->c != c);
+        *end = tf->lines[tf->pos.l]->tokens.size();
         break;
     }
   } else {
@@ -296,8 +296,8 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
 
   for( Pattern p : patterns ) {
     elem_idx = 0;
-    tf->currLine = ps.lineStart;
-    tf->currElem = ps.start;
+    tf->pos.l = ps.lineStart;
+    tf->pos.c = ps.start;
     tmpSteps.steps.clear();
     tmpSteps.patternIdx = pat_idx;
 
@@ -332,13 +332,13 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
   for( auto steps : possibleSteps ) {
 
     Node<Token *> *answer = new Node<Token *>(NULL), *first = answer;
-    tf->currLine = ps.lineStart;
-    tf->currElem = ps.start;
+    tf->pos.l = ps.lineStart;
+    tf->pos.c = ps.start;
     size_t curIntervalIdx = 0;
-    while(tf->currLine <= ps.lineEnd && tf->currElem < ps.end) {
+    while(tf->pos.l <= ps.lineEnd && tf->pos.c < ps.end) {
       if(curIntervalIdx < steps.steps.size()) {
-        if(tf->currLine == steps.steps[curIntervalIdx].lineStart &&
-           tf->currElem == steps.steps[curIntervalIdx].start) {
+        if(tf->pos.l == steps.steps[curIntervalIdx].lineStart &&
+           tf->pos.c == steps.steps[curIntervalIdx].start) {
           auto child = this->parseFile(tf, steps.steps[curIntervalIdx]);
           if(!child) { answer = NULL; break; }
           if(!child->get_data()) {
@@ -351,10 +351,10 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
             delete child;
           } else Node<Token *>::linkFatherAndChild(answer, child);
 
-          tf->currLine = steps.steps[curIntervalIdx].lineEnd;
-          tf->currElem = steps.steps[curIntervalIdx].end;
+          tf->pos.l = steps.steps[curIntervalIdx].lineEnd;
+          tf->pos.c = steps.steps[curIntervalIdx].end;
           curIntervalIdx++;
-          // if(tf->currElem == steps.steps[curIntervalIdx].end) {
+          // if(tf->pos.c == steps.steps[curIntervalIdx].end) {
           //   curIntervalIdx++;
           // } else printf("what the heck\n"); // WARNING: this should not happen, maybe remove this
           continue;

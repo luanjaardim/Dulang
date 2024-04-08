@@ -184,8 +184,8 @@ FileReader createFileReader(const char *file) {
 */
 TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
   TokenizedFile *clone = new TokenizedFile();
-  clone->currLine = tf.currLine;
-  clone->currElem = tf.currElem;
+  clone->pos.l = tf.pos.l;
+  clone->pos.c = tf.pos.c;
   clone->lines = tf.lines;
   return clone;
 }
@@ -194,9 +194,9 @@ TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
  * This function is used to get the current Token
 */
 Token *currToken(TokenizedFile tf) {
-  if(tf.lines.size() == tf.currLine || tf.lines[tf.currLine]->tokens.size() == tf.currElem)
+  if(tf.lines.size() == tf.pos.l || tf.lines[tf.pos.l]->tokens.size() == tf.pos.c)
     return NULL;
-  return tf.lines[tf.currLine]->tokens[tf.currElem];
+  return tf.lines[tf.pos.l]->tokens[tf.pos.c];
 }
 
 /*
@@ -205,22 +205,22 @@ Token *currToken(TokenizedFile tf) {
 */
 Token *nextToken(TokenizedFile *tf, size_t n) {
   for(size_t i = 0; i < n; i++)
-    if(tf->lines[tf->currLine]->tokens.size() == ++tf->currElem) {
+    if(tf->lines[tf->pos.l]->tokens.size() == ++tf->pos.c) {
       //if there are no more lines to iterate over or the line is empty, then return NULL
-      if(tf->lines.size() == tf->currLine+1 || tf->lines[tf->currLine+1]->tokens.size() == 0) {
-        tf->currElem--;
+      if(tf->lines.size() == tf->pos.l+1 || tf->lines[tf->pos.l+1]->tokens.size() == 0) {
+        tf->pos.c--;
         return NULL;
       }
 
-      tf->currElem = 0;
-      tf->currLine++;
+      tf->pos.c = 0;
+      tf->pos.l++;
     }
   return currToken(*tf);
 }
 // same as above, but searching only in the current line
 Token *nextLineToken(TokenizedFile *tf, size_t n) {
-  size_t currLine = tf->currLine;
-  if(nextToken(tf, n) && tf->currLine == currLine) 
+  size_t currLine = tf->pos.l;
+  if(nextToken(tf, n) && tf->pos.l == currLine) 
     return currToken(*tf);
   else 
     return NULL;
@@ -245,20 +245,20 @@ Token *peekLineToken(TokenizedFile tf, size_t n) {
 */
 Token *returnToken(TokenizedFile *tf, size_t n) {
   for(size_t i = 0; i < n; i++) {
-    if(!tf->currElem) { //if it is the first element of the line
-      if(!tf->currLine) //if it is the first line
+    if(!tf->pos.c) { //if it is the first element of the line
+      if(!tf->pos.l) //if it is the first line
         return NULL;
-      tf->currLine--;
-      tf->currElem = tf->lines[tf->currLine]->tokens.size();
+      tf->pos.l--;
+      tf->pos.c = tf->lines[tf->pos.l]->tokens.size();
     }
-    tf->currElem--;
+    tf->pos.c--;
   }
   return currToken(*tf);
 }
 // the same as above, but searching only in the current line
 Token *returnLineToken(TokenizedFile *tf, size_t n) {
-  size_t currLine = tf->currLine;
-  if(returnToken(tf, n) && tf->currLine == currLine) 
+  size_t currLine = tf->pos.l;
+  if(returnToken(tf, n) && tf->pos.l == currLine)
     return currToken(*tf);
   else 
     return NULL;
@@ -280,15 +280,15 @@ Token *peekBackLineToken(TokenizedFile tf, size_t n) {
 
 /*
  * Try to advance the line, 0 if cannot, 1 if can
- * If it cannot advance the line it will update the currElem to the last element of the line
+ * If it cannot advance the line it will update the pos.c to the last element of the line
 */
 int advanceLineTokenizdFile(TokenizedFile *tf) {
-  if(tf->currLine == tf->lines.size() - 1) {
-    tf->currElem = tf->lines[tf->currLine]->tokens.size() - 1;
+  if(tf->pos.l == tf->lines.size() - 1) {
+    tf->pos.c = tf->lines[tf->pos.l]->tokens.size() - 1;
     return 0;
   }
-  tf->currLine++;
-  tf->currElem = 0;
+  tf->pos.l++;
+  tf->pos.c = 0;
   return 1;
 }
 

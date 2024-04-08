@@ -19,10 +19,10 @@ typedef struct TokenizedLine {
 } TokenizedLine;
 
 typedef struct TokenizedFile {
-    size_t currLine, currElem; //used for navigation
+    Position pos;
     vector<TokenizedLine *> lines;
 
-    TokenizedFile() : currLine(0), currElem(0) {}
+    TokenizedFile() : pos(Position(0, 0)) {}
 } TokenizedFile;
 
 typedef struct FileReader {
