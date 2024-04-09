@@ -10,9 +10,7 @@ stmt:
   <type_def>
   <if_stmt>
   <while_stmt>
-  "back" <expr>                                    $ return point of a function
-  "stop"                                           $ break point of a loop
-  "skip"                                           $ restart point of a loop
+  <back_stop_skip>
 
 func_def:
   "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
@@ -39,6 +37,11 @@ while_stmt:
   "while" <expr> "|" <body>
 
 $ for_stmt:
+
+back_stop_skip:
+  "back" <expr>                                    $ return point of a function
+  "stop"                                           $ break point of a loop
+  "skip"                                           $ restart point of a loop
 
 $$
   body is a list of indented new_line separated statements or a just a single statement
