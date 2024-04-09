@@ -114,15 +114,18 @@ typedef enum {
 } TokenType;
 
 struct Position {
-  size_t l, c;
+  size_t l, e;
   bool found;
-  Position(size_t l, size_t c) : l(l), c(c) { found = true; }
+  Position(size_t l, size_t e) : l(l), e(e) { found = true; }
   Position() { found = false; }
 
+  void goToPos(Position p) { l = p.l; e = p.e; }
   bool sameLine(Position p) { return l == p.l; }
-  bool equals(Position p) { return l == p.l && c == p.c; }
-  bool isBefore(Position p) { return l < p.l || (l == p.l && c < p.c); }
-  bool isAfter(Position p) { return l > p.l || (l == p.l && c > p.c); }
+  bool equals(Position p) { return l == p.l && e == p.e; }
+  bool isBefore(Position p) { return l < p.l || (l == p.l && e < p.e); }
+  bool isAfter(Position p) { return l > p.l || (l == p.l && e > p.e); }
+
+  void print() { printf("Line: %lu, Element: %lu, Found: %s\n", l, e, found ? "True" : "False"); }
 };
 
 void maybeRealloc(void **pnt, int *const cap, int newSize, size_t elementSize);

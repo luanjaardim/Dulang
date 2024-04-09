@@ -185,7 +185,7 @@ FileReader createFileReader(const char *file) {
 TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
   TokenizedFile *clone = new TokenizedFile();
   clone->pos.l = tf.pos.l;
-  clone->pos.c = tf.pos.c;
+  clone->pos.e = tf.pos.e;
   clone->lines = tf.lines;
   return clone;
 }
@@ -194,9 +194,9 @@ TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
  * This function is used to get the current Token
 */
 Token *currToken(TokenizedFile tf) {
-  if(tf.lines.size() == tf.pos.l || tf.lines[tf.pos.l]->tokens.size() == tf.pos.c)
+  if(tf.lines.size() == tf.pos.l || tf.lines[tf.pos.l]->tokens.size() == tf.pos.e)
     return NULL;
-  return tf.lines[tf.pos.l]->tokens[tf.pos.c];
+  return tf.lines[tf.pos.l]->tokens[tf.pos.e];
 }
 
 /*
@@ -205,14 +205,14 @@ Token *currToken(TokenizedFile tf) {
 */
 Token *nextToken(TokenizedFile *tf, size_t n) {
   for(size_t i = 0; i < n; i++)
-    if(tf->lines[tf->pos.l]->tokens.size() == ++tf->pos.c) {
+    if(tf->lines[tf->pos.l]->tokens.size() == ++tf->pos.e) {
       //if there are no more lines to iterate over or the line is empty, then return NULL
       if(tf->lines.size() == tf->pos.l+1 || tf->lines[tf->pos.l+1]->tokens.size() == 0) {
-        tf->pos.c--;
+        tf->pos.e--;
         return NULL;
       }
 
-      tf->pos.c = 0;
+      tf->pos.e = 0;
       tf->pos.l++;
     }
   return currToken(*tf);
@@ -245,13 +245,13 @@ Token *peekLineToken(TokenizedFile tf, size_t n) {
 */
 Token *returnToken(TokenizedFile *tf, size_t n) {
   for(size_t i = 0; i < n; i++) {
-    if(!tf->pos.c) { //if it is the first element of the line
+    if(!tf->pos.e) { //if it is the first element of the line
       if(!tf->pos.l) //if it is the first line
         return NULL;
       tf->pos.l--;
-      tf->pos.c = tf->lines[tf->pos.l]->tokens.size();
+      tf->pos.e = tf->lines[tf->pos.l]->tokens.size();
     }
-    tf->pos.c--;
+    tf->pos.e--;
   }
   return currToken(*tf);
 }
@@ -280,15 +280,15 @@ Token *peekBackLineToken(TokenizedFile tf, size_t n) {
 
 /*
  * Try to advance the line, 0 if cannot, 1 if can
- * If it cannot advance the line it will update the pos.c to the last element of the line
+ * If it cannot advance the line it will update the pos.e to the last element of the line
 */
 int advanceLineTokenizdFile(TokenizedFile *tf) {
   if(tf->pos.l == tf->lines.size() - 1) {
-    tf->pos.c = tf->lines[tf->pos.l]->tokens.size() - 1;
+    tf->pos.e = tf->lines[tf->pos.l]->tokens.size() - 1;
     return 0;
   }
   tf->pos.l++;
-  tf->pos.c = 0;
+  tf->pos.e = 0;
   return 1;
 }
 
