@@ -205,7 +205,7 @@ Token *currToken(TokenizedFile tf) {
 */
 Token *nextToken(TokenizedFile *tf, size_t n) {
   for(size_t i = 0; i < n; i++)
-    if(tf->lines[tf->pos.l]->tokens.size() == ++tf->pos.e) {
+    if(tf->lines[tf->pos.l]->tokens.size() <= ++tf->pos.e) {
       //if there are no more lines to iterate over or the line is empty, then return NULL
       if(tf->lines.size() == tf->pos.l+1 || tf->lines[tf->pos.l+1]->tokens.size() == 0) {
         tf->pos.e--;
@@ -222,8 +222,10 @@ Token *nextLineToken(TokenizedFile *tf, size_t n) {
   size_t currLine = tf->pos.l;
   if(nextToken(tf, n) && tf->pos.l == currLine) 
     return currToken(*tf);
-  else 
+  else {
+    returnToken(tf, n);
     return NULL;
+  }
 }
 
 /*

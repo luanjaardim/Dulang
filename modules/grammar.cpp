@@ -155,6 +155,10 @@ Position findStartOfNextElement(
   Position currElem = tf->pos;
   bool failed = true;
   if(nextElemIdx >= p.elements.size()) return *end;
+  if(nextElem->type == VALUE && nextElem->value.type == VAL_NEW_LINE) {
+    if(tf->pos.l == end->l) return Position();
+    return Position(tf->pos.l, tf->lines[tf->pos.l]->tokens.size());
+  }
 
   do {
     if(handleElementType(
@@ -162,9 +166,9 @@ Position findStartOfNextElement(
     )) {
       failed = false;
       break;
-    } else copy->pos = currElem;
+    } else copy->pos.goToPos(currElem);
     currElem.e++;
-  } while(nextLineToken(copy, 1) && currElem.isBefore(*end)); // WARNING: only working for elements in the same line
+  } while(nextToken(copy, 1) && currElem.isBefore(*end));
   delete copy;
   if(failed) return Position();
   return currElem;
@@ -248,23 +252,23 @@ bool handleElementType(
     }
 
   } else if(e->type == VALUE){
-    Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     switch(e->value.type) {
       case VAL_NAME:
-        if(tk->type != TK_NAME) return false;
+        if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_NAME) return false;
         break;
       case VAL_NUMBER:
-        if(tk->type != TK_INT) return false;
+        if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_INT) return false;
         break;
       case VAL_STRING:
-        if(tk->type != TK_STR) return false;
+        if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_STR) return false;
         break;
       case VAL_CHAR:
-        if(tk->type != TK_CHAR) return false;
+        if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_CHAR) return false;
         break;
       case VAL_NEW_LINE:
-        return false;
-        // TODO: find a way to check if the token is a new line
+        if(tf->pos.e != tf->lines[tf->pos.l]->tokens.size())
+          return false;
+        advanceLineTokenizdFile(tf);
         break;
       case VAL_INDENT:
         return false;
@@ -331,6 +335,10 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     tf->pos.goToPos(ps.start);
     size_t curIntervalIdx = 0;
     while(tf->pos.isBefore(ps.end)) {
+      // when the currToken is NULL, it means we are the end of that line
+      // this happens when the token identified is a NEW_LINE
+      if(currToken(*tf) == NULL) advanceLineTokenizdFile(tf);
+
       if(curIntervalIdx < steps.steps.size()) {
         if(tf->pos.equals(steps.steps[curIntervalIdx].start)) {
 
