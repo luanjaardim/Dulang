@@ -151,14 +151,24 @@ Position findStartOfNextElement(
   size_t nextElemIdx,
   Position *end
 ) {
+  if(nextElemIdx >= p.elements.size()) return *end;
+  if(nextElem->type == VALUE && (nextElem->value.type == VAL_NEW_LINE || nextElem->value.type == VAL_BLOCK)) {
+    Position start = tf->pos;
+    size_t indent = getLineIndentation(tf->lines[tf->pos.l]);
+    while(advanceLineTokenizdFile(tf) && tf->pos.isBefore(*end)) {
+      if(getLineIndentation(tf->lines[tf->pos.l]) <= indent) {
+        Position tmp = tf->pos;
+        tf->pos.goToPos(start);
+        return Position(tmp.l-1, tf->lines[tmp.l-1]->tokens.size());
+      }
+    }
+    tf->pos.goToPos(start);
+    return Position();
+  }
+
   TokenizedFile *copy = cloneTokenizedFile(*tf);
   Position currElem = tf->pos;
   bool failed = true;
-  if(nextElemIdx >= p.elements.size()) return *end;
-  if(nextElem->type == VALUE && nextElem->value.type == VAL_NEW_LINE) {
-    if(tf->pos.l == end->l) return Position();
-    return Position(tf->pos.l, tf->lines[tf->pos.l]->tokens.size());
-  }
 
   do {
     if(handleElementType(
@@ -265,18 +275,15 @@ bool handleElementType(
       case VAL_CHAR:
         if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_CHAR) return false;
         break;
+      case VAL_BLOCK:
       case VAL_NEW_LINE:
-        if(tf->pos.e != tf->lines[tf->pos.l]->tokens.size())
+        if(tf->pos.e < tf->lines[tf->pos.l]->tokens.size() - 1)
           return false;
         advanceLineTokenizdFile(tf);
         break;
       case VAL_INDENT:
         return false;
         // TODO: find a way to check if the token is an indent
-        break;
-      case VAL_BLOCK:
-        return false;
-        // TODO: move to the end of the block to return the position
         break;
     }
   } else {

@@ -294,6 +294,11 @@ int advanceLineTokenizdFile(TokenizedFile *tf) {
   return 1;
 }
 
+size_t getLineIndentation(TokenizedLine *line) {
+  if(line->tokens.size() == 0) return 0;
+  return line->tokens[0]->c;
+}
+
 /*
  * Return the id of the last word of the block and it's line
 */

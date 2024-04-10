@@ -46,6 +46,7 @@ Token *returnLineToken(TokenizedFile *tf, size_t n);
 Token *peekBackToken(TokenizedFile tf, size_t n);
 Token *peekBackLineToken(TokenizedFile tf, size_t n);
 int advanceLineTokenizdFile(TokenizedFile *tf);
+size_t getLineIndentation(TokenizedLine *line);
 
 struct endOfBlock {
   size_t lastId, lastLine;
