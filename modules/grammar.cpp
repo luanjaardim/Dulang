@@ -121,7 +121,7 @@ Token *getTokenIfBeforeAndAdvance(TokenizedFile *tf, Position end) {
     return NULL;
   }
   Token *tk = currToken(*tf);
-  nextLineToken(tf, 1);
+  nextToken(tf, 1);
   // TODO: check if the token is in the same line as the end
   // if(tf->pos.sameLine(end))
   //   nextLineToken(tf, 1);
@@ -178,7 +178,7 @@ Position findStartOfNextElement(
       break;
     } else copy->pos.goToPos(currElem);
     currElem.e++;
-  } while(nextToken(copy, 1) && currElem.isBefore(*end));
+  } while(nextLineToken(copy, 1) && currElem.isBefore(*end));
   delete copy;
   if(failed) return Position();
   return currElem;
@@ -377,7 +377,6 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
       if(nextToken(tf, 1) == NULL) break;
     }
     if(answer) {
-      //delete answer; TODO: free memory
       return first;
     } //else delete first; TODO: free memory
   }
