@@ -192,6 +192,12 @@ bool handleElementType(
   size_t elem_idx, 
   Position *end
 ) {
+  // WARNING: experimental if, it can cause some code not being parsed, remove it and test again if it's not working
+  if((e->type == TEXT || (e->type == VALUE && e->value.type != VAL_BLOCK && e->value.type != VAL_NEW_LINE)) &&
+    tf->pos.sameLine(*end) && end->e - tf->pos.e > 1 && elem_idx == p.elements.size() - 1) {
+    //this if tries to avoid tokens that should not exist
+    return false;
+  }
   if(e->type == TEXT) {
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     if(!tk || e->text.text != tk->text) return false;
