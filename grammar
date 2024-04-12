@@ -111,7 +111,10 @@ user_type:
   "{" [<arg>:";"] "}"
 
 type:
-  "(" <type> ")"
+  "(" <type> ")"             $ greater precedence for parenthesis surrounding types
+  <data_types>
+
+data_types:
   "{" [<type>:";"] "}"       $ compound type, a type that is a 
   "#" <type>                 $ pointer to a type
   "?" <type>                 $ nullable pointer to a type

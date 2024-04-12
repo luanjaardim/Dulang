@@ -193,10 +193,13 @@ bool handleElementType(
   Position *end
 ) {
   // WARNING: experimental if, it can cause some code not being parsed, remove it and test again if it's not working
-  if((e->type == TEXT || (e->type == VALUE && e->value.type != VAL_BLOCK && e->value.type != VAL_NEW_LINE)) &&
-    tf->pos.sameLine(*end) && end->e - tf->pos.e > 1 && elem_idx == p.elements.size() - 1) {
-    //this if tries to avoid tokens that should not exist
-    return false;
+  if((e->type == TEXT ||
+     (e->type == VALUE && e->value.type != VAL_BLOCK && e->value.type != VAL_NEW_LINE)) &&
+       tf->pos.sameLine(*end) && end->e - tf->pos.e > 1 && //there is more than one token, when should be only one
+       p.elements[elem_idx]->type == e->type &&//the last element is the same type as the current element
+       elem_idx == p.elements.size() - 1 //it's the last element of the pattern, no other element will consume the tokens
+    ) {
+    return false; //this 'if' tries to avoid tokens that should not exist
   }
   if(tf->pos.isAfter(*end)) return false; //if the end of the pattern was reached
   
@@ -231,6 +234,8 @@ bool handleElementType(
     Position start = tf->pos;
     for(auto elem : e->optionalElement.elements) {
       if(!handleElementType(tf, p, elem, steps, elem_idx, end)) {
+        if(elem_idx + 1 == p.elements.size()) return false;
+
         Element *nextElem = p.elements[elem_idx+1];
         if(nextElem->type == OPTIONAL) {
           tf->pos.goToPos(start);
