@@ -218,7 +218,7 @@ bool handleElementType(
     PatternSteps tmp = PatternSteps(steps->parentPatternKey);
     size_t idx = elem_idx;
     for(int ith_elem = idx + 1; ith_elem < (int)p.elements.size(); ith_elem++ ) {
-      //find the element right behind the one that is not optional
+      //find the element right behind the one that is not optional, the last optional in a sequence
       if(p.elements[ith_elem]->type != OPTIONAL) {
         idx = ith_elem - 1;
         break;
@@ -325,9 +325,11 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     }
 
     if(!failed) {
+      // TODO: enhance the way to choose the best steps
       if(tmpSteps.steps.size() == bestSteps.steps.size()) {
         for(int i = 0; i < (int)bestSteps.steps.size(); i++) {
           if(bestSteps.steps[i].end.isBefore(tmpSteps.steps[i].end)) {
+            if(bestSteps.steps[i].start.isAfter(tmpSteps.steps[i].start)) break;
             bestSteps = tmpSteps;
             possibleSteps.clear();
             break;
@@ -335,6 +337,7 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
         }
         possibleSteps.push_back(tmpSteps);
       } else if(tmpSteps.steps.size() > bestSteps.steps.size()) {
+        // TODO: choose for the empty steps here
         bestSteps = tmpSteps;
         possibleSteps.clear();
         possibleSteps.push_back(bestSteps);
