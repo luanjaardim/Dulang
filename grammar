@@ -10,7 +10,9 @@ stmt:
   <type_def>
   <if_stmt>
   <while_stmt>
-  <back_stop_skip>
+  "back" <expr>                                    $ return point of a function
+  "stop"                                           $ break point of a loop
+  "skip"                                           $ restart point of a loop
 
 func_def:
   "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
@@ -40,9 +42,6 @@ while_stmt:
 $ for_stmt:
 
 back_stop_skip:
-  "back" <expr>                                    $ return point of a function
-  "stop"                                           $ break point of a loop
-  "skip"                                           $ restart point of a loop
 
 $$
   body is a list of indented new_line separated statements or a just a single statement
@@ -97,16 +96,13 @@ primary:
   NAME "@" <num>
 
 atom:
-  <var>
+  ?("#") NAME
   <comptime_val>
 
 comptime_val:
   NUMBER
   CHAR
   STRING
-
-var:
-  ?("#") NAME
 
 $$
   A compound type that must have a name to it's fields and possibly a default value

@@ -17,6 +17,7 @@
 #include <map>
 #include <utility>
 #include <algorithm>
+#include <numeric>
 
 using namespace std;
 

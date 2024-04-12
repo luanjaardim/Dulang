@@ -325,19 +325,33 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
     }
 
     if(!failed) {
-      // TODO: enhance the way to choose the best steps
-      if(tmpSteps.steps.size() == bestSteps.steps.size()) {
+      if(tmpSteps.steps.empty()) {
+        possibleSteps = {tmpSteps};
+        break; //it's already our best choose
+
+      } else if(tmpSteps.steps.size() == bestSteps.steps.size()) {
+        //Choose for the one that consumed more tokens till now
+        vector<size_t> vTmp = {}, vBest = {};
         for(int i = 0; i < (int)bestSteps.steps.size(); i++) {
-          if(bestSteps.steps[i].end.isBefore(tmpSteps.steps[i].end)) {
-            if(bestSteps.steps[i].start.isAfter(tmpSteps.steps[i].start)) break;
-            bestSteps = tmpSteps;
-            possibleSteps.clear();
-            break;
+          vTmp.push_back(tmpSteps.steps[i].end.e - tmpSteps.steps[i].start.e);
+          vBest.push_back(bestSteps.steps[i].end.e - bestSteps.steps[i].start.e);
+        }
+        size_t sumTmp = accumulate(vTmp.begin(), vTmp.end(), 0), sumBest = accumulate(vBest.begin(), vBest.end(), 0);
+        if(sumTmp < sumBest) {
+          bestSteps = tmpSteps;
+          possibleSteps.clear();
+        } else if(sumTmp == sumBest) {
+          //If both consumed the same amount of tokens, choose the one that the tokens at the beginning are greater
+          for(int i = 0; i < (int)vBest.size(); i++) {
+            if(vTmp[i] < vBest[i]) {
+              bestSteps = tmpSteps;
+              possibleSteps.clear();
+              break;
+            }
           }
         }
         possibleSteps.push_back(tmpSteps);
       } else if(tmpSteps.steps.size() > bestSteps.steps.size()) {
-        // TODO: choose for the empty steps here
         bestSteps = tmpSteps;
         possibleSteps.clear();
         possibleSteps.push_back(bestSteps);
