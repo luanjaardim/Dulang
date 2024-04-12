@@ -13,6 +13,7 @@ stmt:
   "back" <expr>                                    $ return point of a function
   "stop"                                           $ break point of a loop
   "skip"                                           $ restart point of a loop
+$ TODO: add a optional NAME after stop and skip for breaking different scope loops
 
 func_def:
   "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
@@ -41,12 +42,7 @@ while_stmt:
 
 $ for_stmt:
 
-back_stop_skip:
-
-$$
-  body is a list of indented new_line separated statements or a just a single statement
-  INDENT -> verifies if the first element collumn of each statement is indented
-$$
+$ body is a list of indented new_line separated statements or a just a single statement
 body:
   <stmt>
   [<stmt>:NEW_LINE]

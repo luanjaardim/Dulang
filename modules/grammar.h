@@ -96,6 +96,8 @@ struct Pattern {
     Pattern() {}
 };
 
+typedef Node<Token *> ParsedFile;
+
 struct Grammar {
     const string filePath = "grammar";
     map<string, vector<Pattern>> patterns;
@@ -107,10 +109,33 @@ struct Grammar {
     ~Grammar() { }
     void loadGrammar(Grammar *gm);
     void extractPatterns(TokenizedFile *tf);
-    Node<Token *> *parseFile(TokenizedFile *tf, PatternStep ps);
+    ParsedFile *parseTokenizedFile(TokenizedFile *tf) {
+        size_t lastLine = tf->lines.size() - 1, lastLineSize = tf->lines[lastLine]->tokens.size();
+        return parseStep(tf, PatternStep("root", Position(0, 0), Position(lastLine, lastLineSize)));
+    }
     void printPatterns();
-    void printAST(Node<Token *> *ast, string tab);
+
+private:
+    ParsedFile *parseStep(TokenizedFile *tf, PatternStep ps);
 };
 
+bool handleElementType(
+  TokenizedFile *tf, 
+  Pattern p,
+  Element *e,
+  PatternSteps *steps,
+  size_t elem_idx, 
+  Position *end
+);
+
+Position findStartOfNextElement(
+  TokenizedFile *tf,
+  Pattern p,
+  Element *nextElem,
+  PatternSteps *steps,
+  size_t nextElemIdx,
+  Position *end
+);
+
+void printAST(Node<Token *> *ast, string tab);
 void printType(Element *e, size_t tab);
-bool handleElementType(struct handleElemType h);

@@ -130,15 +130,6 @@ Token *getTokenIfBeforeAndAdvance(TokenizedFile *tf, Position end) {
   return tk;
 }
 
-bool handleElementType(
-  TokenizedFile *tf, 
-  Pattern p,
-  Element *e,
-  PatternSteps *steps,
-  size_t elem_idx, 
-  Position *end
-);
-
 /*
 * Returns the index of the next element, if it fails, returns 0
 * If there is no next element, returns the size of the line
@@ -307,7 +298,7 @@ bool handleElementType(
   return true;
 }
 
-Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
+Node<Token *> *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
   vector<Pattern> patterns = this->patterns[ps.key];
   vector<PatternSteps> possibleSteps;
   PatternSteps bestSteps = PatternSteps(ps.key), tmpSteps = PatternSteps(ps.key);
@@ -379,7 +370,7 @@ Node<Token *> *Grammar::parseFile(TokenizedFile *tf, PatternStep ps) {
       if(curIntervalIdx < steps.steps.size()) {
         if(tf->pos.equals(steps.steps[curIntervalIdx].start)) {
 
-          auto child = this->parseFile(tf, steps.steps[curIntervalIdx]);
+          auto child = this->parseStep(tf, steps.steps[curIntervalIdx]);
           if(!child) { answer = NULL; break; }
           if(!child->get_data()) {
             for(int i = CHILD(1); i < (int)child->get_neighbors_size(); i++) {
@@ -466,7 +457,7 @@ void Grammar::printPatterns() {
 }
 
 //traversing the AST and printing the tokens
-void Grammar::printAST(Node<Token *> *node, string tab) {
+void printAST(Node<Token *> *node, string tab) {
   if(node == NULL) return;
   printf("%sToken: %s\n", tab.c_str(), node->get_data() ? node->get_data()->text.c_str() : "NULL");
   for(int i = CHILD(1); i < (int)node->get_neighbors_size(); i++) {
