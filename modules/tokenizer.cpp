@@ -194,7 +194,7 @@ TokenizedFile *cloneTokenizedFile(const TokenizedFile tf) {
  * This function is used to get the current Token
 */
 Token *currToken(TokenizedFile tf) {
-  if(tf.lines.size() == tf.pos.l || tf.lines[tf.pos.l]->tokens.size() == tf.pos.e)
+  if(tf.lines.size() <= tf.pos.l || tf.lines[tf.pos.l]->tokens.size() <= tf.pos.e)
     return NULL;
   return tf.lines[tf.pos.l]->tokens[tf.pos.e];
 }
@@ -204,11 +204,11 @@ Token *currToken(TokenizedFile tf) {
  * Will return NULL at the end of all Tokens
 */
 Token *nextToken(TokenizedFile *tf, size_t n) {
+  if(currToken(*tf) == NULL) return NULL;
   for(size_t i = 0; i < n; i++)
     if(tf->lines[tf->pos.l]->tokens.size() <= ++tf->pos.e) {
       //if there are no more lines to iterate over or the line is empty, then return NULL
       if(tf->lines.size() == tf->pos.l+1 || tf->lines[tf->pos.l+1]->tokens.size() == 0) {
-        tf->pos.e--;
         return NULL;
       }
 
