@@ -198,6 +198,8 @@ bool handleElementType(
     //this if tries to avoid tokens that should not exist
     return false;
   }
+  if(tf->pos.isAfter(*end)) return false; //if the end of the pattern was reached
+  
   if(e->type == TEXT) {
     Token *tk = getTokenIfBeforeAndAdvance(tf, *end);
     if(!tk || e->text.text != tk->text) return false;
