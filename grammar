@@ -25,6 +25,7 @@ var_def:
 assignment:
   <primary> "=" <expr>
 
+$ TODO: cannot define a type with multiple lines
 type_def:
   "type" NAME "|" <user_type>                      $ defining a user type, a name to be used to refer that type
   "type" NAME "|" <type>                           $ defining an alias to a type
@@ -49,7 +50,7 @@ $$
 $$
 body:
   <stmt>
-  NEW_LINE INDENT [<stmt>:NEW_LINE]
+  [<stmt>:NEW_LINE]
 
 expr:
   <expr> "?" <expr> ":" <expr>
@@ -86,6 +87,7 @@ term:
 
 factor:
   "-" <factor>
+  "(" <expr> ")"
   <primary>
   <atom>
 
@@ -95,13 +97,16 @@ primary:
   NAME "@" <num>
 
 atom:
-  ?("#") NAME
+  <var>
   <comptime_val>
 
 comptime_val:
   NUMBER
   CHAR
   STRING
+
+var:
+  ?("#") NAME
 
 $$
   A compound type that must have a name to it's fields and possibly a default value
