@@ -6,6 +6,7 @@
 #include <string>
 
 #include "modules/tokenizer.h"
+#include "modules/grammar.h"
 
 using namespace std;
 
@@ -32,8 +33,18 @@ int main(int argc, char **argv) {
 
     TokenizedFile *tokFile = readToTokenizedFile(file.c_str());
     //Every word is turned into Tokens, with informations that helps on parsing
-    printf("Tokenized file:\n");
-    printTokenizedFile(*tokFile);
+    // printTokenizedFile(*tokFile);
+
+    //Initializing the grammar
+    Grammar *gm = new Grammar();
+    //Parsing the tokenized file
+    Node<Token *> *node = gm->parseTokenizedFile(tokFile);
+    //Printing the AST
+    printAST(node, "");
+
+
+
+    delete gm;
     exit(1);
     // ParsedFile pf = createParsedFile(&tokFile);
     /* for(int i = 0; i < (int)pf.qtdBlocks; i++) */

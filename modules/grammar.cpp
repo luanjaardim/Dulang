@@ -298,7 +298,7 @@ bool handleElementType(
   return true;
 }
 
-Node<Token *> *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
+ParsedFile *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
   vector<Pattern> patterns = this->patterns[ps.key];
   vector<PatternSteps> possibleSteps;
   PatternSteps bestSteps = PatternSteps(ps.key), tmpSteps = PatternSteps(ps.key);
@@ -359,7 +359,7 @@ Node<Token *> *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
   //choose the steps to take and make the recursion for the inner elements
   for( auto steps : possibleSteps ) {
 
-    Node<Token *> *answer = new Node<Token *>(NULL), *first = answer;
+    ParsedFile *answer = new ParsedFile(NULL), *first = answer;
     tf->pos.goToPos(ps.start);
     size_t curIntervalIdx = 0;
     while(tf->pos.isBefore(ps.end)) {
@@ -370,17 +370,17 @@ Node<Token *> *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
       if(curIntervalIdx < steps.steps.size()) {
         if(tf->pos.equals(steps.steps[curIntervalIdx].start)) {
 
-          auto child = this->parseStep(tf, steps.steps[curIntervalIdx]);
+          ParsedFile *child = this->parseStep(tf, steps.steps[curIntervalIdx]);
           if(!child) { answer = NULL; break; }
           if(!child->get_data()) {
             for(int i = CHILD(1); i < (int)child->get_neighbors_size(); i++) {
               if(child->get_neighbor(i) == NULL) continue;
-              Node<Token *> *tmp = child->get_neighbor(i);
+              ParsedFile *tmp = child->get_neighbor(i);
               child->unlink(tmp);
-              Node<Token *>::linkFatherAndChild(answer, tmp);
+              ParsedFile::linkFatherAndChild(answer, tmp);
             }
             delete child;
-          } else Node<Token *>::linkFatherAndChild(answer, child);
+          } else ParsedFile::linkFatherAndChild(answer, child);
 
           tf->pos.goToPos(steps.steps[curIntervalIdx].end);
           curIntervalIdx++;
@@ -390,8 +390,8 @@ Node<Token *> *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
       if(answer->get_data() == NULL)
         answer->set_data(currToken(*tf));
       else {
-        Node<Token *> *newNode = new Node<Token *>(NULL);
-        Node<Token *>::linkNodeNextTo(answer, newNode);
+        ParsedFile *newNode = new ParsedFile(NULL);
+        ParsedFile::linkNodeNextTo(answer, newNode);
         newNode->set_data(currToken(*tf));
         answer = newNode;
       }
@@ -401,14 +401,6 @@ Node<Token *> *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
       return first;
     } //else delete first; TODO: free memory
   }
-
-  // print current steps
-  // for(auto step : bestSteps.steps) {
-  //   printf("Key: %s\n", step.key.c_str());
-  //   printf("Line: %d\n", (int)step.start.l);
-  //   printf("Start: %d\n", (int)step.start.e);
-  //   printf("End: %d\n", (int)step.end.e);
-  // }
 
   return NULL;
 }
@@ -456,8 +448,8 @@ void Grammar::printPatterns() {
   }
 }
 
-//traversing the AST and printing the tokens
-void printAST(Node<Token *> *node, string tab) {
+//traversing the ParsedFile and printing the tokens
+void printAST(ParsedFile *node, string tab) {
   if(node == NULL) return;
   printf("%sToken: %s\n", tab.c_str(), node->get_data() ? node->get_data()->text.c_str() : "NULL");
   for(int i = CHILD(1); i < (int)node->get_neighbors_size(); i++) {

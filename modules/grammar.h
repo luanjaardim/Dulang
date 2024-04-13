@@ -137,5 +137,5 @@ Position findStartOfNextElement(
   Position *end
 );
 
-void printAST(Node<Token *> *ast, string tab);
+void printAST(ParsedFile *ast, string tab);
 void printType(Element *e, size_t tab);
