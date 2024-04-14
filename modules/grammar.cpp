@@ -398,6 +398,14 @@ ParsedFile *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
       if(nextToken(tf, 1) == NULL) break;
     }
     if(answer) {
+      if(curIntervalIdx < steps.steps.size()) {
+        printf("Error: not all inner elements were parsed\n");
+        if(currToken(*tf))
+          printf("Parsed fails at line %d, column %d\n", (int)currToken(*tf)->l, (int)currToken(*tf)->c);
+        else if(returnToken(tf, 1))
+          printf("Parsed fails: expecting a token at the end of line %d\n", (int)currToken(*tf)->l);
+        exit(1);
+      } //else delete first; TODO: free memory
       return first;
     } //else delete first; TODO: free memory
   }
