@@ -35,7 +35,8 @@ type_def:
 
 if_stmt:
   "if" <expr> "|" <body>
-  "if" <expr> "|" <body> "else" "|" <body>
+  "else" "if" <expr> "|" <body>
+  "else" "|" <body>
 
 while_stmt:
   "while" <expr> "|" <body>
@@ -122,3 +123,4 @@ data_types:
   "ubyte"                    $ unsigned 1-byte
   "int"                      $ signed 4-bytes
   "uint"                     $ unsigned 4-bytes
+  "none"                     $ void type, nothing to return

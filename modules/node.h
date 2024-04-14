@@ -37,7 +37,27 @@ public:
       delete_data(this->data);
     this->data = data; 
   }
-  Node<T>* get_neighbor(int index) { return neighbors[index]; }
+  Node<T>* get_neighbor(int index) { return index < (int)neighbors.size() ? neighbors[index] : NULL; }
+  Node<T>* get_parent() { return neighbors[PARENT_LINK]; }
+
+  Node<T>* get_brother(int offset_brother) {
+    Node *parent = get_parent();
+    if(parent == NULL)
+      return NULL;
+    vector<Node<T>*> parent_neighbors = parent->neighbors;
+    for(int i = 0; i < (int)parent_neighbors.size(); i++) {
+      if(parent_neighbors[i] == this) {
+        if(i + offset_brother >= 0 && 
+           i + offset_brother < (int)parent_neighbors.size() &&
+           parent_neighbors[i + offset_brother])
+            return parent_neighbors[i + offset_brother];
+        return NULL;
+      }
+    }
+    return NULL;
+  }
+  Node<T>* get_next_brother() { return get_brother(1); }
+  Node<T>* get_prev_brother() { return get_brother(-1); }
   size_t get_neighbors_size() { return neighbors.size(); }
   void push_neighbor_with_data(T data) {
     neighbors.push_back(new Node(data, delete_data));
