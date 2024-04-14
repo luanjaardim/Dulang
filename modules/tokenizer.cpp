@@ -46,6 +46,7 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"@",     TK_TYPE_DEREF},
   {"->",    TK_TYPE_FN_ARROW},
   {"^",     TK_TYPE_TAG_UNION},
+  {"::",    TK_TYPE_PARSE},
   
   //stmt blocks
   {"fn",    TK_BLOCK_FUNC},
@@ -426,13 +427,12 @@ TokenizedFile *readToTokenizedFile(const char *file) {
   readFile(&fr);
   size_t numWord = 0, substrPos = 0, firstSpecialCharPos = numeric_limits<size_t>::max(); //comments = 0, EndOfTheWord = 0;
 
-  // chars that can be concatenated with themselves
-  // everyone besides the ';' can be concatenated with '=', and the ';' can be concatenated with itself
-  const string doubleEspChars = ";=-+*/%<!>"; 
+  // doubleEspChars can be concatenated with themselves, they follow the combinations bellow
+  const string doubleEspChars = ";=-+*/%<!>:"; 
   const vector<string> possibleCombinations = {
-    "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>"
+    "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::"
   };
-  const string singleEspChars = "()[]{}@#|?,:.\'\"";
+  const string singleEspChars = "()[]{}@#|?,.\'\"";
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
   #define ADD_WORD_TILL(pos) fr.word = fr.word.substr(0, pos); \

@@ -75,6 +75,7 @@ typedef enum {
   TK_TYPE_DEREF,
   TK_TYPE_FN_ARROW,
   TK_TYPE_TAG_UNION,
+  TK_TYPE_PARSE,
 
   //statements
   TK_BLOCK_FUNC,

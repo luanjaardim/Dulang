@@ -220,7 +220,7 @@ bool handleElementType(
     }
     Position endOfCurrent = findStartOfNextElement(tf, p, p.elements[idx+1], &tmp, idx+1, end);
     if(endOfCurrent.found == false) return false;
-    if(endOfCurrent.equals(tf->pos)) return true;
+    if(endOfCurrent.equals(tf->pos) && p.elements.size() > idx+1 && p.elements[idx+1]->type != INNER_ELEMENT) return true;
 
     Position start = tf->pos;
     for(auto elem : e->optionalElement.elements) {
@@ -228,7 +228,7 @@ bool handleElementType(
         if(elem_idx + 1 == p.elements.size()) return false;
 
         Element *nextElem = p.elements[elem_idx+1];
-        if(nextElem->type == OPTIONAL) {
+        if(nextElem->type == OPTIONAL || nextElem->type == INNER_ELEMENT) {
           tf->pos.goToPos(start);
           break; //the next optional can take what was not accepted here
         }
@@ -447,11 +447,13 @@ void Grammar::printPatterns() {
   vector<string> humanReadable = { "KEY", "VALUE", "TEXT", "INNER_ELEMENT", "OPTIONAL", "LIST" };
   for( auto key : this->patterns ) {
     printf("Key: %s\n", key.first.c_str());
+    printf("=======================\n");
     for( auto pattern : key.second ) {
       for( auto elem : pattern.elements ) {
         printf("\tElement type: %s\n", humanReadable[(int)elem->type].c_str());
         printType(elem, 16);
       }
+      printf("-----------------------\n");
     }
   }
 }
