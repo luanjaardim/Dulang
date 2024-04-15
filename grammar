@@ -1,58 +1,44 @@
-$ the whole program is a list of statements ended with NEW_LINE('\n')
+$ the whole program is a list of block statements
 root:
   [<stmt>:BLOCK]
 
-$ can be used inside the scope was defined, and in inner scopes
 stmt:
-  <func_def>
-  <var_def>
   <assignment>
+  <cond_stmt>
+  <loop_stmt>
   <type_def>
-  <if_stmt>
-  <while_stmt>
-  "back" <expr>                                    $ return point of a function
-  "stop"                                           $ break point of a loop
-  "skip"                                           $ restart point of a loop
-$ TODO: add a optional NAME after stop and skip for breaking different scope loops
-
-func_def:
-  "fn" <type> NAME ?(":" [<arg>:","]) "|" <body>   $ creating a function
-
-arg: 
-  <type> NAME ?("=" <comptime_val>)
-
-var_def:
-  "var" <type> NAME "=" <expr>                     $ creating a variable
-  ?("const") ?(<type>) NAME "=" <expr>             $ creating a constant, the type can be infered
+  "back" <expr>
+  "skip" ?(NAME)
+  "stop" ?(NAME)
 
 assignment:
-  <primary> "=" <expr>
+  ?("const") <primary> ?("::" <type>) "=" <expr>
+  "var" <primary> "::" <type> "=" <expr>
 
-$ TODO: cannot define a type with multiple lines
-type_def:
-  "type" NAME "|" <user_type>                      $ defining a user type, a name to be used to refer that type
-  "type" NAME "|" <type>                           $ defining an alias to a type
-
-if_stmt:
+cond_stmt:
   "if" <expr> "|" <body>
   "else" "if" <expr> "|" <body>
   "else" "|" <body>
 
-while_stmt:
-  "while" <expr> "|" <body>
+$ the optional NAME and ":" can be used on skip and stop to refer to other loop besides the current
+loop_stmt:
+  ?(NAME ":") "while" <expr> "|" <body>
+  ?(NAME ":") "loop" "|" <body>           $ infinity loop, only exits when stopped
 
-$ for_stmt:
+type_def:
+  "type" NAME "|" <type>             $ defining an alias to a type
 
-$ body is a list of indented new_line separated statements or a just a single statement
 body:
   <stmt>
-  [<stmt>:NEW_LINE]
+  [<stmt>:BLOCK]
 
 expr:
-  <expr> "?" <expr> ":" <expr>
-  "(" <expr> ")"
-  NAME [<expr>:" "]                                $ function call
+  <expr> "?" <expr> ":" <expr>       $ ternary
+  <primary> "[" [<expr>:","] "]"     $ function call, TODO: possible change this to another element
+  <primary> ":" [<expr>:NEXT] "|"
+  <primary>
   <bitwise>
+  <parse>
 
 bitwise:
   <bitwise> "band" <bitwise>
@@ -61,14 +47,18 @@ bitwise:
   <bitwise> "shl" <num>
   <bitwise> "shr" <num>
   <boolean>
-  $ continue...
 
 boolean:
   <boolean> "and" <boolean>
   <boolean> "or" <boolean>
   <boolean> "not" <boolean>
+  <boolean> ">" <boolean>
+  <boolean> ">=" <boolean>
+  <boolean> "==" <boolean>
+  <boolean> "!=" <boolean>
+  <boolean> "<" <boolean>
+  <boolean> "<=" <boolean>
   <num>
-  $ continue...
 
 num:
   <num> "+" <term>
@@ -88,12 +78,17 @@ factor:
   <atom>
 
 primary:
-  <primary> "." <primary>
-  "@" NAME
-  NAME "@" <num>
+  <primary> "." <primary>            $ field access
+  "@" <primary>                        $ dereference pointer
+  <primary> "@" <num>                     $ dereference pointer with some offset
+  NAME
+
+name:
+  NAME                               $ add possible type definition
 
 atom:
-  ?("#") NAME
+  ?("#") NAME                        $ reference to a name(declaration)
+  "fn" [<name>:","] "|" <body>       $ function definition
   <comptime_val>
 
 comptime_val:
@@ -101,18 +96,14 @@ comptime_val:
   CHAR
   STRING
 
-$$
-  A compound type that must have a name to it's fields and possibly a default value
-$$
-user_type:
-  "{" [<arg>:";"] "}"
+parse:
+  <expr> "::" <type>
+
+field: 
+  NAME "::" <type> ?("=" <comptime_val>)
 
 type:
-  "(" <type> ")"             $ greater precedence for parenthesis surrounding types
-  <data_types>
-
-data_types:
-  "{" [<type>:";"] "}"       $ compound type, a type that is a 
+  [<field>:"&"]              $ compound type, a type that is a 
   "#" <type>                 $ pointer to a type
   "?" <type>                 $ nullable pointer to a type
   "#" "[" NUMBER "]" <type>  $ array of NUMBER elements

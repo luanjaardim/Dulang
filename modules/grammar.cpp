@@ -156,6 +156,7 @@ Position findStartOfNextElement(
     tf->pos.goToPos(start);
     return Position();
   }
+  if(nextElem->type == VALUE && nextElem->value.type == VAL_NEXT) return Position(tf->pos.l, tf->pos.e + 1);
 
   TokenizedFile *copy = cloneTokenizedFile(*tf);
   Position currElem = tf->pos;
@@ -200,8 +201,12 @@ bool handleElementType(
   } else if(e->type == INNER_ELEMENT) {
 
     PatternSteps tmp = PatternSteps(steps->parentPatternKey);
-    Position endOfCurrent = findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
-    if(endOfCurrent.found == false) return false;
+    Position endOfCurrent = (elem_idx + 1 == p.elements.size()) ? 
+              *end :
+              findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
+    // WARN: the change bellow may broke something
+    if(endOfCurrent.found == false) endOfCurrent.goToPos(*end);
+    if(tf->pos.equals(endOfCurrent)) return false;
     steps->steps.push_back( 
       PatternStep(e->innerElement.elem, tf->pos, endOfCurrent)
     );
@@ -218,9 +223,12 @@ bool handleElementType(
         break;
       }
     }
-    Position endOfCurrent = findStartOfNextElement(tf, p, p.elements[idx+1], &tmp, idx+1, end);
+    Position endOfCurrent = (elem_idx + 1 == p.elements.size()) ? 
+              *end :
+              findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
     if(endOfCurrent.found == false) return false;
-    if(endOfCurrent.equals(tf->pos) && p.elements.size() > idx+1 && p.elements[idx+1]->type != INNER_ELEMENT) return true;
+    if(endOfCurrent.equals(tf->pos) && 
+      (p.elements.size() == idx+1 || (p.elements.size() > idx+1 && p.elements[idx+1]->type != INNER_ELEMENT))) return true;
 
     Position start = tf->pos;
     for(auto elem : e->optionalElement.elements) {
@@ -242,27 +250,25 @@ bool handleElementType(
     Position nextElementStart = findStartOfNextElement(tf, p, p.elements[elem_idx+1], &tmp, elem_idx+1, end);
     if(nextElementStart.found == false) return false;
 
-    Position sep_pos = {};
-    while(tf->pos.isBefore(nextElementStart)) { //iterate over the list
+    bool failed;
+    Position sep_pos = tf->pos, prev_pos = tf->pos;
+    while(tf->pos.isBefore(nextElementStart)) {
+      prev_pos.goToPos(tf->pos);
       sep_pos = findStartOfNextElement(tf, p, e->list.separator, &tmp, elem_idx, end);
-      // TODO: verifies func_def args with a comma without anything after
       if(sep_pos.found == false) {
-        steps->steps.push_back(
-          PatternStep(e->list.e->innerElement.elem, tf->pos, nextElementStart)
-        );
-        tf->pos.goToPos(nextElementStart);
-        return true;
-      }
-      Position lastPos = nextElementStart.e > 0 ? Position(nextElementStart.l, nextElementStart.e-1) : nextElementStart;
-      if(sep_pos.equals(lastPos) || sep_pos.isAfter(lastPos)) {
+        failed = !handleElementType(tf, p, e->list.e, steps, elem_idx, &nextElementStart);
         break;
       }
-      steps->steps.push_back(
-        PatternStep(e->list.e->innerElement.elem, tf->pos, sep_pos)
-      );
-      tf->pos.goToPos(sep_pos);
-      //consumes separator
-      if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
+      else {
+        failed = !handleElementType(tf, p, e->list.e, steps, elem_idx, &sep_pos);
+        //consumes separator
+        tf->pos.goToPos(sep_pos);
+        if(!handleElementType(tf, p, e->list.separator, steps, elem_idx, end)) return false;
+
+        //returning for try again on next separator
+        if(failed)
+          tf->pos.goToPos(prev_pos);
+      }
     }
 
   } else if(e->type == VALUE){
