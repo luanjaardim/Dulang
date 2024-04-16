@@ -207,6 +207,7 @@ bool handleElementType(
     // WARN: the change bellow may broke something
     if(endOfCurrent.found == false) endOfCurrent.goToPos(*end);
     if(tf->pos.equals(endOfCurrent)) return false;
+
     steps->steps.push_back( 
       PatternStep(e->innerElement.elem, tf->pos, endOfCurrent)
     );

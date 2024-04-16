@@ -103,13 +103,20 @@ field:
   NAME "::" <type> ?("=" <comptime_val>)
 
 type:
-  [<field>:"&"]              $ compound type, a type that is a 
+  "(" <type> ")"
+  [<field>:"&"]              $ compound type, a struct
+  <tag_type>
+
+tag_type:
+  <type> "^" <type>          $ tagged union types
+  <type> "->" <type>         $ functions types
+  <basic_type>
+
+basic_type:
   "#" <type>                 $ pointer to a type
   "?" <type>                 $ nullable pointer to a type
   "#" "[" NUMBER "]" <type>  $ array of NUMBER elements
   "#" "*" <type>             $ pointer to an array null terminated
-  <type> "^" <type>          $ tagged union types
-  <type> "->" <type>         $ functions types
   "byte"                     $ signed 1-byte
   "ubyte"                    $ unsigned 1-byte
   "int"                      $ signed 4-bytes
