@@ -336,8 +336,12 @@ ParsedFile *Grammar::parseStep(TokenizedFile *tf, PatternStep ps) {
         //Choose for the one that consumed more tokens till now
         vector<size_t> vTmp = {}, vBest = {};
         for(int i = 0; i < (int)bestSteps.steps.size(); i++) {
-          vTmp.push_back(tmpSteps.steps[i].end.e - tmpSteps.steps[i].start.e);
-          vBest.push_back(bestSteps.steps[i].end.e - bestSteps.steps[i].start.e);
+          vTmp.push_back(0);
+          tf->pos.goToPos(tmpSteps.steps[i].start);
+          while(tf->pos.isBefore(tmpSteps.steps[i].end)) { vTmp.back()++; nextToken(tf, 1); }
+          vBest.push_back(0);
+          tf->pos.goToPos(bestSteps.steps[i].start);
+          while(tf->pos.isBefore(bestSteps.steps[i].end)) { vBest.back()++; nextToken(tf, 1); }
         }
         size_t sumTmp = accumulate(vTmp.begin(), vTmp.end(), 0), sumBest = accumulate(vBest.begin(), vBest.end(), 0);
         if(sumTmp < sumBest) {
