@@ -46,8 +46,9 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"@",     TK_TYPE_DEREF},
   {"->",    TK_TYPE_FN_ARROW},
   {"^",     TK_TYPE_TAG_UNION},
+  {"&",     TK_TYPE_COMPOUND},
   {"::",    TK_TYPE_PARSE},
-  
+
   //stmt blocks
   {"fn",    TK_BLOCK_FUNC},
   {"if",    TK_BLOCK_IF},
@@ -432,7 +433,7 @@ TokenizedFile *readToTokenizedFile(const char *file) {
   const vector<string> possibleCombinations = {
     "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::"
   };
-  const string singleEspChars = "()[]{}@#|?,.\'\"";
+  const string singleEspChars = "()[]{}@#&|?,.\'\"";
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
   #define ADD_WORD_TILL(pos) fr.word = fr.word.substr(0, pos); \
