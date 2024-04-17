@@ -34,8 +34,7 @@ body:
 
 expr:
   <expr> "?" <expr> ":" <expr>       $ ternary
-  <primary> "[" [<expr>:","] "]"     $ function call, TODO: possible change this to another element
-  <primary> ":" [<expr>:NEXT] "|"
+  <primary> "(" [<expr>:","] ")"     $ function call, TODO: possible change this to another element
   <primary>
   <bitwise>
   <parse>
@@ -84,7 +83,8 @@ primary:
   NAME
 
 name:
-  NAME                               $ add possible type definition
+  NAME
+  <name> "::" <type>
 
 atom:
   ?("#") NAME                        $ reference to a name(declaration)
