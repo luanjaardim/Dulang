@@ -40,27 +40,26 @@ struct OperationToken {
 };
 
 struct OperationFuncDef {
-    string name;
     vector<Variable> args;
-    Type returnType;
+    Type type;
     vector<AnalyzedParsedFile *> ops;
 };
 
 struct OperationVarDef {
     Variable var;
-    OperationToken value;
+    AnalyzedParsedFile *value;
 };
 
 struct OperationCond {
     enum CondType {
         NONE = 0, IF = 1, ELSE = 2, ELSE_IF = 3
     } type;
-    OperationToken expr;
+    AnalyzedParsedFile *expr;
     vector<AnalyzedParsedFile *> ops;
 };
 
 struct OperationLoop {
-    OperationToken expr;
+    AnalyzedParsedFile *expr;
     vector<AnalyzedParsedFile *> ops;
 };
 
