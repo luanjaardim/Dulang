@@ -1,18 +1,24 @@
 #include "analyzer.h"
 #include "utils.h"
 
+AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
+
 Type analyzeType(ParsedFile *tokens) {
   if(tokens == NULL)
     return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
 
   TokenType type = tokens->get_data()->type;
-  if(type == TK_TYPE_FN_ARROW || type == TK_TYPE_TAG_UNION) {
+  if(type == TK_TYPE_FN_ARROW || type == TK_TYPE_TAG_UNION || type == TK_TYPE_COMPOUND) {
     Type firstChild = analyzeType(tokens->get_neighbor(CHILD(1)));
     Type secondChild = analyzeType(tokens->get_neighbor(CHILD(2)));
+    string innerText[3] = {" -> ", " ^ ", " & " };
+    BaseType types[3] = {TYPE_FUNC, TYPE_TAG_UNION, TYPE_COMPOUND};
+    vector<Type> subTypes = {firstChild};
+    subTypes.insert(subTypes.end(), secondChild.subTypes.begin(), secondChild.subTypes.end());
     return Type{
-      .textType = firstChild.textType + (type == TK_TYPE_FN_ARROW ? " -> " : " ^ ") + secondChild.textType,
-      .base = TYPE_COMPOUND,
-      .subTypes = {firstChild, secondChild}
+      .textType = firstChild.textType + innerText[type - TK_TYPE_FN_ARROW] + secondChild.textType,
+      .base = types[type - TK_TYPE_FN_ARROW],
+      .subTypes = subTypes
     }; 
   } else if(type == TK_TYPE_REF) {
     Type t = analyzeType(tokens->get_neighbor(CHILD(1)));
@@ -23,24 +29,22 @@ Type analyzeType(ParsedFile *tokens) {
     return Type{.textType = "byte", .base = TYPE_BYTE, .subTypes = {}};
   } else if(type == TK_TYPE_NONE) {
     return Type{.textType = "none", .base = TYPE_NONE, .subTypes = {}};
+  } else if(type == TK_NAME) {
+    return Type{.textType = tokens->get_data()->text, .base = TYPE_USER_DEFINED, .subTypes = {}};
   } else {
     return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
   }
 }
 
-Type analyzeExprType(ParsedFile *tokens) {
-  (void)tokens;
-  return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
-}
-
 // must be a name followed by a type as a child, and it will return a Variable
-Variable analyzeNameAndType(ParsedFile *tokens) {
+Variable analyzeParseType(ParsedFile *tokens) {
+  Token *name = tokens->get_neighbor(CHILD(1))->get_data();
   return Variable{
-    .id = tokens->get_data()->id,
-    .name = tokens->get_data()->text,
+    .id = name->id,
+    .name = name->text,
     .mut = false,
-    .pos = Position(tokens->get_data()->l, tokens->get_data()->c),
-    .type = analyzeType(tokens->get_neighbor(CHILD(1)))
+    .pos = Position(name->l, name->c),
+    .type = analyzeType(tokens->get_neighbor(CHILD(2)))
   };
 }
 
@@ -80,23 +84,38 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
   if(tokens->get_data()->type == TK_CONSTANT || tokens->get_data()->type == TK_VARIABLE) {
     //mutable?
     varDef.var.mut = tokens->get_data()->type == TK_VARIABLE;
-    //type of the variable
-    varDef.var.type = analyzeType(tmp->get_neighbor(CHILD(1)));
-
     //name of the variable
+    Token *name = tmp->get_neighbor(CHILD(1))->get_data();
+    varDef.var.name = name->text;
+    varDef.var.pos = Position(name->l, name->c);
+    varDef.var.id = name->id;
+
+    //type of the variable
     tmp = tmp->get_neighbor(RIGHT_LINK);
-    varDef.var.name = tmp->get_data()->text;
-    varDef.var.id = tmp->get_data()->id;
-  } else if(tokens->get_data()->type == TK_NAME)
-    varDef.var = analyzeNameAndType(tokens);
+    if(tmp->get_data()->type == TK_VARIABLE || tmp->get_data()->type == TK_TYPE_PARSE) {
+      varDef.var.type = analyzeType(tmp->get_neighbor(CHILD(1)));
+      tmp = tmp->get_neighbor(RIGHT_LINK);
+    } else {
+      varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
+    }
+    tmp = tmp->get_neighbor(CHILD(1));
+  } else if(tokens->get_data()->type == TK_TYPE_PARSE) {
+    varDef.var = analyzeParseType(tokens);
+    tmp = tmp->get_neighbor(RIGHT_LINK);
+    tmp = tmp->get_neighbor(CHILD(1));
+    printAST(tmp, "");
+  } else if(tokens->get_data()->type == TK_ASSIGN) {
+    varDef.var.mut = false;
+    Token *name = tmp->get_neighbor(CHILD(1))->get_data();
+    varDef.var.name = name->text;
+    varDef.var.pos = Position(name->l, name->c);
+    varDef.var.id = name->id;
+    varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
+    tmp = tmp->get_neighbor(CHILD(2));
+  }
 
   //goes to the value of the variable
-  tmp = tmp->get_neighbor(RIGHT_LINK)->get_neighbor(CHILD(1));
   AnalyzedParsedFile *node = analyzeParsedFile(tmp);// TODO: delete node
-  if(node->get_data()->type != OP_TOKEN) {
-    printf("Error: variable must have a value\n");
-    exit(1);
-  }
   varDef.value = node->get_data()->tk;
   return new AnalyzedParsedFile(
             new Operation(varDef, Position(tokens->get_data()->l, tokens->get_data()->c))
@@ -121,12 +140,7 @@ AnalyzedParsedFile *analyzeCond(ParsedFile *tokens) {
   }
   if(tmp->get_data()->type == TK_BLOCK_IF ) {
     ParsedFile *child = tmp->get_neighbor(CHILD(1));
-    // TODO: remove this by not allowing expression to be empty
-    if(child == NULL) {
-      printf("Error: if without condition at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
-      exit(1);
-    }
-    cond.expr = OperationToken{.tk = child->get_data(), .type = analyzeExprType(child)};
+    cond.expr = analyzeToken(child)->get_data()->tk; // TODO: free data
     //goes to the operations
     tmp = tmp->get_neighbor(RIGHT_LINK);
     condType = condType == 0 ? OperationCond::IF : OperationCond::ELSE_IF;
@@ -144,7 +158,7 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
   ParsedFile *tmp = tokens;
   OperationLoop loop;
   if(tmp->get_data()->type == TK_BLOCK_WHILE) {
-    loop.expr = OperationToken{.tk = tmp->get_data(), .type = analyzeExprType(tmp)};
+    loop.expr = analyzeToken(tmp)->get_data()->tk; // TODO: free data 
     //goes to the operations
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
@@ -157,7 +171,34 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
 }
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
-  OperationToken tk = OperationToken{.tk = tokens->get_data(), .type = analyzeType(tokens)};
+  Type t;
+  switch(tokens->get_data()->type) {
+    case TK_TYPE_PARSE:
+    {
+      t = analyzeType(tokens->get_neighbor(CHILD(2)));
+      tokens = tokens->get_neighbor(CHILD(1));
+    }
+    break;
+    case TK_INT:
+      { t = Type{.textType = "int", .base = TYPE_INT, .subTypes = {}}; }
+    break;
+    case TK_STR:
+    { 
+      t = Type{.textType = "#byte", .base = TYPE_REF, .subTypes = {Type{
+        .textType = "byte", .base = TYPE_BYTE, .subTypes = {}
+      }}}; 
+    }
+    break;
+    case TK_CHAR:
+      { t = Type{.textType = "byte", .base = TYPE_BYTE, .subTypes = {}}; }
+    break;
+    case TK_NAME:
+      { t = Type{.textType = tokens->get_data()->text, .base = TYPE_USER_DEFINED, .subTypes = {}}; }
+    break;
+    default:
+      { t = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}; }
+  }
+  OperationToken tk = OperationToken{.tk = tokens->get_data(), .type = t};
   AnalyzedParsedFile *node = new AnalyzedParsedFile(
     new Operation(tk, Position(tokens->get_data()->l, tokens->get_data()->c))
   );
@@ -176,8 +217,9 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
       return analyzeFunc(tokens);
     case TK_VARIABLE:
     case TK_CONSTANT:
-        return analyzeVar(tokens);
-    case TK_NAME:
+    case TK_ASSIGN:
+      return analyzeVar(tokens);
+    case TK_TYPE_PARSE:
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ASSIGN)
         return analyzeVar(tokens);
       return analyzeToken(tokens);
@@ -215,7 +257,7 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
       }
       break;
     case OP_VAR_DEF:
-      cout << tab << "Variable def: " << op->varDef.var.name << " Type: " << op->varDef.var.type.textType << endl;
+      cout << tab << "Variable def: " << op->varDef.var.name << " Type: " << op->varDef.var.type.textType << " Mutable: " << op->varDef.var.mut << endl;
       cout << tab+"  " << "Value: " << op->varDef.value.tk->text << " Type: " << op->varDef.value.type.textType << endl;
       break;
     case OP_COND:

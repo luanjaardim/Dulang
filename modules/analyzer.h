@@ -12,6 +12,7 @@ enum BaseType {
     TYPE_TAG_UNION,  //enum
     TYPE_FUNC,
     TYPE_NONE,
+    TYPE_USER_DEFINED,
     TYPE_UNKNOWN,
 };
 
