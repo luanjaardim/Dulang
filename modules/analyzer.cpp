@@ -3,6 +3,36 @@
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
 
+string typeString(Type t) {
+  switch(t.base) {
+    case TYPE_FUNC:
+    case TYPE_TAG_UNION:
+    case TYPE_COMPOUND:
+    {
+      string symbol[3] = {" -> ", " ^ ", " & " };
+      string typeText = "";
+      for(int i = 0; i < (int)t.subTypes.size(); i++) {
+        Type s = t.subTypes[i];
+        typeText += (s.base >= TYPE_FUNC && s.base <= TYPE_COMPOUND ? 
+            "(" + typeString(s) + ")" : typeString(s)) + (i != (int)t.subTypes.size() - 1 ? symbol[t.base - TYPE_FUNC] : "");
+      }
+      return typeText;
+    }
+    case TYPE_REF:
+      return "#" + typeString(t.subTypes[0]);
+    case TYPE_INT:
+      return "int";
+    case TYPE_BYTE:
+      return "byte";
+    case TYPE_NONE:
+      return "none";
+    case TYPE_USER_DEFINED:
+      return t.textType;
+    default:
+      return "unknown";
+  }
+}
+
 Type analyzeType(ParsedFile *tokens) {
   if(tokens == NULL)
     return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
@@ -14,7 +44,10 @@ Type analyzeType(ParsedFile *tokens) {
     string innerText[3] = {" -> ", " ^ ", " & " };
     BaseType types[3] = {TYPE_FUNC, TYPE_TAG_UNION, TYPE_COMPOUND};
     vector<Type> subTypes = {firstChild};
-    subTypes.insert(subTypes.end(), secondChild.subTypes.begin(), secondChild.subTypes.end());
+    if(secondChild.base == types[type - TK_TYPE_FN_ARROW])
+      subTypes.insert(subTypes.end(), secondChild.subTypes.begin(), secondChild.subTypes.end());
+    else
+      subTypes.push_back(secondChild);
     return Type{
       .textType = firstChild.textType + innerText[type - TK_TYPE_FN_ARROW] + secondChild.textType,
       .base = types[type - TK_TYPE_FN_ARROW],
@@ -62,13 +95,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   }
   t.subTypes.push_back(Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}); //return type
   //get the function type as text
-  t.textType = t.subTypes.front().textType;
-  for(int i = 1; i < (int)t.subTypes.size(); i++) {
-    if(t.subTypes[i].base == TYPE_FUNC || t.subTypes[i].base == TYPE_TAG_UNION || t.subTypes[i].base == TYPE_COMPOUND)
-      t.textType += " -> (" + t.subTypes[i].textType + ")";
-    else
-      t.textType += " -> " + t.subTypes[i].textType;
-  }
+  t.textType = typeString(t);
   funcDef.type = t;
 
   //goes to the operations

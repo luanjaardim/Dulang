@@ -8,9 +8,9 @@ enum BaseType {
     TYPE_INT,
     TYPE_BYTE,
     TYPE_REF,
-    TYPE_COMPOUND,   //struct
+    TYPE_FUNC,       //function, WARN: do not change it's position in the enum
     TYPE_TAG_UNION,  //enum
-    TYPE_FUNC,
+    TYPE_COMPOUND,   //struct
     TYPE_NONE,
     TYPE_USER_DEFINED,
     TYPE_UNKNOWN,
