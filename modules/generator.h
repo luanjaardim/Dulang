@@ -1,27 +1,45 @@
-#ifndef GENERATOR_H_
-#define GENERATOR_H_
+#include "analyzer.h"
 
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <assert.h>
+enum ScopeType {
+    SCOPE_FUNC,
+    SCOPE_LOOP,
+    SCOPE_COND,
+};
 
-#include "parser.h"
-#include "map.h"
-#include "utils.h"
+struct Scope {
+    ScopeType type;
+    vector<Variable> defs;
+    Scope(ScopeType type) : type(type) { }
+};
 
-typedef struct {
-    Map *var_map;
-    Map *func_map;
-    int currConditional;
-    int currLoop;
-    int prev_rsp; //used to know what variables were created inside a block and will be deallocated
-} Generator;
+struct Generator {
+    Generator() {};
+    vector<Scope> scopes;
 
-void generateDulangFile(FILE *f, ParsedFile *pf);
-void translateExpression(FILE *f, Expression *expr, Generator g);
+    void addDefinition(Variable v) { scopes.back().defs.push_back(v); }
+    void popDefinition() { scopes.pop_back(); }
+    Variable getLastDefinition() {
+        if(!this->scopes.empty() && !this->scopes.back().defs.empty()) 
+            return this->scopes.back().defs.back();
+        else { printf("Trying to get last definition that does not exist"); exit(1); }
+    }
+    Variable findDefinition(string name, Position pos) {
+        Variable v;
+        bool found = false;
+        for( int i = scopes.size() - 1 && !found; i >= 0; i ++) {
+            for(int j = scopes[i].defs.size() - 1 && !found; j >= 0; j ++) {
+                if(scopes[i].defs[j].name == name) {
+                    v = scopes[i].defs[j];
+                    found = true;
+                }
+            }
+        }
+        if(!found) {
+            printf("Variable of name: %s, is not defined. At line: %d and col: %d", name.c_str(), (int)pos.l, (int)pos.e);
+            exit(1);
+        } else return v;
+    }
+    string convertASTtoC(AnalyzedParsedFile *ast);
+};
 
-#endif // GENERATOR_H_
+
