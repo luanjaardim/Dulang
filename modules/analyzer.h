@@ -69,6 +69,7 @@ enum OperationType {
     OP_VAR_DEF, //variable definition
     OP_COND, //if, else if and else
     OP_LOOP, //while and loop
+    // TODO: Add function call operation and type definitions
 };
 
 struct Operation {

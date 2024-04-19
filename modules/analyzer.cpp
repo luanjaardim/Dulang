@@ -86,7 +86,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   OperationFuncDef funcDef;
   Type t;
   t.base = TYPE_FUNC;
-  while(tmp->get_data()->type != TK_END_BAR) {
+  while(tmp->get_data()->type != TK_END_BAR && tmp->get_data()->type != TK_FN_RETURN) {
     if(tmp->get_neighbors_size() > CHILD(1)) {
       funcDef.args.push_back(analyzeParseType(tmp->get_neighbor(CHILD(1)))); //get the arguments
       t.subTypes.push_back(funcDef.args.back().type); //get to make the type of the function
@@ -94,7 +94,12 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
   if(t.subTypes.empty()) t.subTypes.push_back(Type{.textType = "none", .base = TYPE_NONE, .subTypes = {}}); //no arguments
-  t.subTypes.push_back(Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}); //return type
+  if(tmp->get_data()->type != TK_FN_RETURN)
+    t.subTypes.push_back(Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}); //return type
+  else {
+    t.subTypes.push_back(analyzeType(tmp->get_neighbor(CHILD(1)))); //return type
+    tmp = tmp->get_neighbor(RIGHT_LINK);
+  }
   //get the function type as text
   t.textType = typeString(t);
   funcDef.type = t;

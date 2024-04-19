@@ -108,6 +108,7 @@ typedef enum {
   TK_EXCLA,
   TK_SEMICOLON,
   TK_DOUB_SEMICOLON,
+  TK_FN_RETURN,
 
   //special tokens
   SYSCALL_TK,

@@ -80,6 +80,7 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"!",     TK_EXCLA},
   {";",     TK_SEMICOLON},
   {";;",    TK_DOUB_SEMICOLON},
+  {"=>",    TK_FN_RETURN},
 
   //special tokens
   {"sys",   SYSCALL_TK},

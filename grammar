@@ -8,8 +8,10 @@ stmt:
   <loop_stmt>
   <type_def>
   "back" <expr>
-  "skip" ?(NAME)
-  "stop" ?(NAME)
+  "skip"
+  "skip" NAME
+  "stop"
+  "stop" NAME
 
 assignment:
   ?("const") <primary> ?("::" <type>) "=" <expr>
@@ -88,7 +90,7 @@ name:
 
 atom:
   ?("#") NAME                        $ reference to a name(declaration)
-  "fn" [<name>:","] "|" <body>       $ function definition
+  "fn" [<name>:","] ?("=>" <type>) "|" <body>       $ function definition
   <comptime_val>
 
 comptime_val:
