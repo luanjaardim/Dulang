@@ -87,12 +87,13 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   Type t;
   t.base = TYPE_FUNC;
   while(tmp->get_data()->type != TK_END_BAR) {
-    if(tmp->get_neighbors_size() >= CHILD(1)) {
+    if(tmp->get_neighbors_size() > CHILD(1)) {
       funcDef.args.push_back(analyzeParseType(tmp->get_neighbor(CHILD(1)))); //get the arguments
       t.subTypes.push_back(funcDef.args.back().type); //get to make the type of the function
     }
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
+  if(t.subTypes.empty()) t.subTypes.push_back(Type{.textType = "none", .base = TYPE_NONE, .subTypes = {}}); //no arguments
   t.subTypes.push_back(Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}); //return type
   //get the function type as text
   t.textType = typeString(t);
