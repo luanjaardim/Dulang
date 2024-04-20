@@ -1,6 +1,7 @@
 #include "analyzer.h"
 
 enum ScopeType {
+    SCOPE_GLOBAL,
     SCOPE_FUNC,
     SCOPE_LOOP,
     SCOPE_COND,
@@ -14,7 +15,7 @@ struct Scope {
 
 struct Generator {
     Generator() {};
-    vector<Scope> scopes;
+    vector<Scope> scopes = {Scope(SCOPE_GLOBAL)};
 
     void addDefinition(Variable v) { scopes.back().defs.push_back(v); }
     void popDefinition() { scopes.pop_back(); }

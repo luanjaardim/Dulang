@@ -67,6 +67,11 @@ struct OperationLoop {
     vector<AnalyzedParsedFile *> ops;
 };
 
+struct OperationFuncCall {
+    string funcName;
+    vector<AnalyzedParsedFile *> params;
+};
+
 enum OperationType {
     OP_TOKEN, //default operation, only one token
     OP_FUNC_DEF, //function definition
@@ -74,6 +79,7 @@ enum OperationType {
     OP_TYPE_DEF,
     OP_COND, //if, else if and else
     OP_LOOP, //while and loop
+    OP_FUNC_CALL,
     // TODO: Add function call operation and type definitions
 };
 
@@ -87,6 +93,7 @@ struct Operation {
         OperationTypeDef typeDef;
         OperationCond cond;
         OperationLoop loop;
+        OperationFuncCall funcCall;
     };
 
     Operation(OperationToken tk, Position p) : pos(p), type(OP_TOKEN), tk(tk) {}
@@ -95,6 +102,7 @@ struct Operation {
     Operation(OperationVarDef varDef, Position p) : pos(p), type(OP_VAR_DEF), varDef(varDef) {}
     Operation(OperationCond cond, Position p) : pos(p), type(OP_COND), cond(cond) {}
     Operation(OperationLoop loop, Position p) : pos(p), type(OP_LOOP), loop(loop) {}
+    Operation(OperationFuncCall funcCall, Position p) : pos(p), type(OP_FUNC_CALL), funcCall(funcCall) {}
 };
 
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);

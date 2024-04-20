@@ -214,6 +214,19 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
   return new AnalyzedParsedFile(new Operation(loop, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
+AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
+  OperationFuncCall funcCall;
+  ParsedFile *tmp = tokens;
+  Token *name = tmp->get_data();
+  funcCall.funcName = name->text;
+  tmp = tmp->get_neighbor(RIGHT_LINK);
+  while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
+    funcCall.params.push_back(analyzeToken(tmp->get_neighbor(CHILD(1))));
+    tmp = tmp->get_neighbor(RIGHT_LINK);
+  }
+  return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
+
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
   Type t;
   switch(tokens->get_data()->type) {
@@ -274,6 +287,10 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
       return analyzeCond(tokens);
     case TK_BLOCK_WHILE:
       return analyzeLoop(tokens);
+    case TK_NAME:
+      if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
+        return analyzeFuncCall(tokens);
+      return analyzeToken(tokens);
     default:
       return analyzeToken(tokens);
   }
@@ -339,6 +356,16 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
       {
         OperationTypeDef typeDef = op->typeDef;
         cout << tab << "New type defined: " << typeDef.var.name << " alias of: " << typeDef.var.type.textType << endl;
+        break;
+      }
+    case OP_FUNC_CALL:
+      {
+        OperationFuncCall funcCall = op->funcCall;
+        cout << tab << "Function call: " << funcCall.funcName << endl;
+        cout << tab+"  " << "Params: " << endl;
+        for(auto p : funcCall.params) {
+          printAnalyzerParsedFile(p, tab+"    ");
+        }
         break;
       }
     default:

@@ -76,27 +76,36 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         this->popDefinition();                  //end of function scope
       } else {
         this->addDefinition(op->varDef.var);
-        text = convertToCVariable(op->varDef.var) + " = " + this->convertASTtoC(op->varDef.value);
+        text = convertToCVariable(op->varDef.var) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
         text += this->convertASTtoC(ast->get_neighbor(RIGHT_LINK));
       }
+    break;
+    case OP_FUNC_CALL:
+    {
+      OperationFuncCall fnCall = op->funcCall;
+      text = fnCall.funcName + "(";
+      for(int i = 0; i < (int)fnCall.params.size(); i++) {
+        text += this->convertASTtoC(fnCall.params[i]);
+        if(i != (int)fnCall.params.size() - 1) text += ",";
+      }
+      text += ")";
+    }
     break;
     case OP_TOKEN:
     {
       OperationToken tk = op->tk;
       switch(tk.tk->type) {
         case TK_BLOCK_BACK:
-          text = "return " + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+          text = "return " + this->convertASTtoC(ast->get_neighbor(CHILD(1))) + ";";
           break;
         default:
           text = tk.tk->text;
       }
-      text += ";\n";
     }
     break;
-    case OP_LOOP:
-    case OP_COND:
     default:
-      printf("not implemented yet\n");
+      printf("not implemented yet:\n");
+      printAnalyzerParsedFile(ast, "");
       exit(1);
   }
   return text;
