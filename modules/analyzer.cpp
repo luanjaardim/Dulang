@@ -112,7 +112,18 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
 
   return new AnalyzedParsedFile(new Operation(funcDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
+AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens) {
+  OperationTypeDef typeDef;
+  ParsedFile *tmp = tokens;
+  tmp = tmp->get_neighbor(RIGHT_LINK); //go to the name of the new type
+  typeDef.var.name = tmp->get_data()->text;
+  typeDef.var.id = tmp->get_data()->id;
+  typeDef.var.pos = Position(tmp->get_data()->l, tmp->get_data()->l);
+  tmp = tmp->get_neighbor(RIGHT_LINK); //go to the end bar
+  typeDef.var.type = analyzeType(tmp->get_neighbor(CHILD(1)));
 
+  return new AnalyzedParsedFile(new Operation(typeDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
 AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
   OperationVarDef varDef;
   ParsedFile *tmp = tokens;
@@ -248,6 +259,8 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
   switch(tokens->get_data()->type) {
     case TK_BLOCK_FUNC:
       return analyzeFunc(tokens);
+    case TK_BLOCK_TYPE:
+      return analyzeTypeDef(tokens);
     case TK_VARIABLE:
     case TK_CONSTANT:
     case TK_ASSIGN:
@@ -321,7 +334,15 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
           printAnalyzerParsedFile(o, tab+"    ");
         }
         break;
-
       }
+    case OP_TYPE_DEF:
+      {
+        OperationTypeDef typeDef = op->typeDef;
+        cout << tab << "New type defined: " << typeDef.var.name << " alias of: " << typeDef.var.type.textType << endl;
+        break;
+      }
+    default:
+      printf("not implemented yet\n");
+      exit(1);
   }
 }

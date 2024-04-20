@@ -50,6 +50,10 @@ struct OperationVarDef {
     AnalyzedParsedFile *value;
 };
 
+struct OperationTypeDef {
+    Variable var; //has the name to alias the type
+};
+
 struct OperationCond {
     enum CondType {
         NONE = 0, IF = 1, ELSE = 2, ELSE_IF = 3
@@ -67,6 +71,7 @@ enum OperationType {
     OP_TOKEN, //default operation, only one token
     OP_FUNC_DEF, //function definition
     OP_VAR_DEF, //variable definition
+    OP_TYPE_DEF,
     OP_COND, //if, else if and else
     OP_LOOP, //while and loop
     // TODO: Add function call operation and type definitions
@@ -79,12 +84,14 @@ struct Operation {
         OperationToken tk;
         OperationFuncDef funcDef;
         OperationVarDef varDef;
+        OperationTypeDef typeDef;
         OperationCond cond;
         OperationLoop loop;
     };
 
     Operation(OperationToken tk, Position p) : pos(p), type(OP_TOKEN), tk(tk) {}
     Operation(OperationFuncDef funcDef, Position p) : pos(p), type(OP_FUNC_DEF), funcDef(funcDef) {}
+    Operation(OperationTypeDef typeDef, Position p) : pos(p), type(OP_TYPE_DEF), typeDef(typeDef) {}
     Operation(OperationVarDef varDef, Position p) : pos(p), type(OP_VAR_DEF), varDef(varDef) {}
     Operation(OperationCond cond, Position p) : pos(p), type(OP_COND), cond(cond) {}
     Operation(OperationLoop loop, Position p) : pos(p), type(OP_LOOP), loop(loop) {}
