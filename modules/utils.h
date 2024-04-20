@@ -80,6 +80,7 @@ typedef enum {
 
   //statements
   TK_BLOCK_FUNC,
+  TK_BLOCK_TYPE,
   TK_BLOCK_IF,
   TK_BLOCK_ELSE,
   TK_BLOCK_WHILE,

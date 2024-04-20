@@ -14,8 +14,8 @@ stmt:
   "stop" NAME
 
 assignment:
-  ?("const") <primary> ?("::" <type>) "=" <expr>
-  "var" <primary> "::" <type> "=" <expr>
+  ?("const") <primary> ?("::" <some_type>) "=" <expr>
+  "var" <primary> "::" <some_type> "=" <expr>
 
 cond_stmt:
   "if" <expr> "|" <body>
@@ -28,7 +28,7 @@ loop_stmt:
   ?(NAME ":") "loop" "|" <body>           $ infinity loop, only exits when stopped
 
 type_def:
-  "type" NAME "|" <type>             $ defining an alias to a type
+  "type" NAME "|" <some_type>             $ defining an alias to a type
 
 body:
   <stmt>
@@ -86,11 +86,11 @@ primary:
 
 name:
   NAME
-  <name> "::" <type>
+  <name> "::" <some_type>
 
 atom:
   ?("#") NAME                        $ reference to a name(declaration)
-  "fn" [<name>:","] ?("=>" <type>) "|" <body>       $ function definition
+  "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
   <comptime_val>
 
 comptime_val:
@@ -99,28 +99,29 @@ comptime_val:
   STRING
 
 parse:
-  <expr> "::" <type>
+  <expr> "::" <some_type>
 
 field: 
-  NAME "::" <type> ?("=" <comptime_val>)
+  NAME "::" <some_type> ?("=" <comptime_val>)
 
-type:
-  "(" <type> ")"
+some_type:
+  "(" <some_type> ")"
   [<field>:"&"]              $ compound type, a struct
   <tag_type>
 
 tag_type:
-  <type> "^" <type>          $ tagged union types
-  <type> "->" <type>         $ functions types
+  <some_type> "^" <some_type>          $ tagged union types
+  <some_type> "->" <some_type>         $ functions types
   <basic_type>
 
 basic_type:
-  "#" <type>                 $ pointer to a type
-  "?" <type>                 $ nullable pointer to a type
-  "#" "[" NUMBER "]" <type>  $ array of NUMBER elements
-  "#" "*" <type>             $ pointer to an array null terminated
+  "#" <some_type>                 $ pointer to a type
+  "?" <some_type>                 $ nullable pointer to a type
+  "#" "[" NUMBER "]" <some_type>  $ array of NUMBER elements
+  "#" "*" <some_type>             $ pointer to an array null terminated
   "byte"                     $ signed 1-byte
   "ubyte"                    $ unsigned 1-byte
   "int"                      $ signed 4-bytes
   "uint"                     $ unsigned 4-bytes
   "none"                     $ void type, nothing to return
+  NAME                       $ user types

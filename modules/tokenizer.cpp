@@ -51,6 +51,7 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
 
   //stmt blocks
   {"fn",    TK_BLOCK_FUNC},
+  {"type",  TK_BLOCK_TYPE},
   {"if",    TK_BLOCK_IF},
   {"else",  TK_BLOCK_ELSE},
   {"while", TK_BLOCK_WHILE},
