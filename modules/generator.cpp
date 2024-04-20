@@ -95,9 +95,23 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationToken tk = op->tk;
       switch(tk.tk->type) {
-        case TK_BLOCK_BACK:
-          text = "return " + this->convertASTtoC(ast->get_neighbor(CHILD(1))) + ";";
-          break;
+        case TK_BLOCK_BACK: text = "return " + this->convertASTtoC(ast->get_neighbor(CHILD(1))) + ";\n"; break;
+        case TK_BLOCK_SKIP: text = "continue;\n"; break; // TODO: continue for outter loops
+        case TK_BLOCK_STOP: text = "break;\n"; break; // TODO: break for outter loops
+
+        //operations with two operands
+        case TK_NUM_ADD:
+        case TK_NUM_SUB:
+        case TK_NUM_MUL:
+        case TK_NUM_DIV:
+        case TK_NUM_MOD:
+        {
+          text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + tk.tk->text + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
+        } break;
+        case TK_TYPE_DEREF:
+        {
+          text = "*" + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+        } break;
         default:
           text = tk.tk->text;
       }

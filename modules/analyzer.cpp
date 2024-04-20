@@ -253,6 +253,26 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
       { t = Type{.textType = tokens->get_data()->text, .base = TYPE_USER_DEFINED, .subTypes = {}}; }
     break;
     default:
+      //operations
+      if(tokens->get_data()->type >= TK_NUM_ADD
+        && tokens->get_data()->type <= TK_BIT_XOR)
+      {
+        AnalyzedParsedFile *left = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+        AnalyzedParsedFile *right = analyzeParsedFile(tokens->get_neighbor(CHILD(2)));
+          if(left->get_data()->type != OP_TOKEN || right->get_data()->type != OP_TOKEN || left->get_data()->type != right->get_data()->type) {
+          printf("Error: expected two tokens with the same type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+          exit(1);
+        } else {
+          t = left->get_data()->tk.type;
+          OperationToken tk = OperationToken{.tk = tokens->get_data(), .type = t};
+          AnalyzedParsedFile *node = new AnalyzedParsedFile(
+            new Operation(tk, Position(tokens->get_data()->l, tokens->get_data()->c))
+          );
+          AnalyzedParsedFile::linkFatherAndChild(node, left);
+          AnalyzedParsedFile::linkFatherAndChild(node, right);
+          return node;
+        }
+      }
       { t = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}; }
   }
   OperationToken tk = OperationToken{.tk = tokens->get_data(), .type = t};
