@@ -36,10 +36,14 @@ body:
 
 expr:
   <expr> "?" <expr> ":" <expr>       $ ternary
-  <primary> "(" [<expr>:","] ")"     $ function call, TODO: possible change this to another element
   <primary>
   <bitwise>
   <parse>
+  "(" <expr> ")"
+  NAME "(" [<expr>:","] ")"                 $ function call, TODO: possible change this to another element
+  "@" NAME "(" [<expr>:","] ")"             $ function call, TODO: possible change this to another element
+  NAME "@" NUMBER "(" [<expr>:","] ")"      $ function call, TODO: possible change this to another element
+  NAME "." <primary> "(" [<expr>:","] ")"   $ function call, TODO: possible change this to another element
 
 bitwise:
   <bitwise> "band" <bitwise>
