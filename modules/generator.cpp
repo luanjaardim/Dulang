@@ -63,9 +63,9 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       text += ") {\n";
 
       for(auto op : fnDef.ops)
-        text += this->convertASTtoC(op);
+        text += "  " + this->convertASTtoC(op);
 
-      text += "\n}";
+      text += "}\n";
     }
     break;
     case OP_VAR_DEF:
@@ -89,6 +89,21 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         if(i != (int)fnCall.params.size() - 1) text += ",";
       }
       text += ")";
+    }
+    break;
+    case OP_COND:
+    {
+      OperationCond cond = op->cond;
+      string conditions[3] = {"if", "else", "else if"};
+      text = conditions[cond.type-1];
+      if(cond.type != OperationCond::ELSE)
+        text += "(" + this->convertASTtoC(cond.expr) + ") {\n";
+      else 
+        text += "{\n";
+
+      for(auto op : cond.ops)
+        text += "  " + this->convertASTtoC(op);
+      text += "\n}\n";
     }
     break;
     case OP_TOKEN:

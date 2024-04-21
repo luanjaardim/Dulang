@@ -260,10 +260,11 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
   Token *name = tmp->get_data();
   funcCall.funcName = name->text;
   tmp = tmp->get_neighbor(RIGHT_LINK);
-  while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
-    funcCall.params.push_back(analyzeToken(tmp->get_neighbor(CHILD(1))));
-    tmp = tmp->get_neighbor(RIGHT_LINK);
-  }
+  if(tmp->get_neighbors_size() > CHILD(1))
+    while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
+      funcCall.params.push_back(analyzeToken(tmp->get_neighbor(CHILD(1))));
+      tmp = tmp->get_neighbor(RIGHT_LINK);
+    }
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
