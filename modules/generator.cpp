@@ -111,7 +111,16 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         case TK_TYPE_REF:
         case TK_TYPE_DEREF:
         {
-          text = (tk.tk->type == TK_TYPE_DEREF ? "*" : "&") + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+          if(ast->get_neighbors_size() == (CHILD(1)) + 1)
+            text = (tk.tk->type == TK_TYPE_DEREF ? "*" : "&") + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+          else {
+            if(tk.tk->type != TK_TYPE_DEREF) {
+              printf("Fatal error: expected a variable to be dereferenced, but got %s\n", ast->get_neighbor(CHILD(1))->get_data()->varDef.var.name.c_str());
+            } else {
+              text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + "[" + this->convertASTtoC(ast->get_neighbor(CHILD(2))) + "]";
+            }
+
+          }
         } break;
         default:
           text = tk.tk->text;

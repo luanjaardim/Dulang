@@ -320,6 +320,8 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
           new Operation(OperationToken{.tk = tokens->get_data(), .type = t}, Position(tokens->get_data()->l, tokens->get_data()->c))
         );
         AnalyzedParsedFile::linkFatherAndChild(node, child);
+        if(tokens->get_neighbors_size() > CHILD(2))// index dereference
+          AnalyzedParsedFile::linkFatherAndChild(node, analyzeParsedFile(tokens->get_neighbor(CHILD(2))));
         return node;
       }
     break;
