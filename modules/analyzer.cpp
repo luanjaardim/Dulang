@@ -1,6 +1,8 @@
 #include "analyzer.h"
 #include "utils.h"
 
+DefinitionsTypes defs;
+
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
 
 string typeString(Type t) {
@@ -105,13 +107,16 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   funcDef.type = t;
 
   //goes to the operations
+  defs.scope++;
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     funcDef.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
+  defs.popVariables(); //pop the variables from the scope
 
   return new AnalyzedParsedFile(new Operation(funcDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
+
 AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens) {
   OperationTypeDef typeDef;
   ParsedFile *tmp = tokens;
@@ -122,8 +127,25 @@ AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens) {
   tmp = tmp->get_neighbor(RIGHT_LINK); //go to the end bar
   typeDef.var.type = analyzeType(tmp->get_neighbor(CHILD(1)));
 
+  defs.pushVariable(typeDef.var);
   return new AnalyzedParsedFile(new Operation(typeDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
+
+bool confirmType(Type *t, Type *s) {
+  if(t->base == TYPE_UNKNOWN || s->base == TYPE_UNKNOWN) {
+    *t = s->base == TYPE_UNKNOWN ? *t : *s;
+    *s = t->base == TYPE_UNKNOWN ? *s : *t;
+    return true;
+  } else if(t->base != s->base) return false;
+  else { //same base type
+    if(t->subTypes.size() != s->subTypes.size()) return false;
+    for(int i = 0; i < (int)t->subTypes.size(); i++) {
+      if(!confirmType(&t->subTypes[i], &s->subTypes[i])) return false;
+    }
+  }
+  return true;
+}
+
 AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
   OperationVarDef varDef;
   ParsedFile *tmp = tokens;
@@ -162,6 +184,15 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
 
   //goes to the value of the variable
   varDef.value = analyzeParsedFile(tmp);
+  Type *valueType = varDef.value->get_data()->type == OP_FUNC_DEF ? &varDef.value->get_data()->funcDef.type : &varDef.value->get_data()->tk.type;
+  //confront variable type with value type
+  if(!confirmType(&varDef.var.type, valueType)) {
+    printf("Error: type mismatch at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    printf("Expected: %s, Found: %s\n", varDef.var.type.textType.c_str(), valueType->textType.c_str());
+    exit(1);
+  }
+
+  defs.pushVariable(varDef.var);
   return new AnalyzedParsedFile(
             new Operation(varDef, Position(tokens->get_data()->l, tokens->get_data()->c))
   );
@@ -184,17 +215,21 @@ AnalyzedParsedFile *analyzeCond(ParsedFile *tokens) {
   }
   if(tmp->get_data()->type == TK_BLOCK_IF ) {
     ParsedFile *child = tmp->get_neighbor(CHILD(1));
-    cond.expr = analyzeToken(child);
+    cond.expr = analyzeParsedFile(child);
     //goes to the operations
     tmp = tmp->get_neighbor(RIGHT_LINK);
     condType = condType == 0 ? OperationCond::IF : OperationCond::ELSE_IF;
   }
+  cond.type = condType;
+
   //get body
+  defs.scope++;
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i) == NULL) continue;
     cond.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
-  cond.type = condType;
+  defs.popVariables(); //pop the variables from the scope
+
   return new AnalyzedParsedFile(new Operation(cond, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
@@ -207,10 +242,13 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
   //get body
+  defs.scope++;
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     loop.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
+  defs.popVariables(); //pop the variables from the scope
+
   return new AnalyzedParsedFile(new Operation(loop, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
@@ -250,7 +288,14 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
       { t = Type{.textType = "byte", .base = TYPE_BYTE, .subTypes = {}}; }
     break;
     case TK_NAME:
-      { t = Type{.textType = tokens->get_data()->text, .base = TYPE_USER_DEFINED, .subTypes = {}}; }
+      {
+        Variable v = defs.getVariable(tokens->get_data()->text);
+        if(v.name == "") {
+          printf("Error: Expected an already defined variable at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+          exit(1);
+        }
+        t = v.type;
+      }
     break;
     default:
       //operations

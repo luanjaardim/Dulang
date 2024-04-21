@@ -108,3 +108,32 @@ struct Operation {
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);
 Type analyzeType(ParsedFile *tokens);
 void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab);
+
+struct DefinitionsTypes {
+    vector<Variable> vars;
+    //will use the name, id and type of Variable to store the definitions, and deallocate them when the scope ends(with id)
+    size_t scope = 1; //when entering a new scope, increment it, when leaving, decrement it
+    void pushVariable(Variable v) {
+        v.id = DefinitionsTypes::scope;
+        vars.push_back(v);
+    }
+    void popVariables() {
+        scope--;
+        if(vars.size() > 0) {
+            for(int i = vars.size() - 1; i >= 0; i--) {
+                if(vars[i].id == DefinitionsTypes::scope) {
+                    break;
+                }
+                vars.pop_back(); //it was a variable defined in a previous scope
+            }
+        }
+    }
+    Variable getVariable(string name) {
+        for(int i = vars.size() - 1; i >= 0; i--) {
+            if(vars[i].name == name) {
+                return vars[i];
+            }
+        }
+        return Variable();
+    }
+};
