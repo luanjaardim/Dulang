@@ -108,9 +108,10 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         {
           text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + tk.tk->text + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
         } break;
+        case TK_TYPE_REF:
         case TK_TYPE_DEREF:
         {
-          text = "*" + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+          text = (tk.tk->type == TK_TYPE_DEREF ? "*" : "&") + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
         } break;
         default:
           text = tk.tk->text;

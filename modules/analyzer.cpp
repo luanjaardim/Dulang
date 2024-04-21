@@ -88,9 +88,12 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   OperationFuncDef funcDef;
   Type t;
   t.base = TYPE_FUNC;
+  defs.scope++; //the variables are in a new scope, include arguments
   while(tmp->get_data()->type != TK_END_BAR && tmp->get_data()->type != TK_FN_RETURN) {
     if(tmp->get_neighbors_size() > CHILD(1)) {
-      funcDef.args.push_back(analyzeParseType(tmp->get_neighbor(CHILD(1)))); //get the arguments
+      Variable v = analyzeParseType(tmp->get_neighbor(CHILD(1)));
+      funcDef.args.push_back(v); //get the arguments
+      defs.pushVariable(v);
       t.subTypes.push_back(funcDef.args.back().type); //get to make the type of the function
     }
     tmp = tmp->get_neighbor(RIGHT_LINK);
@@ -107,7 +110,6 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   funcDef.type = t;
 
   //goes to the operations
-  defs.scope++;
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     funcDef.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
@@ -295,6 +297,30 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
           exit(1);
         }
         t = v.type;
+      }
+    break;
+    case TK_TYPE_DEREF:
+    case TK_TYPE_REF:
+      {
+        AnalyzedParsedFile *child = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+        if(child->get_data()->type != OP_TOKEN) {
+          printf("Error: expected a token at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+          exit(1);
+        }
+        if(tokens->get_data()->type == TK_TYPE_REF)
+          t = Type{.textType = "#" + child->get_data()->tk.type.textType, .base = TYPE_REF, .subTypes = {child->get_data()->tk.type}};
+        else if(tokens->get_data()->type == TK_TYPE_DEREF) {
+          if(child->get_data()->tk.type.base != TYPE_REF) {
+            printf("Error: expected a reference type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+            exit(1);
+          }
+          t = child->get_data()->tk.type.subTypes[0];
+        }
+        AnalyzedParsedFile *node = new AnalyzedParsedFile(
+          new Operation(OperationToken{.tk = tokens->get_data(), .type = t}, Position(tokens->get_data()->l, tokens->get_data()->c))
+        );
+        AnalyzedParsedFile::linkFatherAndChild(node, child);
+        return node;
       }
     break;
     default:

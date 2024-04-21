@@ -75,7 +75,7 @@ term:
 factor:
   "-" <factor>
   "(" <expr> ")"
-  <primary>
+  <primary>                       $ TODO: remove this, already been treated at atom first rule
   <atom>
 
 primary:
@@ -89,7 +89,7 @@ name:
   <name> "::" <some_type>
 
 atom:
-  ?("#") NAME                        $ reference to a name(declaration)
+  ?("#") <primary>                        $ reference to a name(declaration)
   "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
   <comptime_val>
 
