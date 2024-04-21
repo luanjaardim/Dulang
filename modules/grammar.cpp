@@ -147,7 +147,9 @@ Position findStartOfNextElement(
     Position start = tf->pos;
     size_t indent = getLineIndentation(tf->lines[tf->pos.l]);
     while(advanceLineTokenizdFile(tf) && tf->pos.isBefore(*end)) {
-      if(getLineIndentation(tf->lines[tf->pos.l]) <= indent) {
+      if(getLineIndentation(tf->lines[tf->pos.l]) <= indent 
+        || tf->lines[tf->pos.l]->tokens[0]->l == tf->lines[start.l]->tokens[0]->l) //if the line is the same, happens with ";;"
+      {
         Position tmp = tf->pos;
         tf->pos.goToPos(start);
         return Position(tmp.l-1, tf->lines[tmp.l-1]->tokens.size());

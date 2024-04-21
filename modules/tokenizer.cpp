@@ -433,7 +433,7 @@ TokenizedFile *readToTokenizedFile(const char *file) {
   // doubleEspChars can be concatenated with themselves, they follow the combinations bellow
   const string doubleEspChars = ";=-+*/%<!>:"; 
   const vector<string> possibleCombinations = {
-    "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::"
+    "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::", ";;"
   };
   const string singleEspChars = "()[]{}@#&|?,.\'\"";
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
