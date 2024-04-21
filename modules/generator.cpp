@@ -64,6 +64,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       text += " " + getVariableName(f) + "(";
       for(auto v : fnDef.args) {
         text += convertToCVariable(v);
+        text += v.id != fnDef.args[fnDef.args.size() - 1].id ? "," : "";
         addDefinition(v);
       }
       text += ") {\n";
@@ -155,8 +156,6 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         } break;
         case TK_NAME:
         {
-          cout << "name: " << tk.tk->text << endl;
-          this->printDefinitions();
           Variable v = findDefinition(tk.tk->text, ast->get_data()->pos);
           text = getVariableName(v);
         } break;

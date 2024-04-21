@@ -143,8 +143,12 @@ bool confirmType(Type *t, Type *s) {
     if(t->subTypes.size() != s->subTypes.size()) return false;
     for(int i = 0; i < (int)t->subTypes.size(); i++) {
       if(!confirmType(&t->subTypes[i], &s->subTypes[i])) return false;
+      t->subTypes[i].textType = typeString(t->subTypes[i]);
+      s->subTypes[i].textType = typeString(s->subTypes[i]);
     }
   }
+  t->textType = typeString(*t);
+  s->textType = typeString(*s);
   return true;
 }
 
@@ -256,16 +260,49 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
 }
 
 AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
+  Variable v = defs.getVariable(tokens->get_data()->text);
+  if(v.type.base != TYPE_FUNC) {
+    printf("Error: Expected a function at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    exit(1);
+  }
   OperationFuncCall funcCall;
   ParsedFile *tmp = tokens;
   Token *name = tmp->get_data();
   funcCall.funcName = name->text;
   tmp = tmp->get_neighbor(RIGHT_LINK);
-  if(tmp->get_neighbors_size() > CHILD(1))
+  if(tmp->get_neighbors_size() > CHILD(1)) {
+    size_t i = 0;
     while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
-      funcCall.params.push_back(analyzeToken(tmp->get_neighbor(CHILD(1))));
+      if(i == v.type.subTypes.size() - 1) {
+        printf("Error: Too many arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+        exit(1);
+      }
+      AnalyzedParsedFile *node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
+      // WARN: the code bellow can cause bugs, maybe
+      Type *s = node->get_data()->type == OP_TOKEN ? &node->get_data()->tk.type : &node->get_data()->funcCall.returnType;
+      if(!confirmType(&v.type.subTypes[i], s)) {
+        printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
+        printf("Expected: %s, Found: %s\n", v.type.subTypes[i].textType.c_str(), s->textType.c_str());
+        exit(1);
+      }
+      funcCall.params.push_back(node);
+      i++;
       tmp = tmp->get_neighbor(RIGHT_LINK);
     }
+    if(i < v.type.subTypes.size() - 1) {
+      funcCall.returnType.base = TYPE_FUNC;
+      funcCall.returnType.subTypes = vector(v.type.subTypes.begin() + i, v.type.subTypes.end());
+      funcCall.returnType.textType = typeString(funcCall.returnType);
+    } else {
+      funcCall.returnType = v.type.subTypes[i];
+    }
+  } else {
+    if(v.type.subTypes[0].base != TYPE_NONE) {
+      printf("Error: Too few arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
+    funcCall.returnType = v.type.subTypes[v.type.subTypes.size() - 1];
+  }
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 

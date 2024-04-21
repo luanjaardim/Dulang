@@ -69,6 +69,7 @@ struct OperationLoop {
 
 struct OperationFuncCall {
     string funcName;
+    Type returnType;
     vector<AnalyzedParsedFile *> params;
 };
 
@@ -135,5 +136,10 @@ struct DefinitionsTypes {
             }
         }
         return Variable();
+    }
+    void printVariables() {
+        for(int i = 0; i < (int)vars.size(); i++) {
+            cout << "Variable: " << vars[i].name << " at scope: " << vars[i].id << endl;
+        }
     }
 };
