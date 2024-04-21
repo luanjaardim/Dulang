@@ -186,6 +186,7 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
 
   //goes to the value of the variable
   varDef.value = analyzeParsedFile(tmp);
+  // WARN: bug bellow, another operation can be assigned to a variable, function call for example
   Type *valueType = varDef.value->get_data()->type == OP_FUNC_DEF ? &varDef.value->get_data()->funcDef.type : &varDef.value->get_data()->tk.type;
   //confront variable type with value type
   if(!confirmType(&varDef.var.type, valueType)) {
@@ -437,9 +438,8 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
       break;
     case OP_LOOP:
       {
-        OperationToken expr = op->loop.expr->get_data()->tk;
-        cout << tab << "Loop, Expression: " << expr.tk->text << " Type: " << expr.type.textType << endl;
-        printAnalyzerParsedFile(op->cond.expr, tab+"  ");
+        cout << tab << "Loop: " << endl;
+        printAnalyzerParsedFile(op->loop.expr, tab+"  ");
         cout << tab+"  " << "Operations: " << endl;
         for(auto o : op->loop.ops) {
           printAnalyzerParsedFile(o, tab+"    ");

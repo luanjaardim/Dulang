@@ -106,6 +106,15 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       text += "\n}\n";
     }
     break;
+    case OP_LOOP:
+    {
+      OperationLoop loop = op->loop;
+      text = "while(" + this->convertASTtoC(loop.expr) + ") {\n";
+      for(auto op : loop.ops)
+        text += "  " + this->convertASTtoC(op);
+      text += "}\n";
+    }
+    break;
     case OP_TOKEN:
     {
       OperationToken tk = op->tk;
