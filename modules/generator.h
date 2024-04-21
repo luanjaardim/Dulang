@@ -18,17 +18,21 @@ struct Generator {
     vector<Scope> scopes = {Scope(SCOPE_GLOBAL)};
 
     void addDefinition(Variable v) { scopes.back().defs.push_back(v); }
-    void popDefinition() { scopes.pop_back(); }
+    void popDefinitions() { scopes.pop_back(); }
     Variable getLastDefinition() {
-        if(!this->scopes.empty() && !this->scopes.back().defs.empty()) 
-            return this->scopes.back().defs.back();
-        else { printf("Trying to get last definition that does not exist"); exit(1); }
+        for(int i = (int)scopes.size() - 1; i >= 0; i--) {
+            if(scopes[i].defs.size() > 0) {
+                return scopes[i].defs.back();
+            }
+        }
+        printf("Trying to get last definition that does not exist"); 
+        exit(1);
     }
-    Variable findDefinition(string name, Position pos) {
+    Variable findDefinition(string name, Position err_pos) {
         Variable v;
         bool found = false;
-        for( int i = scopes.size() - 1 && !found; i >= 0; i ++) {
-            for(int j = scopes[i].defs.size() - 1 && !found; j >= 0; j ++) {
+        for( int i = (int)scopes.size() - 1; i >= 0 && !found; i--) {
+            for(int j = (int)scopes[i].defs.size() - 1; j >= 0 && !found; j--) {
                 if(scopes[i].defs[j].name == name) {
                     v = scopes[i].defs[j];
                     found = true;
@@ -36,9 +40,17 @@ struct Generator {
             }
         }
         if(!found) {
-            printf("Variable of name: %s, is not defined. At line: %d and col: %d", name.c_str(), (int)pos.l, (int)pos.e);
+            printf("Variable of name: %s, is not defined. At line: %d and col: %d", name.c_str(), (int)err_pos.l, (int)err_pos.e);
             exit(1);
         } else return v;
+    }
+    void printDefinitions() {
+        for(int i = 0; i < (int)scopes.size(); i++) {
+            printf("Scope %d\n", i);
+            for(int j = 0; j < (int)scopes[i].defs.size(); j++) {
+                printf("  %s\n", scopes[i].defs[j].name.c_str());
+            }
+        }
     }
     string convertASTtoC(AnalyzedParsedFile *ast);
 };

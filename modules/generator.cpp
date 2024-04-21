@@ -1,6 +1,10 @@
 #include "generator.h"
 #include "utils.h"
 
+string getVariableName(Variable v) {
+  return v.name + "_" + to_string(v.id);
+}
+
 string typeAsCType(Type t) {
   switch(t.base) {
     case TYPE_INT:
@@ -18,17 +22,18 @@ string typeAsCType(Type t) {
 }
 
 string convertToCVariable(Variable v) {
+  string nameAndId = getVariableName(v);
   switch(v.type.base) {
     case TYPE_INT:
     case TYPE_BYTE:
     case TYPE_REF:
     case TYPE_NONE:
-      return typeAsCType(v.type) + " " + v.name;
+      return typeAsCType(v.type) + " " + nameAndId;
     case TYPE_FUNC:
     {
       Type t = v.type;
       string returnType = typeAsCType(t.subTypes[t.subTypes.size() - 1]);
-      string name = "(*" + v.name + ")(";
+      string name = "(*" + nameAndId + ")(";
       string type = returnType + name;
       for(int i = 0; i < (int)t.subTypes.size() - 1; i ++) {
           type += typeAsCType(t.subTypes[i]);
@@ -56,9 +61,10 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       Variable f = getLastDefinition();
       OperationFuncDef fnDef = ast->get_data()->funcDef;
       text = typeAsCType(f.type.subTypes[f.type.subTypes.size() - 1]);
-      text += " " + f.name + "(";
+      text += " " + getVariableName(f) + "(";
       for(auto v : fnDef.args) {
         text += convertToCVariable(v);
+        addDefinition(v);
       }
       text += ") {\n";
 
@@ -70,10 +76,10 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     break;
     case OP_VAR_DEF:
       if(op->varDef.var.type.base == TYPE_FUNC) {
-        this->scopes.push_back(Scope(SCOPE_FUNC));
-        this->addDefinition(op->varDef.var);    //start of function scope
+        this->addDefinition(op->varDef.var);
+        this->scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
         text = this->convertASTtoC(op->varDef.value);
-        this->popDefinition();                  //end of function scope
+        this->popDefinitions();                         //end of function scope
       } else {
         this->addDefinition(op->varDef.var);
         text = convertToCVariable(op->varDef.var) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
@@ -83,7 +89,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     case OP_FUNC_CALL:
     {
       OperationFuncCall fnCall = op->funcCall;
-      text = fnCall.funcName + "(";
+      Variable f = findDefinition(fnCall.funcName, ast->get_data()->pos);
+      text = getVariableName(f) + "(";
       for(int i = 0; i < (int)fnCall.params.size(); i++) {
         text += this->convertASTtoC(fnCall.params[i]);
         if(i != (int)fnCall.params.size() - 1) text += ",";
@@ -130,7 +137,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         case TK_NUM_DIV:
         case TK_NUM_MOD:
         {
-          text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + tk.tk->text + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
+          text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + " " +tk.tk->text + " " + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
         } break;
         case TK_TYPE_REF:
         case TK_TYPE_DEREF:
@@ -145,6 +152,13 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
             }
 
           }
+        } break;
+        case TK_NAME:
+        {
+          cout << "name: " << tk.tk->text << endl;
+          this->printDefinitions();
+          Variable v = findDefinition(tk.tk->text, ast->get_data()->pos);
+          text = getVariableName(v);
         } break;
         default:
           text = tk.tk->text;
