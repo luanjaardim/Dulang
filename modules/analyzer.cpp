@@ -1,7 +1,7 @@
 #include "analyzer.h"
 #include "utils.h"
 
-DefinitionsTypes defs;
+DefinitionsHandler defs;
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
 
@@ -88,7 +88,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   OperationFuncDef funcDef;
   Type t;
   t.base = TYPE_FUNC;
-  defs.scope++; //the variables are in a new scope, include arguments
+  defs.scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
   while(tmp->get_data()->type != TK_END_BAR && tmp->get_data()->type != TK_FN_RETURN) {
     if(tmp->get_neighbors_size() > CHILD(1)) {
       funcDef.args.push_back(analyzeParseType(tmp->get_neighbor(CHILD(1)))); //get the arguments
@@ -103,7 +103,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
     t.subTypes.push_back(analyzeType(tmp->get_neighbor(CHILD(1)))); //return type
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
-  Type *thisFuncVarType = &defs.vars[defs.vars.size() - 1].type; //type defined at varDef
+  Type *thisFuncVarType = &defs.getLastDefinition()->type;
   //get the function type as text
   t.textType = typeString(t);
   funcDef.type = t;
@@ -117,7 +117,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   for(int i = 0; i < (int)funcDef.args.size(); i++) {
     Variable *v = &funcDef.args[i];
     v->type = funcDef.type.subTypes[i]; //update the type of the arguments
-    defs.pushVariable(*v); //push the arguments to the scope
+    defs.addDefinition(*v); //push the arguments to the scope
   }
 
   //goes to the operations
@@ -125,7 +125,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     funcDef.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
-  defs.popVariables(); //pop the variables from the scope
+  defs.popDefinitions(); //pop the variables from the scope
 
   return new AnalyzedParsedFile(new Operation(funcDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
@@ -140,7 +140,7 @@ AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens) {
   tmp = tmp->get_neighbor(RIGHT_LINK); //go to the end bar
   typeDef.var.type = analyzeType(tmp->get_neighbor(CHILD(1)));
 
-  defs.pushVariable(typeDef.var);
+  defs.addDefinition(typeDef.var);
   return new AnalyzedParsedFile(new Operation(typeDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
@@ -256,12 +256,12 @@ AnalyzedParsedFile *analyzeCond(ParsedFile *tokens) {
   cond.type = condType;
 
   //get body
-  defs.scope++;
+  defs.scopes.push_back(Scope(SCOPE_COND));
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i) == NULL) continue;
     cond.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
-  defs.popVariables(); //pop the variables from the scope
+  defs.popDefinitions(); //pop the variables from the scope
 
   return new AnalyzedParsedFile(new Operation(cond, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
@@ -275,19 +275,23 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
   //get body
-  defs.scope++;
+  defs.scopes.push_back(Scope(SCOPE_LOOP));
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     loop.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
-  defs.popVariables(); //pop the variables from the scope
+  defs.popDefinitions(); //pop the variables from the scope
 
   return new AnalyzedParsedFile(new Operation(loop, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
 AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
-  Variable v = defs.getVariable(tokens->get_data()->text);
-  if(v.type.base != TYPE_FUNC) {
+  Variable *v = defs.findDefinition(tokens->get_data()->text);
+  if(v == NULL) {
+    printf("Error: Expected an already defined function at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    exit(1);
+  }
+  if(v->type.base != TYPE_FUNC) {
     printf("Error: Expected a function at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     exit(1);
   }
@@ -299,35 +303,35 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
   if(tmp->get_neighbors_size() > CHILD(1)) {
     size_t i = 0;
     while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
-      if(i == v.type.subTypes.size() - 1) {
+      if(i == v->type.subTypes.size() - 1) {
         printf("Error: Too many arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
         exit(1);
       }
       AnalyzedParsedFile *node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
       // WARN: the code bellow can cause bugs, maybe
       Type *s = node->get_data()->type == OP_TOKEN ? &node->get_data()->tk.type : &node->get_data()->funcCall.returnType;
-      if(!confirmType(&v.type.subTypes[i], s)) {
+      if(!confirmType(&v->type.subTypes[i], s)) {
         printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
-        printf("Expected: %s, Found: %s\n", v.type.subTypes[i].textType.c_str(), s->textType.c_str());
+        printf("Expected: %s, Found: %s\n", v->type.subTypes[i].textType.c_str(), s->textType.c_str());
         exit(1);
       }
       funcCall.params.push_back(node);
       i++;
       tmp = tmp->get_neighbor(RIGHT_LINK);
     }
-    if(i < v.type.subTypes.size() - 1) {
+    if(i < v->type.subTypes.size() - 1) {
       funcCall.returnType.base = TYPE_FUNC;
-      funcCall.returnType.subTypes = vector(v.type.subTypes.begin() + i, v.type.subTypes.end());
+      funcCall.returnType.subTypes = vector(v->type.subTypes.begin() + i, v->type.subTypes.end());
       funcCall.returnType.textType = typeString(funcCall.returnType);
     } else {
-      funcCall.returnType = v.type.subTypes[i];
+      funcCall.returnType = v->type.subTypes[i];
     }
   } else {
-    if(v.type.subTypes[0].base != TYPE_NONE) {
+    if(v->type.subTypes[0].base != TYPE_NONE) {
       printf("Error: Too few arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
       exit(1);
     }
-    funcCall.returnType = v.type.subTypes[v.type.subTypes.size() - 1];
+    funcCall.returnType = v->type.subTypes[v->type.subTypes.size() - 1];
   }
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
@@ -356,12 +360,12 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
     break;
     case TK_NAME:
       {
-        Variable v = defs.getVariable(tokens->get_data()->text);
-        if(v.name == "") {
+        Variable *v = defs.findDefinition(tokens->get_data()->text);
+        if(v == NULL) {
           printf("Error: Expected an already defined variable at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
           exit(1);
         }
-        t = v.type;
+        t = v->type;
       }
     break;
     case TK_TYPE_DEREF:

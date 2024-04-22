@@ -1,6 +1,8 @@
 #include "generator.h"
 #include "utils.h"
 
+DefinitionsHandler defsGen;
+
 string getVariableName(Variable v) {
   return v.name + "_" + to_string(v.id);
 }
@@ -56,7 +58,7 @@ string Generator::createFunc(Variable f, vector<Variable> args) {
   for(auto v : args) {
     text += convertToCVariable(v);
     text += v.id != args[args.size() - 1].id ? "," : "";
-    this->addDefinition(v);
+    defsGen.addDefinition(v);
   }
   text += ") {\n";
   return text;
@@ -64,13 +66,13 @@ string Generator::createFunc(Variable f, vector<Variable> args) {
 
 string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
   if(ast == NULL) return "";
-  printAnalyzerParsedFile(ast, "");
+  // printAnalyzerParsedFile(ast, "");
   Operation *op = ast->get_data();
   string text = "";
   switch(op->type) {
     case OP_FUNC_DEF:
     {
-      Variable f = getLastDefinition();
+      Variable f = *defsGen.getLastDefinition();
       OperationFuncDef fnDef = ast->get_data()->funcDef;
       text = createFunc(f, fnDef.args);
 
@@ -95,11 +97,11 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     case OP_FUNC_CALL:
     {
       OperationFuncCall fnCall = op->funcCall;
-      Variable f = findDefinition(fnCall.funcName, ast->get_data()->pos);
+      Variable f = *defsGen.findDefinition(fnCall.funcName);
 
       vector<Variable> args;
       if(fnCall.returnType.base == TYPE_FUNC) {
-          Variable v = getLastDefinition();
+          Variable v = *defsGen.getLastDefinition();
           for(int i = 0; i < (int)v.type.subTypes.size()-1; i++)
             args.push_back(Variable{
               .id = v.id,
@@ -133,6 +135,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       else 
         text += "{\n";
 
+      defsGen.scopes.push_back(Scope(SCOPE_COND));
       for(auto op : cond.ops)
         text += "  " + this->convertASTtoC(op);
       text += "\n}\n";
@@ -142,6 +145,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationLoop loop = op->loop;
       text = "while(" + this->convertASTtoC(loop.expr) + ") {\n";
+      defsGen.scopes.push_back(Scope(SCOPE_LOOP));
       for(auto op : loop.ops)
         text += "  " + this->convertASTtoC(op);
       text += "}\n";
@@ -180,7 +184,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         } break;
         case TK_NAME:
         {
-          Variable v = findDefinition(tk.tk->text, ast->get_data()->pos);
+          //wont exist any null return from findDefinition, all of them were solved at analyzer, i think.
+          Variable v = *defsGen.findDefinition(tk.tk->text);
           text = getVariableName(v);
         } break;
         default:
