@@ -83,14 +83,20 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     }
     break;
     case OP_VAR_DEF:
-      this->addDefinition(op->varDef.var);
       if(op->varDef.var.type.base == TYPE_FUNC) {
-        this->scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
+        defsGen.addDefinition(op->varDef.var);
+        defsGen.scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
         text = this->convertASTtoC(op->varDef.value);
-        this->popDefinitions();                         //end of function scope
+        defsGen.popDefinitions();                         //end of function scope
       } else {
-        this->addDefinition(op->varDef.var);
-        text = convertToCVariable(op->varDef.var) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+        Variable *v;
+        if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut)
+          text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+        else {
+          defsGen.addDefinition(op->varDef.var);
+          text = convertToCVariable(op->varDef.var) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+        }
+
         text += this->convertASTtoC(ast->get_neighbor(RIGHT_LINK));
       }
     break;

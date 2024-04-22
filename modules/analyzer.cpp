@@ -166,6 +166,7 @@ bool confirmType(Type *t, Type *s) {
 AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
   OperationVarDef varDef;
   ParsedFile *tmp = tokens;
+  bool assignVariable = false;
   // cout << "Var: " << tokens->get_data()->text << endl;
   if(tokens->get_data()->type == TK_CONSTANT || tokens->get_data()->type == TK_VARIABLE) {
     //mutable?
@@ -190,18 +191,28 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(RIGHT_LINK);
     tmp = tmp->get_neighbor(CHILD(1));
   } else if(tokens->get_data()->type == TK_ASSIGN) {
-    varDef.var.mut = false;
     Token *name = tmp->get_neighbor(CHILD(1))->get_data();
-    varDef.var.name = name->text;
-    varDef.var.pos = Position(name->l, name->c);
-    varDef.var.id = name->id;
-    varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
+    Variable *v;
+    if((v = defs.findDefinition(name->text)) != NULL && v->mut) {
+      varDef.var = *v;
+      assignVariable = true;
+    } else {
+      varDef.var.mut = false;
+      varDef.var.name = name->text;
+      varDef.var.pos = Position(name->l, name->c);
+      varDef.var.id = name->id;
+      varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
+    }
     tmp = tmp->get_neighbor(CHILD(2));
   }
 
   if(tmp->get_data()->type == TK_BLOCK_FUNC) {
     //with functions we push the variable first, so inside the function we can use it to infer types
-    defs.pushVariable(varDef.var);
+    if(varDef.var.mut) {
+      printf("You can't define a mutable function. At line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
+    defs.addDefinition(varDef.var);
     varDef.value = analyzeParsedFile(tmp);//goes to the value of the variable
     varDef.var.type = varDef.value->get_data()->funcDef.type;
   } else {
@@ -223,7 +234,8 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
       printf("Expected: %s, Found: %s\n", varDef.var.type.textType.c_str(), valueType->textType.c_str());
       exit(1);
     }
-    defs.pushVariable(varDef.var); //push the variable to the scope
+    if(!assignVariable)
+      defs.addDefinition(varDef.var); //push the variable to the scope
   }
 
   return new AnalyzedParsedFile(
