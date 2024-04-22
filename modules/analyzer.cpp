@@ -91,9 +91,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   defs.scope++; //the variables are in a new scope, include arguments
   while(tmp->get_data()->type != TK_END_BAR && tmp->get_data()->type != TK_FN_RETURN) {
     if(tmp->get_neighbors_size() > CHILD(1)) {
-      Variable v = analyzeParseType(tmp->get_neighbor(CHILD(1)));
-      funcDef.args.push_back(v); //get the arguments
-      defs.pushVariable(v);
+      funcDef.args.push_back(analyzeParseType(tmp->get_neighbor(CHILD(1)))); //get the arguments
       t.subTypes.push_back(funcDef.args.back().type); //get to make the type of the function
     }
     tmp = tmp->get_neighbor(RIGHT_LINK);
@@ -105,9 +103,22 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
     t.subTypes.push_back(analyzeType(tmp->get_neighbor(CHILD(1)))); //return type
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
+  Type *thisFuncVarType = &defs.vars[defs.vars.size() - 1].type; //type defined at varDef
   //get the function type as text
   t.textType = typeString(t);
   funcDef.type = t;
+
+  if(!confirmType(thisFuncVarType, &(funcDef.type))) {
+    printf("Error: type mismatch at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    printf("Expected: %s, Found: %s\n", thisFuncVarType->textType.c_str(), t.textType.c_str());
+    exit(1);
+  }
+  //possibly updating arguments types
+  for(int i = 0; i < (int)funcDef.args.size(); i++) {
+    Variable *v = &funcDef.args[i];
+    v->type = funcDef.type.subTypes[i]; //update the type of the arguments
+    defs.pushVariable(*v); //push the arguments to the scope
+  }
 
   //goes to the operations
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
@@ -188,18 +199,33 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(CHILD(2));
   }
 
-  //goes to the value of the variable
-  varDef.value = analyzeParsedFile(tmp);
-  // WARN: bug bellow, another operation can be assigned to a variable, function call for example
-  Type *valueType = varDef.value->get_data()->type == OP_FUNC_DEF ? &varDef.value->get_data()->funcDef.type : &varDef.value->get_data()->tk.type;
-  //confront variable type with value type
-  if(!confirmType(&varDef.var.type, valueType)) {
-    printf("Error: type mismatch at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-    printf("Expected: %s, Found: %s\n", varDef.var.type.textType.c_str(), valueType->textType.c_str());
-    exit(1);
+  if(tmp->get_data()->type == TK_BLOCK_FUNC) {
+    //with functions we push the variable first, so inside the function we can use it to infer types
+    defs.pushVariable(varDef.var);
+    varDef.value = analyzeParsedFile(tmp);//goes to the value of the variable
+    varDef.var.type = varDef.value->get_data()->funcDef.type;
+  } else {
+    varDef.value = analyzeParsedFile(tmp);//goes to the value of the variable
+    Type *valueType;
+    switch(varDef.value->get_data()->type) {
+      case OP_TOKEN:
+        valueType = &(varDef.value->get_data()->tk.type); break;
+      case OP_FUNC_CALL:
+        valueType = &(varDef.value->get_data()->funcCall.returnType); break;
+      default:
+        printf("Error: expected a token, function call or function definition at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+        exit(1);
+    }
+
+    //confront variable type with value type
+    if(!confirmType(&varDef.var.type, valueType)) {
+      printf("Error: type mismatch at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      printf("Expected: %s, Found: %s\n", varDef.var.type.textType.c_str(), valueType->textType.c_str());
+      exit(1);
+    }
+    defs.pushVariable(varDef.var); //push the variable to the scope
   }
 
-  defs.pushVariable(varDef.var);
   return new AnalyzedParsedFile(
             new Operation(varDef, Position(tokens->get_data()->l, tokens->get_data()->c))
   );

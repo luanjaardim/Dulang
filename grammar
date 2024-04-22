@@ -40,6 +40,7 @@ expr:
   <bitwise>
   <parse>
   "(" <expr> ")"
+  "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
   NAME "(" [<expr>:","] ")"                 $ function call, TODO: possible change this to another element
   "@" NAME "(" [<expr>:","] ")"             $ function call, TODO: possible change this to another element
   NAME "@" NUMBER "(" [<expr>:","] ")"      $ function call, TODO: possible change this to another element
@@ -94,7 +95,6 @@ name:
 
 atom:
   ?("#") <primary>                        $ reference to a name(declaration)
-  "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
   <comptime_val>
 
 comptime_val:

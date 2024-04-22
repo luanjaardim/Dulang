@@ -108,6 +108,7 @@ struct Operation {
 
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);
 Type analyzeType(ParsedFile *tokens);
+bool confirmType(Type *t, Type *s);
 void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab);
 
 struct DefinitionsTypes {
