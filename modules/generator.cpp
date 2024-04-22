@@ -50,24 +50,29 @@ string convertToCVariable(Variable v) {
   }
 }
 
+string Generator::createFunc(Variable f, vector<Variable> args) {
+  string text = typeAsCType(f.type.subTypes[f.type.subTypes.size() - 1]);
+  text += " " + getVariableName(f) + "(";
+  for(auto v : args) {
+    text += convertToCVariable(v);
+    text += v.id != args[args.size() - 1].id ? "," : "";
+    this->addDefinition(v);
+  }
+  text += ") {\n";
+  return text;
+}
+
 string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
   if(ast == NULL) return "";
   printAnalyzerParsedFile(ast, "");
   Operation *op = ast->get_data();
-  string text;
+  string text = "";
   switch(op->type) {
     case OP_FUNC_DEF:
     {
       Variable f = getLastDefinition();
       OperationFuncDef fnDef = ast->get_data()->funcDef;
-      text = typeAsCType(f.type.subTypes[f.type.subTypes.size() - 1]);
-      text += " " + getVariableName(f) + "(";
-      for(auto v : fnDef.args) {
-        text += convertToCVariable(v);
-        text += v.id != fnDef.args[fnDef.args.size() - 1].id ? "," : "";
-        addDefinition(v);
-      }
-      text += ") {\n";
+      text = createFunc(f, fnDef.args);
 
       for(auto op : fnDef.ops)
         text += "  " + this->convertASTtoC(op);
@@ -76,8 +81,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     }
     break;
     case OP_VAR_DEF:
+      this->addDefinition(op->varDef.var);
       if(op->varDef.var.type.base == TYPE_FUNC) {
-        this->addDefinition(op->varDef.var);
         this->scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
         text = this->convertASTtoC(op->varDef.value);
         this->popDefinitions();                         //end of function scope
@@ -91,12 +96,31 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationFuncCall fnCall = op->funcCall;
       Variable f = findDefinition(fnCall.funcName, ast->get_data()->pos);
-      text = getVariableName(f) + "(";
+
+      vector<Variable> args;
+      if(fnCall.returnType.base == TYPE_FUNC) {
+          Variable v = getLastDefinition();
+          for(int i = 0; i < (int)v.type.subTypes.size()-1; i++)
+            args.push_back(Variable{
+              .id = v.id,
+              .name = "dummy" + to_string(i),
+              .pos = v.pos,
+              .type = v.type.subTypes[i],
+            });
+          text = createFunc(v, args);
+      }
+      text += "return " + getVariableName(f) + "(";
       for(int i = 0; i < (int)fnCall.params.size(); i++) {
         text += this->convertASTtoC(fnCall.params[i]);
-        if(i != (int)fnCall.params.size() - 1) text += ",";
+        if(fnCall.returnType.base == TYPE_FUNC || i != (int)fnCall.params.size() - 1) text += ",";
       }
-      text += ")";
+      if(fnCall.returnType.base == TYPE_FUNC) {
+        for(int i = 0; i < (int)args.size(); i++)
+          text += getVariableName(args[i]) + (i != (int)args.size() - 1 ? "," : ");\n");
+        text += "}\n";
+      }
+      else
+        text += ")";
     }
     break;
     case OP_COND:
