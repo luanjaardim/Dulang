@@ -21,7 +21,12 @@ string typeString(Type t) {
       return typeText;
     }
     case TYPE_REF:
-      return "#" + typeString(t.subTypes[0]);
+      {
+        Type s = t.subTypes[0];
+        if(s.base >= TYPE_FUNC && s.base <= TYPE_COMPOUND)
+          return "#(" + typeString(s) + ")";
+        return "#" + typeString(s);
+      }
     case TYPE_INT:
       return "int";
     case TYPE_BYTE:
@@ -388,8 +393,10 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
           printf("Error: expected a token at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
           exit(1);
         }
-        if(tokens->get_data()->type == TK_TYPE_REF)
-          t = Type{.textType = "#" + child->get_data()->tk.type.textType, .base = TYPE_REF, .subTypes = {child->get_data()->tk.type}};
+        if(tokens->get_data()->type == TK_TYPE_REF) {
+          t = Type{.textType = "", .base = TYPE_REF, .subTypes = {child->get_data()->tk.type}};
+          t.textType = typeString(t);
+        }
         else if(tokens->get_data()->type == TK_TYPE_DEREF) {
           if(child->get_data()->tk.type.base != TYPE_REF) {
             printf("Error: expected a reference type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);

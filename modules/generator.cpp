@@ -13,10 +13,29 @@ string typeAsCType(Type t) {
       return "int";
     case TYPE_BYTE:
       return "char";
-    case TYPE_REF:
-      return typeAsCType(t.subTypes[0]) + "*";
     case TYPE_NONE:
       return "void";
+    case TYPE_REF:
+    {
+      string innerType = typeAsCType(t.subTypes[0]);
+      size_t pos;
+      if((pos = innerType.find('$')) != string::npos) {
+          return innerType.insert(pos, "*");
+      }
+      return innerType + "*";
+    }
+    case TYPE_FUNC:
+    {
+      // $ will be used as place to put the name of the variable after the type is finished
+      string type = typeAsCType(t.subTypes[t.subTypes.size() - 1]) + " ($)(";
+      for(int i = 0; i < (int)t.subTypes.size() - 1; i ++) {
+          type += typeAsCType(t.subTypes[i]);
+          if(i != (int)t.subTypes.size() - 2) type += ",";
+      }
+      return type + ")";
+    }
+    case TYPE_UNKNOWN:
+      return "unknown";
     default:
     break;
   }
@@ -30,23 +49,20 @@ string convertToCVariable(Variable v) {
     case TYPE_BYTE:
     case TYPE_REF:
     case TYPE_NONE:
-      return typeAsCType(v.type) + " " + nameAndId;
-    case TYPE_FUNC:
-    {
-      Type t = v.type;
-      string returnType = typeAsCType(t.subTypes[t.subTypes.size() - 1]);
-      string name = "(*" + nameAndId + ")(";
-      string type = returnType + name;
-      for(int i = 0; i < (int)t.subTypes.size() - 1; i ++) {
-          type += typeAsCType(t.subTypes[i]);
-          if(i != (int)t.subTypes.size() - 1) type += ",";
+      {
+      string text = typeAsCType(v.type);
+        size_t pos;
+      if((pos = text.find('$')) != string::npos)
+        text.replace(pos, 1, nameAndId);
+      else
+        text += " " + nameAndId;
+      return text;
       }
-      return type;
-    }
     case TYPE_COMPOUND:
     case TYPE_TAG_UNION:
+    case TYPE_FUNC: //probably wont be needed
     default:
-      printf("not implemented yet\n");
+      printf("this type is not implemented yet: %s\n", typeAsCType(v.type).c_str());
       exit(1);
       break;
   }
@@ -83,12 +99,20 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     }
     break;
     case OP_VAR_DEF:
-      if(op->varDef.var.type.base == TYPE_FUNC) {
+      if(op->varDef.var.type.base == TYPE_FUNC && 
+        (op->varDef.value->get_data()->type == OP_FUNC_DEF ||
+        op->varDef.value->get_data()->type == OP_FUNC_CALL)
+      ){
         defsGen.addDefinition(op->varDef.var);
         defsGen.scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
         text = this->convertASTtoC(op->varDef.value);
         defsGen.popDefinitions();                         //end of function scope
       } else {
+        if(op->varDef.var.type.base == TYPE_FUNC) {
+          printf("When passing a function to another constant, use a pointer to a function! Try add an '#'.\n");
+          printf("Error: type mismatch at line: %d, column: %d\n", (int)op->varDef.value->get_data()->pos.l, (int)op->varDef.value->get_data()->pos.e);
+          exit(1);
+        }
         Variable *v;
         if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut)
           text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
