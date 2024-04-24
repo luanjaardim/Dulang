@@ -44,7 +44,7 @@ string typeAsCType(Type t) {
   return "";
 }
 
-string convertToCVariable(Variable v) {
+string Generator::convertToCVariable(Variable v) {
   string nameAndId = getVariableName(v);
   switch(v.type.base) {
     case TYPE_INT:
@@ -60,14 +60,50 @@ string convertToCVariable(Variable v) {
         text += " " + nameAndId;
       return text;
       }
-    case TYPE_COMPOUND:
     case TYPE_TAG_UNION:
+      return "struct taggedUnion" + to_string(getTaggedUnionId(v.type)) + " " + nameAndId;
+    case TYPE_COMPOUND:
     case TYPE_FUNC: //probably wont be needed
     default:
       printf("this type is not implemented yet: %s\n", typeAsCType(v.type).c_str());
       exit(1);
       break;
   }
+}
+
+size_t Generator::getTaggedUnionId(Type t) {
+  if(t.base != TYPE_TAG_UNION) {
+    printf("Error: expected a tagged union, but got %s\n", typeAsCType(t).c_str());
+    exit(1);
+  }
+  size_t index = 0; //the index of the defined type, so the name of the type is taggedUnion + index
+  for(auto s : this->definedTypes) {
+    if(confirmType(&t, &s)) return index;
+    index++;
+  }
+  string text = "struct taggedUnion" + to_string(index) + " {\n";
+  text += "  enum type {\n";
+  string enum_elements = "";
+  string union_elements = "";
+  for(int i = 0; i < (int)t.subTypes.size(); i++) {
+    enum_elements += "    TYPE_" + to_string(i) + ",\n";
+    string type = typeAsCType(t.subTypes[i]);
+    if(type.find('$') != string::npos) {
+      type.replace(type.find('$'), 1, "FIELD_" + to_string(i));
+    } else {
+      type += " FIELD_" + to_string(i);
+    }
+    union_elements += "    " + type + ";\n";
+  }
+
+  text += enum_elements + "  };\n";
+  text += "  union {\n";
+  text += union_elements + "  };\n";
+  text += "};\n";
+  this->prevDefinitions += text;
+
+  this->definedTypes.push_back(t);
+  return index;
 }
 
 string Generator::createFunc(Variable f, vector<Variable> args) {

@@ -154,13 +154,25 @@ bool confirmType(Type *t, Type *s) {
     *t = s->base == TYPE_UNKNOWN ? *t : *s;
     *s = t->base == TYPE_UNKNOWN ? *s : *t;
     return true;
-  } else if(t->base != s->base) return false;
-  else { //same base type
-    if(t->subTypes.size() != s->subTypes.size()) return false;
-    for(int i = 0; i < (int)t->subTypes.size(); i++) {
-      if(!confirmType(&t->subTypes[i], &s->subTypes[i])) return false;
-      t->subTypes[i].textType = typeString(t->subTypes[i]);
-      s->subTypes[i].textType = typeString(s->subTypes[i]);
+  }
+  else {
+    if((t->base == TYPE_TAG_UNION && s->base != TYPE_TAG_UNION) || (t->base != TYPE_TAG_UNION && s->base == TYPE_TAG_UNION)) {
+      Type *tagUnion = t->base == TYPE_TAG_UNION ? t : s;
+      Type *simpleType = t->base == TYPE_TAG_UNION ? s : t;
+      if(simpleType->base != TYPE_UNKNOWN)
+        for(int i = 0; i < (int)tagUnion->subTypes.size(); i++) {
+          if(confirmType(&tagUnion->subTypes[i], simpleType)) return true;
+        }
+      return false;
+    }
+    else if(t->base != s->base) return false; //same base type
+    else {
+      if(t->subTypes.size() != s->subTypes.size()) return false;
+      for(int i = 0; i < (int)t->subTypes.size(); i++) {
+        if(!confirmType(&t->subTypes[i], &s->subTypes[i])) return false;
+        t->subTypes[i].textType = typeString(t->subTypes[i]);
+        s->subTypes[i].textType = typeString(s->subTypes[i]);
+      }
     }
   }
   t->textType = typeString(*t);

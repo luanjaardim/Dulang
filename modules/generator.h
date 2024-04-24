@@ -2,6 +2,8 @@
 
 struct Generator {
     string prevDefinitions = "";
+    vector<Type> definedTypes; // general types, that can be used many times: int ^ int, int & int
+
     Generator() {};
     void translateFile(ParsedFile *ast, string fileName) {
         string text = "";
@@ -19,4 +21,6 @@ struct Generator {
     }
     string convertASTtoC(AnalyzedParsedFile *ast);
     string createFunc(Variable f, vector<Variable> args);
+    string convertToCVariable(Variable v);
+    size_t getTaggedUnionId(Type t);
 };
