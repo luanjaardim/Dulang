@@ -303,53 +303,53 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
 }
 
 AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
-  Variable *v = defs.findDefinition(tokens->get_data()->text);
-  if(v == NULL) {
-    printf("Error: Expected an already defined function at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+  AnalyzedParsedFile *node = analyzeToken(tokens);
+  if(node->get_data()->type != OP_TOKEN) { //this is not an error, but at the moment we only accept tokens
+    printf("Analyzer Error: expected a token at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     exit(1);
   }
-  if(v->type.base != TYPE_FUNC) {
+  OperationToken *op = &node->get_data()->tk;
+  Type *t = &op->type;
+  if(op->type.base != TYPE_FUNC) {
     printf("Error: Expected a function at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     exit(1);
   }
   OperationFuncCall funcCall;
+  funcCall.func = node;
   ParsedFile *tmp = tokens;
-  Token *name = tmp->get_data();
-  funcCall.funcName = name->text;
   tmp = tmp->get_neighbor(RIGHT_LINK);
   if(tmp->get_neighbors_size() > CHILD(1)) {
     size_t i = 0;
     while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
-      if(i == v->type.subTypes.size() - 1) {
+      if(i == t->subTypes.size() - 1) {
         printf("Error: Too many arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
         exit(1);
       }
-      AnalyzedParsedFile *node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
+      node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
       // WARN: the code bellow can cause bugs, maybe
       Type *s = node->get_data()->type == OP_TOKEN ? &node->get_data()->tk.type : &node->get_data()->funcCall.returnType;
-      if(!confirmType(&v->type.subTypes[i], s)) {
+      if(!confirmType(&t->subTypes[i], s)) {
         printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
-        printf("Expected: %s, Found: %s\n", v->type.subTypes[i].textType.c_str(), s->textType.c_str());
+        printf("Expected: %s, Found: %s\n", t->subTypes[i].textType.c_str(), s->textType.c_str());
         exit(1);
       }
       funcCall.params.push_back(node);
       i++;
       tmp = tmp->get_neighbor(RIGHT_LINK);
     }
-    if(i < v->type.subTypes.size() - 1) {
+    if(i < t->subTypes.size() - 1) {
       funcCall.returnType.base = TYPE_FUNC;
-      funcCall.returnType.subTypes = vector(v->type.subTypes.begin() + i, v->type.subTypes.end());
-      funcCall.returnType.textType = typeString(funcCall.returnType);
-    } else {
-      funcCall.returnType = v->type.subTypes[i];
-    }
-  } else {
-    if(v->type.subTypes[0].base != TYPE_NONE) {
-      printf("Error: Too few arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      funcCall.returnType.subTypes = vector(t->subTypes.begin() + i, t->subTypes.end());
+    } else
+      funcCall.returnType = t->subTypes[i];
+  } else { //there is no arguments passed
+    if(t->subTypes[0].base != TYPE_NONE) {
+      printf("Error: received \"none\" when expecting \"%s\" at line: %d, column: %d\n", typeString(t->subTypes[0]).c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
       exit(1);
     }
-    funcCall.returnType = v->type.subTypes[v->type.subTypes.size() - 1];
+    funcCall.returnType = t->subTypes[t->subTypes.size() - 1];
   }
+  funcCall.returnType.textType = typeString(funcCall.returnType);
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
@@ -382,7 +382,9 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
           printf("Error: Expected an already defined variable at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
           exit(1);
         }
-        t = v->type;
+        return new AnalyzedParsedFile(
+          new Operation(OperationToken{.tk = tokens->get_data(), .type = v->type}, Position(tokens->get_data()->l, tokens->get_data()->c))
+        );
       }
     break;
     case TK_TYPE_DEREF:
@@ -469,6 +471,7 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
     case TK_BLOCK_WHILE:
       return analyzeLoop(tokens);
     case TK_NAME:
+    case TK_TYPE_DEREF:
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
         return analyzeFuncCall(tokens);
       return analyzeToken(tokens);
@@ -541,7 +544,8 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
     case OP_FUNC_CALL:
       {
         OperationFuncCall funcCall = op->funcCall;
-        cout << tab << "Function call: " << funcCall.funcName << endl;
+        cout << tab << "Function call: " << endl;
+        printAnalyzerParsedFile(funcCall.func, tab+"  ");
         cout << tab+"  " << "Params: " << endl;
         for(auto p : funcCall.params) {
           printAnalyzerParsedFile(p, tab+"    ");

@@ -68,7 +68,7 @@ struct OperationLoop {
 };
 
 struct OperationFuncCall {
-    string funcName;
+    AnalyzedParsedFile *func;
     Type returnType;
     vector<AnalyzedParsedFile *> params;
 };

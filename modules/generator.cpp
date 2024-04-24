@@ -127,7 +127,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     case OP_FUNC_CALL:
     {
       OperationFuncCall fnCall = op->funcCall;
-      Variable f = *defsGen.findDefinition(fnCall.funcName);
+      string caller = this->convertASTtoC(op->funcCall.func);
+      bool isFuncPointerCall = caller[0] == '*' || caller[caller.size() - 1] == ']';
 
       vector<Variable> args;
       if(fnCall.returnType.base == TYPE_FUNC) {
@@ -139,9 +140,9 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
               .pos = v.pos,
               .type = v.type.subTypes[i],
             });
-          text = createFunc(v, args);
+          text = createFunc(v, args) + "\n\treturn ";
       }
-      text += "return " + getVariableName(f) + "(";
+      text += (isFuncPointerCall ? "(" + caller + ")" : caller) + "(";
       for(int i = 0; i < (int)fnCall.params.size(); i++) {
         text += this->convertASTtoC(fnCall.params[i]);
         if(fnCall.returnType.base == TYPE_FUNC || i != (int)fnCall.params.size() - 1) text += ",";

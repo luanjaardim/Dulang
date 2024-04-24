@@ -42,8 +42,8 @@ expr:
   "(" <expr> ")"
   "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
   NAME "(" [<expr>:","] ")"                 $ function call, TODO: possible change this to another element
-  "@" NAME "(" [<expr>:","] ")"             $ function call, TODO: possible change this to another element
-  NAME "@" NUMBER "(" [<expr>:","] ")"      $ function call, TODO: possible change this to another element
+  "@" <primary> "(" [<expr>:","] ")"             $ function call, TODO: possible change this to another element
+  <primary> "@" NUMBER "(" [<expr>:","] ")"      $ function call, TODO: possible change this to another element
   NAME "." <primary> "(" [<expr>:","] ")"   $ function call, TODO: possible change this to another element
 
 bitwise:
