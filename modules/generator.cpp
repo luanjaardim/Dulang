@@ -128,6 +128,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationFuncCall fnCall = op->funcCall;
       string caller = this->convertASTtoC(op->funcCall.func);
+      //check if the call is by a function pointer
       bool isFuncPointerCall = caller[0] == '*' || caller[caller.size() - 1] == ']';
 
       vector<Variable> args;
@@ -202,13 +203,20 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         case TK_TYPE_REF:
         case TK_TYPE_DEREF:
         {
-          if(ast->get_neighbors_size() == (CHILD(1)) + 1)
-            text = (tk.tk->type == TK_TYPE_DEREF ? "*" : "&") + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+          AnalyzedParsedFile *child1 = ast->get_neighbor(CHILD(1));
+          string child1Text = this->convertASTtoC(child1);
+          size_t numberOfChildren = ast->get_neighbors_size();
+          if(child1->get_data()->type == OP_TOKEN &&  //check if the previous dereference is different from the current one
+             child1->get_data()->tk.tk->type == TK_TYPE_DEREF &&
+             numberOfChildren != child1->get_neighbors_size()) child1Text = "(" + child1Text + ")";
+
+          if(numberOfChildren == (CHILD(1)) + 1) //has only one child
+            text = (tk.tk->type == TK_TYPE_DEREF ? "*" : "&") + child1Text;
           else {
             if(tk.tk->type != TK_TYPE_DEREF) {
-              printf("Fatal error: expected a variable to be dereferenced, but got %s\n", ast->get_neighbor(CHILD(1))->get_data()->varDef.var.name.c_str());
+              printf("Fatal error: expected a variable to be dereferenced, but got %s\n", child1->get_data()->varDef.var.name.c_str());
             } else {
-              text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + "[" + this->convertASTtoC(ast->get_neighbor(CHILD(2))) + "]";
+              text = child1Text + "[" + this->convertASTtoC(ast->get_neighbor(CHILD(2))) + "]";
             }
 
           }
