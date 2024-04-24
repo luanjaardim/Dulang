@@ -4,7 +4,9 @@
 DefinitionsHandler defsGen;
 
 string getVariableName(Variable v) {
-  return v.name + "_" + to_string(v.id);
+  if(v.name != "main")
+    return v.name + "_" + to_string(v.id);
+  return v.name;
 }
 
 string typeAsCType(Type t) {
@@ -90,12 +92,13 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       Variable f = *defsGen.getLastDefinition();
       OperationFuncDef fnDef = ast->get_data()->funcDef;
-      text = createFunc(f, fnDef.args);
+      string funcDef = createFunc(f, fnDef.args);
 
       for(auto op : fnDef.ops)
-        text += "  " + this->convertASTtoC(op);
+        funcDef += "  " + this->convertASTtoC(op);
 
-      text += "}\n";
+      funcDef += "}\n";
+      this->prevDefinitions += funcDef;
     }
     break;
     case OP_VAR_DEF:
@@ -132,7 +135,9 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       bool isFuncPointerCall = caller[0] == '*' || caller[caller.size() - 1] == ']';
 
       vector<Variable> args;
-      if(fnCall.returnType.base == TYPE_FUNC) {
+      //the function call will create another function that uses the original one, but with the constants
+      //parameters that were passed to the function
+      if(fnCall.returnType.base == TYPE_FUNC) { 
           Variable v = *defsGen.getLastDefinition();
           for(int i = 0; i < (int)v.type.subTypes.size()-1; i++)
             args.push_back(Variable{
@@ -141,7 +146,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
               .pos = v.pos,
               .type = v.type.subTypes[i],
             });
-          text = createFunc(v, args) + "\n\treturn ";
+          text = createFunc(v, args) + "  return ";
       }
       text += (isFuncPointerCall ? "(" + caller + ")" : caller) + "(";
       for(int i = 0; i < (int)fnCall.params.size(); i++) {
@@ -152,6 +157,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         for(int i = 0; i < (int)args.size(); i++)
           text += getVariableName(args[i]) + (i != (int)args.size() - 1 ? "," : ");\n");
         text += "}\n";
+        this->prevDefinitions += text;
+        text.clear();
       }
       else
         text += ")";
