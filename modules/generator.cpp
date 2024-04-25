@@ -71,6 +71,18 @@ string Generator::convertToCVariable(Variable v) {
   }
 }
 
+size_t Generator::fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t) {
+  if(t.base == TYPE_UNKNOWN) {
+    printf("Error: expected a type, but got unknown\n");
+    exit(1);
+  }
+  for(size_t i = 0; i < this->definedTypes[tagUnionId].subTypes.size(); i++) {
+    if(confirmType(&t, &this->definedTypes[tagUnionId].subTypes[i])) return i;
+  }
+  printf("Error: could not find the type %s in the tagged union of type %s\n", t.textType.c_str(), this->definedTypes[tagUnionId].textType.c_str());
+  exit(1);
+}
+
 size_t Generator::getTaggedUnionId(Type t) {
   if(t.base != TYPE_TAG_UNION) {
     printf("Error: expected a tagged union, but got %s\n", typeAsCType(t).c_str());
@@ -82,7 +94,7 @@ size_t Generator::getTaggedUnionId(Type t) {
     index++;
   }
   string text = "struct taggedUnion" + to_string(index) + " {\n";
-  text += "  enum type {\n";
+  text += "  enum {\n";
   string enum_elements = "";
   string union_elements = "";
   for(int i = 0; i < (int)t.subTypes.size(); i++) {
@@ -96,7 +108,7 @@ size_t Generator::getTaggedUnionId(Type t) {
     union_elements += "    " + type + ";\n";
   }
 
-  text += enum_elements + "  };\n";
+  text += enum_elements + "  } type;\n";
   text += "  union {\n";
   text += union_elements + "  };\n";
   text += "};\n";
@@ -245,6 +257,31 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       for(auto op : loop.ops)
         text += "  " + this->convertASTtoC(op);
       text += "}\n";
+    }
+    break;
+    case OP_MATCH:
+    {
+        OperationMatch match = op->match;
+        printAnalyzerParsedFile(match.expr, "");
+        Type tagUnionType = match.expr->get_data()->tk.type;
+        size_t taggedUnionId = getTaggedUnionId(tagUnionType);
+        string tagUnion = this->convertASTtoC(match.expr);
+        text = "switch((" + tagUnion + ").type) {\n";
+        for(size_t i = 0; i < match.castedVars.size(); i++) {
+          Variable v = match.castedVars[i];
+          size_t curId = fromTaggedUnionIdGetTypeId(taggedUnionId, v.type);
+          text += "  case TYPE_" + to_string(curId) + ":\n{\n";
+          text += convertToCVariable(v) + " = (" + tagUnion + ").FIELD_" + to_string(curId) + ";\n"; 
+          defsGen.scopes.push_back(Scope(SCOPE_MATCH_BRANCH));
+          defsGen.addDefinition(v);
+
+          for(auto op : match.branches[i])
+            text += "    " + this->convertASTtoC(op);
+          text += "}\n  break;\n";
+
+          defsGen.popDefinitions();
+        }
+        text += "}\n";
     }
     break;
     case OP_TOKEN:

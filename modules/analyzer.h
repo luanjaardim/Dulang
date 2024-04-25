@@ -73,6 +73,12 @@ struct OperationFuncCall {
     vector<AnalyzedParsedFile *> params;
 };
 
+struct OperationMatch {
+    AnalyzedParsedFile *expr;
+    vector<Variable> castedVars;
+    vector<vector<AnalyzedParsedFile *>> branches;
+};
+
 enum OperationType {
     OP_TOKEN, //default operation, only one token
     OP_FUNC_DEF, //function definition
@@ -81,7 +87,7 @@ enum OperationType {
     OP_COND, //if, else if and else
     OP_LOOP, //while and loop
     OP_FUNC_CALL,
-    // TODO: Add function call operation and type definitions
+    OP_MATCH,
 };
 
 struct Operation {
@@ -95,6 +101,7 @@ struct Operation {
         OperationCond cond;
         OperationLoop loop;
         OperationFuncCall funcCall;
+        OperationMatch match;
     };
 
     Operation(OperationToken tk, Position p) : pos(p), type(OP_TOKEN), tk(tk) {}
@@ -104,6 +111,7 @@ struct Operation {
     Operation(OperationCond cond, Position p) : pos(p), type(OP_COND), cond(cond) {}
     Operation(OperationLoop loop, Position p) : pos(p), type(OP_LOOP), loop(loop) {}
     Operation(OperationFuncCall funcCall, Position p) : pos(p), type(OP_FUNC_CALL), funcCall(funcCall) {}
+    Operation(OperationMatch match, Position p) : pos(p), type(OP_MATCH), match(match) {}
 };
 
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);
@@ -116,6 +124,7 @@ enum ScopeType {
     SCOPE_FUNC,
     SCOPE_LOOP,
     SCOPE_COND,
+    SCOPE_MATCH_BRANCH,
 };
 
 struct Scope {

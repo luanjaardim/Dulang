@@ -23,4 +23,5 @@ struct Generator {
     string createFunc(Variable f, vector<Variable> args);
     string convertToCVariable(Variable v);
     size_t getTaggedUnionId(Type t);
+    size_t fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t);
 };

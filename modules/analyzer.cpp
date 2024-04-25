@@ -365,6 +365,30 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
+AnalyzedParsedFile *analyzeMatch(ParsedFile *tokens) {
+  OperationMatch match;
+  match.expr = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+  if(match.expr->get_data()->tk.type.base != TYPE_TAG_UNION) {
+    printf("Error: expected a tagged union at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    exit(1);
+  }
+  ParsedFile *tmp = tokens->get_neighbor(RIGHT_LINK);
+  for(int branch = CHILD(1); branch < (int)tmp->get_neighbors_size(); branch++) {
+    ParsedFile *node = tmp->get_neighbor(branch);
+    Variable v = analyzeParseType(node->get_neighbor(CHILD(1)));
+    defs.scopes.push_back(Scope(SCOPE_MATCH_BRANCH));
+    defs.addDefinition(v);
+    match.castedVars.push_back(v);
+    match.branches.push_back({});
+    for(int i = CHILD(2); i < (int)node->get_neighbors_size(); i++) {
+      if(node->get_neighbor(i) == NULL) continue;
+      match.branches.back().push_back(analyzeParsedFile(node->get_neighbor(i)));
+    }
+    defs.popDefinitions();
+  }
+  return new AnalyzedParsedFile(new Operation(match, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
+
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
   Type t;
   switch(tokens->get_data()->type) {
@@ -487,6 +511,8 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
         return analyzeFuncCall(tokens);
       return analyzeToken(tokens);
+    case TK_BLOCK_MATCH:
+      return analyzeMatch(tokens);
     default:
       return analyzeToken(tokens);
   }
@@ -564,6 +590,19 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
         }
         break;
       }
+    case OP_MATCH:
+    {
+        OperationMatch match = op->match;
+        cout << tab << "Match: " << endl;
+        for(int i = 0; i < (int)match.castedVars.size(); i++) {
+          cout << tab+"  " << "-> Casted var: " << match.castedVars[i].name << " Type: " << match.castedVars[i].type.textType << endl;
+          cout << tab+"  " << "Branch: " << endl;
+          for(auto b : match.branches[i]) {
+            printAnalyzerParsedFile(b, tab+"    ");
+          }
+        }
+    }
+    break;
     default:
       printf("not implemented yet\n");
       exit(1);

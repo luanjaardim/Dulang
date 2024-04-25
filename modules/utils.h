@@ -89,6 +89,7 @@ typedef enum {
   TK_BLOCK_SKIP,
   TK_BLOCK_STOP,
   TK_BLOCK_BACK,
+  TK_BLOCK_MATCH,
 
   //assignment keywords
   TK_ASSIGN,

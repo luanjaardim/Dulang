@@ -30,6 +30,12 @@ loop_stmt:
 type_def:
   "type" NAME "|" <some_type>             $ defining an alias to a type
 
+match_tag_union:
+  "match" <primary> "|" [<match_branch>:BLOCK]
+
+match_branch:
+  <name> "|" <body>
+
 body:
   <stmt>
   [<stmt>:BLOCK]
