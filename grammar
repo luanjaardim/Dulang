@@ -7,6 +7,7 @@ stmt:
   <cond_stmt>
   <loop_stmt>
   <type_def>
+  <match_tag_union>
   "back" <expr>
   "skip"
   "skip" NAME
@@ -116,12 +117,15 @@ field:
 
 some_type:
   "(" <some_type> ")"
-  [<field>:"&"]              $ compound type, a struct
+  <some_type> "->" <some_type>       $ functions types
+  <tupple_type>
+
+tupple_type:
+  <tupple_type> "&" <tupple_type>        $ tupples
   <tag_type>
 
 tag_type:
-  <some_type> "^" <some_type>          $ tagged union types
-  <some_type> "->" <some_type>         $ functions types
+  <tag_type> "^" <tag_type>          $ tagged union types
   <basic_type>
 
 basic_type:

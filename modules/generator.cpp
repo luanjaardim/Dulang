@@ -3,6 +3,32 @@
 
 DefinitionsHandler defsGen;
 
+Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
+  if(apf == NULL) {
+    printf("Error: expected a type, but got NULL\n");
+    exit(1);
+  }
+  Operation *op = apf->get_data();
+  switch(op->type) {
+    case OP_TOKEN:
+      return op->tk.type;
+    case OP_FUNC_CALL:
+      return op->funcCall.returnType;
+    case OP_FUNC_DEF:
+      return op->funcDef.type;
+    case OP_TYPE_DEF:
+    case OP_LOOP:
+    case OP_COND:
+    case OP_VAR_DEF:
+    case OP_MATCH:
+      return Type{ .textType = "none" , .base = TYPE_NONE,  .subTypes = {}};
+    default:
+      printf("Error: expected a type, but got %d\n", op->type);
+      exit(1);
+  }
+}
+
+
 string getVariableName(Variable v) {
   if(v.name != "main")
     return v.name + "_" + to_string(v.id);
@@ -165,11 +191,29 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           exit(1);
         }
         Variable *v;
-        if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut)
-          text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+        if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut) {
+          if(op->varDef.var.type.base == TYPE_TAG_UNION) {
+            Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
+            size_t taggedUnionId = getTaggedUnionId(op->varDef.var.type);
+            size_t typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
+            string id = to_string(typeId);
+            text = getVariableName(*v) +
+                " = (struct taggedUnion" + id + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
+                this->convertASTtoC(op->varDef.value) + "};\n";
+          } else
+            text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+        }
         else {
           defsGen.addDefinition(op->varDef.var);
-          text = convertToCVariable(op->varDef.var) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+          text = convertToCVariable(op->varDef.var) + " = ";
+          string value = this->convertASTtoC(op->varDef.value);
+          if(op->varDef.var.type.base == TYPE_TAG_UNION) {
+            Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
+            size_t taggedUnionId = getTaggedUnionId(op->varDef.var.type);
+            size_t typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
+            text += "{.type = TYPE_" + to_string(typeId) + ", .FIELD_" + to_string(typeId) + " = " + value + "};\n";
+          } else
+             text += value + ";\n";
         }
 
         text += this->convertASTtoC(ast->get_neighbor(RIGHT_LINK));
@@ -262,7 +306,6 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     case OP_MATCH:
     {
         OperationMatch match = op->match;
-        printAnalyzerParsedFile(match.expr, "");
         Type tagUnionType = match.expr->get_data()->tk.type;
         size_t taggedUnionId = getTaggedUnionId(tagUnionType);
         string tagUnion = this->convertASTtoC(match.expr);
