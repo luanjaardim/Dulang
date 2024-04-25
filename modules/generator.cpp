@@ -167,8 +167,9 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationFuncCall fnCall = op->funcCall;
       string caller = this->convertASTtoC(op->funcCall.func);
+      string localText = "";
       //check if the call is by a function pointer
-      bool isFuncPointerCall = caller[0] == '*' || caller[caller.size() - 1] == ']';
+      bool isFuncPointerCall = fnCall.func->get_data()->type == OP_TOKEN && fnCall.func->get_data()->tk.tk->type == TK_TYPE_DEREF;
 
       vector<Variable> args;
       //the function call will create another function that uses the original one, but with the constants
@@ -182,22 +183,42 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
               .pos = v.pos,
               .type = v.type.subTypes[i],
             });
-          text = createFunc(v, args) + "  return ";
+          localText = createFunc(v, args) + "  return ";
       }
-      text += (isFuncPointerCall ? "(" + caller + ")" : caller) + "(";
+      // partial function call with a function pointer
+      // we will create a function as normal, but a global function pointer will be created
+      // to store the function pointer, being used in the function call
+      if(isFuncPointerCall && fnCall.returnType.base == TYPE_FUNC) {
+        AnalyzedParsedFile *tmp = fnCall.func->get_neighbor(CHILD(1));
+        while(tmp->get_data()->type == OP_TOKEN && tmp->get_data()->tk.tk->type == TK_TYPE_DEREF)
+          tmp = tmp->get_neighbor(CHILD(1));
+        if(tmp->get_data()->type == OP_TOKEN && tmp->get_data()->tk.tk->type == TK_NAME) {
+          Variable funcPntGlobal = *defsGen.findDefinition(tmp->get_data()->tk.tk->text);
+          string nameWithId = getVariableName(funcPntGlobal);
+          funcPntGlobal.name = "global_" + funcPntGlobal.name;
+          string globalNameWithId = getVariableName(funcPntGlobal);
+          caller.replace(caller.find(nameWithId), nameWithId.size(), globalNameWithId);
+          //creating the global function pointer
+          this->prevDefinitions += convertToCVariable(funcPntGlobal) + " = (void *)0;\n";
+          text = "if(" + globalNameWithId + " == (void *)0) " + globalNameWithId + " = " + nameWithId + ";\n";
+        } else {
+          printf("Error: expected a function name, but got %s\n", tmp->get_data()->tk.tk->text.c_str());
+          exit(1);
+        }
+      }
+      localText += (isFuncPointerCall ? "(" + caller + ")" : caller) + "(";
       for(int i = 0; i < (int)fnCall.params.size(); i++) {
-        text += this->convertASTtoC(fnCall.params[i]);
-        if(fnCall.returnType.base == TYPE_FUNC || i != (int)fnCall.params.size() - 1) text += ",";
+        localText += this->convertASTtoC(fnCall.params[i]);
+        if(fnCall.returnType.base == TYPE_FUNC || i != (int)fnCall.params.size() - 1) localText += ",";
       }
       if(fnCall.returnType.base == TYPE_FUNC) {
         for(int i = 0; i < (int)args.size(); i++)
-          text += getVariableName(args[i]) + (i != (int)args.size() - 1 ? "," : ");\n");
-        text += "}\n";
-        this->prevDefinitions += text;
-        text.clear();
+          localText += getVariableName(args[i]) + (i != (int)args.size() - 1 ? "," : ");\n");
+        localText += "}\n";
+        this->prevDefinitions += localText;
       }
       else
-        text += ")";
+        text = localText + ")";
     }
     break;
     case OP_COND:
