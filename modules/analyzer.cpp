@@ -157,7 +157,9 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     funcDef.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
   }
-  defs.popDefinitions(); //pop the variables from the scope
+  //this will be used on generator to know the variables passed with context
+  funcDef.defsFromPrevScopes = defs.scopes.back().defsFromPrevScope;
+  defs.popDefinitions(); //pop the variables of the scope
 
   return new AnalyzedParsedFile(new Operation(funcDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }

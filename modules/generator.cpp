@@ -9,7 +9,7 @@ string getVariableName(Variable v) {
   return v.name;
 }
 
-string typeAsCType(Type t) {
+string Generator::typeAsCType(Type t) {
   switch(t.base) {
     case TYPE_INT:
       return "int";
@@ -36,6 +36,13 @@ string typeAsCType(Type t) {
       }
       return type + ")";
     }
+    case TYPE_COMPOUND:
+    case TYPE_TAG_UNION:
+    {
+      size_t id = this->getTaggedUnionOrTuppleId(t);
+      return (t.base == TYPE_TAG_UNION ? "struct taggedUnion" : "struct tupple") + to_string(id);
+    }
+    break;
     case TYPE_UNKNOWN:
       return "unknown";
     default:
@@ -72,10 +79,19 @@ string Generator::convertToCVariable(Variable v) {
   }
 }
 
-size_t Generator::fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t) {
+//returns the position of the type in the subtypes of the tagged union
+//-1 if the type is the same as the tagged union
+int Generator::fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t) {
   if(t.base == TYPE_UNKNOWN) {
     printf("Error: expected a type, but got unknown\n");
     exit(1);
+  }
+  if(t.base == TYPE_TAG_UNION) {
+    if(!confirmType(&t, &this->definedTypes[tagUnionId])) {
+      printf("Error: expected a tagged union %s, but got %s\n", this->definedTypes[tagUnionId].textType.c_str(), t.textType.c_str());
+      exit(1);
+    }
+    return -1;
   }
   for(size_t i = 0; i < this->definedTypes[tagUnionId].subTypes.size(); i++) {
     if(confirmType(&t, &this->definedTypes[tagUnionId].subTypes[i])) return i;
@@ -143,8 +159,29 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     case OP_FUNC_DEF:
     {
       Variable f = *defsGen.getLastDefinition();
-      OperationFuncDef fnDef = ast->get_data()->funcDef;
+      OperationFuncDef fnDef = op->funcDef;
+      vector<Variable> prevDefinedVars = fnDef.defsFromPrevScopes;
+      //if there are variables used inside this function that were not defined inside it
+      //we need to pass a context to this function, a struct with the variables that were used
       string funcDef = createFunc(f, fnDef.args);
+
+      if(prevDefinedVars.size() > 0) {
+        string funcName = getVariableName(f);
+        string contextType = "struct context_" + funcName;
+        string context = contextType + " {\n";
+        for(auto d : prevDefinedVars) {
+          string defineVar = "  " + convertToCVariable(d);
+          string variableName = getVariableName(d);
+
+          context += defineVar + ";\n";
+          funcDef += defineVar + " = g_context_" + funcName + "." + variableName + ";\n";
+          text += variableName + ", "; // TODO: pass as reference, for variables can be changed
+        }
+        context += "};\n";
+        context += contextType + " g_context_" + funcName + " = {};\n";
+        text = "g_context_" + funcName + " = (" + contextType + "){" + text + "};\n";
+        this->prevDefinitions += context;
+      }
 
       for(auto op : fnDef.ops)
         funcDef += "  " + this->convertASTtoC(op);
@@ -172,12 +209,16 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut) {
           if(op->varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
+            cout << t.textType << endl;
             size_t taggedUnionId = getTaggedUnionOrTuppleId(op->varDef.var.type);
-            size_t typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
+            int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string id = to_string(typeId);
-            text = getVariableName(*v) +
-                " = (struct taggedUnion" + id + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
-                this->convertASTtoC(op->varDef.value) + "};\n";
+            if(typeId != -1)
+              text = getVariableName(*v) +
+                  " = (struct taggedUnion" + id + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
+                  this->convertASTtoC(op->varDef.value) + "};\n";
+            else
+              text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
           } else
             text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
         }
@@ -188,8 +229,12 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           if(op->varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
             size_t taggedUnionId = getTaggedUnionOrTuppleId(op->varDef.var.type);
-            size_t typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
-            text += "{.type = TYPE_" + to_string(typeId) + ", .FIELD_" + to_string(typeId) + " = " + value + "};\n";
+            int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
+            string idStr = to_string(typeId);
+            if(typeId != -1)
+              text += "{.type = TYPE_" + idStr + ", .FIELD_" + idStr + " = " + value + "};\n";
+            else
+              text += value + ";\n";
           } else
              text += value + ";\n";
         }
@@ -290,7 +335,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         text = "switch((" + tagUnion + ").type) {\n";
         for(size_t i = 0; i < match.castedVars.size(); i++) {
           Variable v = match.castedVars[i];
-          size_t curId = fromTaggedUnionIdGetTypeId(taggedUnionId, v.type);
+          int curId = fromTaggedUnionIdGetTypeId(taggedUnionId, v.type);
           text += "  case TYPE_" + to_string(curId) + ":\n{\n";
           text += convertToCVariable(v) + " = (" + tagUnion + ").FIELD_" + to_string(curId) + ";\n"; 
           defsGen.scopes.push_back(Scope(SCOPE_MATCH_BRANCH));

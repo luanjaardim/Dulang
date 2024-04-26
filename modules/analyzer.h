@@ -41,6 +41,7 @@ struct OperationToken {
 
 struct OperationFuncDef {
     vector<Variable> args;
+    vector<Variable> defsFromPrevScopes; //definitions from other scopes that were used in this scope
     Type type;
     vector<AnalyzedParsedFile *> ops;
 };
@@ -143,7 +144,8 @@ struct Scope {
     AnalyzedParsedFile *scopeMainNode;
     ScopeType type;
     Type returnType;
-    vector<Variable> defs;
+    vector<Variable> defs = {};
+    vector<Variable> defsFromPrevScope = {}; //definitions from other scopes that were used in this scope
     Scope(ScopeType type) : type(type) { }
 };
 
@@ -165,6 +167,17 @@ struct DefinitionsHandler {
         for( int i = (int)scopes.size() - 1; i >= 0; i--) {
             for(int j = (int)scopes[i].defs.size() - 1; j >= 0; j--) {
                 if(scopes[i].defs[j].name == name) {
+                    //add the definition to the next scopes, as used by them, this will be part of the context of the fuction
+                    if(i > 0) //do not add if from global scope, and only add if it is a function
+                        for(int k = i + 1; k < (int)scopes.size(); k++) {
+                            if(scopes[k].type == SCOPE_FUNC) {
+                                bool add = true;
+                                for( auto v : scopes[k].defsFromPrevScope) //already added
+                                    if(v.id == scopes[i].defs[j].id) add = false;
+                                if(add)
+                                    scopes[k].defsFromPrevScope.push_back(scopes[i].defs[j]);
+                            }
+                        }
                     return &scopes[i].defs[j];
                 }
             }
