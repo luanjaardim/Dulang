@@ -7,7 +7,9 @@ stmt:
   <cond_stmt>
   <loop_stmt>
   <type_def>
+  <func_call>
   <match_tag_union>
+  $TODO : include load and loadC statements
   "back" <expr>
   "skip"
   "skip" NAME
@@ -31,6 +33,12 @@ loop_stmt:
 type_def:
   "type" NAME "|" <some_type>             $ defining an alias to a type
 
+func_call:
+  NAME "(" [<expr>:","] ")"
+  "@" <primary> "(" [<expr>:","] ")"
+  <primary> "@" NUMBER "(" [<expr>:","] ")"
+  NAME "." <primary> "(" [<expr>:","] ")"
+
 match_tag_union:
   "match" <primary> "|" [<match_branch>:BLOCK]
 
@@ -42,16 +50,15 @@ body:
   [<stmt>:BLOCK]
 
 expr:
+  "(" <expr> ")"
   <expr> "?" <expr> ":" <expr>       $ ternary
+  "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
+  "[" [<expr>:","] "]"                                   $ array creation
+  "{" [<expr>:","] "}"                                   $ tupple creation
   <primary>
   <bitwise>
   <parse>
-  "(" <expr> ")"
-  "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
-  NAME "(" [<expr>:","] ")"                 $ function call, TODO: possible change this to another element
-  "@" <primary> "(" [<expr>:","] ")"             $ function call, TODO: possible change this to another element
-  <primary> "@" NUMBER "(" [<expr>:","] ")"      $ function call, TODO: possible change this to another element
-  NAME "." <primary> "(" [<expr>:","] ")"   $ function call, TODO: possible change this to another element
+  <func_call>
 
 bitwise:
   <bitwise> "band" <bitwise>
@@ -113,7 +120,7 @@ parse:
   <expr> "::" <some_type>
 
 field: 
-  NAME "::" <some_type> ?("=" <comptime_val>)
+  NAME "::" <some_type> ?("=" <comptime_val>) $ TODO: use this kind of construction for struct with fields
 
 some_type:
   "(" <some_type> ")"

@@ -3,32 +3,6 @@
 
 DefinitionsHandler defsGen;
 
-Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
-  if(apf == NULL) {
-    printf("Error: expected a type, but got NULL\n");
-    exit(1);
-  }
-  Operation *op = apf->get_data();
-  switch(op->type) {
-    case OP_TOKEN:
-      return op->tk.type;
-    case OP_FUNC_CALL:
-      return op->funcCall.returnType;
-    case OP_FUNC_DEF:
-      return op->funcDef.type;
-    case OP_TYPE_DEF:
-    case OP_LOOP:
-    case OP_COND:
-    case OP_VAR_DEF:
-    case OP_MATCH:
-      return Type{ .textType = "none" , .base = TYPE_NONE,  .subTypes = {}};
-    default:
-      printf("Error: expected a type, but got %d\n", op->type);
-      exit(1);
-  }
-}
-
-
 string getVariableName(Variable v) {
   if(v.name != "main")
     return v.name + "_" + to_string(v.id);
@@ -87,11 +61,12 @@ string Generator::convertToCVariable(Variable v) {
       return text;
       }
     case TYPE_TAG_UNION:
-      return "struct taggedUnion" + to_string(getTaggedUnionId(v.type)) + " " + nameAndId;
+      return "struct taggedUnion" + to_string(getTaggedUnionOrTuppleId(v.type)) + " " + nameAndId;
     case TYPE_COMPOUND:
+      return "struct tupple" + to_string(getTaggedUnionOrTuppleId(v.type)) + " " + nameAndId;
     case TYPE_FUNC: //probably wont be needed
     default:
-      printf("this type is not implemented yet: %s\n", typeAsCType(v.type).c_str());
+      printf("Error at convertToCVariable: this type is not implemented yet: %s\n", typeAsCType(v.type).c_str());
       exit(1);
       break;
   }
@@ -109,8 +84,8 @@ size_t Generator::fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t) {
   exit(1);
 }
 
-size_t Generator::getTaggedUnionId(Type t) {
-  if(t.base != TYPE_TAG_UNION) {
+size_t Generator::getTaggedUnionOrTuppleId(Type t) {
+  if(t.base != TYPE_TAG_UNION && t.base != TYPE_COMPOUND) {
     printf("Error: expected a tagged union, but got %s\n", typeAsCType(t).c_str());
     exit(1);
   }
@@ -119,10 +94,11 @@ size_t Generator::getTaggedUnionId(Type t) {
     if(confirmType(&t, &s)) return index;
     index++;
   }
-  string text = "struct taggedUnion" + to_string(index) + " {\n";
-  text += "  enum {\n";
+  string text = (t.base == TYPE_TAG_UNION ? "struct taggedUnion" : "struct tupple") + to_string(index) + " {\n";
+  if(t.base == TYPE_TAG_UNION)
+    text += "  enum {\n";
   string enum_elements = "";
-  string union_elements = "";
+  string fields = "";
   for(int i = 0; i < (int)t.subTypes.size(); i++) {
     enum_elements += "    TYPE_" + to_string(i) + ",\n";
     string type = typeAsCType(t.subTypes[i]);
@@ -131,12 +107,14 @@ size_t Generator::getTaggedUnionId(Type t) {
     } else {
       type += " FIELD_" + to_string(i);
     }
-    union_elements += "    " + type + ";\n";
+    fields += "    " + type + ";\n";
   }
 
-  text += enum_elements + "  } type;\n";
-  text += "  union {\n";
-  text += union_elements + "  };\n";
+  if(t.base == TYPE_TAG_UNION) {
+    text += enum_elements + "  } type;\n";
+    text += "  union {\n";
+  }
+  text += fields + (t.base == TYPE_TAG_UNION ? "  };\n" : "");
   text += "};\n";
   this->prevDefinitions += text;
 
@@ -194,7 +172,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut) {
           if(op->varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
-            size_t taggedUnionId = getTaggedUnionId(op->varDef.var.type);
+            size_t taggedUnionId = getTaggedUnionOrTuppleId(op->varDef.var.type);
             size_t typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string id = to_string(typeId);
             text = getVariableName(*v) +
@@ -209,7 +187,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           string value = this->convertASTtoC(op->varDef.value);
           if(op->varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
-            size_t taggedUnionId = getTaggedUnionId(op->varDef.var.type);
+            size_t taggedUnionId = getTaggedUnionOrTuppleId(op->varDef.var.type);
             size_t typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             text += "{.type = TYPE_" + to_string(typeId) + ", .FIELD_" + to_string(typeId) + " = " + value + "};\n";
           } else
@@ -307,7 +285,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
         OperationMatch match = op->match;
         Type tagUnionType = match.expr->get_data()->tk.type;
-        size_t taggedUnionId = getTaggedUnionId(tagUnionType);
+        size_t taggedUnionId = getTaggedUnionOrTuppleId(tagUnionType);
         string tagUnion = this->convertASTtoC(match.expr);
         text = "switch((" + tagUnion + ").type) {\n";
         for(size_t i = 0; i < match.castedVars.size(); i++) {
@@ -325,6 +303,21 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           defsGen.popDefinitions();
         }
         text += "}\n";
+    }
+    break;
+    case OP_ELEM_LIST:
+    {
+      OperationElemList elemList = op->elemList;
+      if(elemList.elemType.base == TYPE_COMPOUND) {
+        size_t id = getTaggedUnionOrTuppleId(elemList.elemType);
+        text = "(struct tupple" + to_string(id) + ")";
+      }
+      text += "{";
+      for(int i = 0; i < (int)elemList.values.size(); i++) {
+        text += this->convertASTtoC(elemList.values[i]);
+        if(i != (int)elemList.values.size() - 1) text += ",";
+      }
+      text += "}";
     }
     break;
     case OP_TOKEN:

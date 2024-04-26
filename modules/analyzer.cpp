@@ -5,6 +5,33 @@ DefinitionsHandler defs;
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
 
+Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
+  if(apf == NULL) {
+    printf("Error: expected a type, but got NULL\n");
+    exit(1);
+  }
+  Operation *op = apf->get_data();
+  switch(op->type) {
+    case OP_TOKEN:
+      return op->tk.type;
+    case OP_FUNC_CALL:
+      return op->funcCall.returnType;
+    case OP_FUNC_DEF:
+      return op->funcDef.type;
+    case OP_ELEM_LIST:
+      return op->elemList.elemType;
+    case OP_TYPE_DEF:
+    case OP_LOOP:
+    case OP_COND:
+    case OP_VAR_DEF:
+    case OP_MATCH:
+      return Type{ .textType = "none" , .base = TYPE_NONE,  .subTypes = {}};
+    default:
+      printf("Error: expected a type, but got %d\n", op->type);
+      exit(1);
+  }
+}
+
 string typeString(Type t) {
   switch(t.base) {
     case TYPE_FUNC:
@@ -240,8 +267,10 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
         valueType = &(varDef.value->get_data()->tk.type); break;
       case OP_FUNC_CALL:
         valueType = &(varDef.value->get_data()->funcCall.returnType); break;
+      case OP_ELEM_LIST:
+        valueType = &(varDef.value->get_data()->elemList.elemType); break;
       default:
-        printf("Error: expected a token, function call or function definition at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+        printf("Error: trying to assign with an invalid value at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
         exit(1);
     }
 
@@ -388,6 +417,35 @@ AnalyzedParsedFile *analyzeMatch(ParsedFile *tokens) {
   }
   return new AnalyzedParsedFile(new Operation(match, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
+AnalyzedParsedFile *analyzeListOfElements(ParsedFile *tokens) {
+  OperationElemList elemList;
+  elemList.type = tokens->get_data()->type == TK_SQR_BRA_OPEN ? OperationElemList::ARRAY : OperationElemList::TUPPLE;
+  elemList.elemType = elemList.type == OperationElemList::ARRAY ? Type{"", TYPE_REF, {}} : Type{"", TYPE_COMPOUND, {}};
+  TokenType lastElement = elemList.type == OperationElemList::ARRAY ? TK_SQR_BRA_CLOSE : TK_CUR_BRA_CLOSE;
+
+  ParsedFile *tmp = tokens;
+  while(tmp->get_data()->type != lastElement) {
+    AnalyzedParsedFile *node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
+    Type type = getTypeFromAnalyzedParsedFile(node);
+    elemList.values.push_back(node);
+
+    if(elemList.elemType.base == TYPE_COMPOUND)
+      elemList.elemType.subTypes.push_back(type);
+    else if(elemList.elemType.base == TYPE_REF) {
+      if(elemList.elemType.subTypes.empty()) {
+        elemList.elemType.subTypes.push_back(type);
+      } else if(!confirmType(&elemList.elemType.subTypes[0], &type)) {
+        printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
+        printf("Expected: %s, Found: %s\n", elemList.elemType.subTypes[0].textType.c_str(), type.textType.c_str());
+        exit(1);
+      }
+    }
+    tmp = tmp->get_neighbor(RIGHT_LINK);
+  }
+  elemList.elemType.textType = typeString(elemList.elemType);
+
+  return new AnalyzedParsedFile(new Operation(elemList, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
   Type t;
@@ -506,13 +564,16 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
       return analyzeCond(tokens);
     case TK_BLOCK_WHILE:
       return analyzeLoop(tokens);
+    case TK_BLOCK_MATCH:
+      return analyzeMatch(tokens);
+    case TK_SQR_BRA_OPEN:
+    case TK_CUR_BRA_OPEN:
+      return analyzeListOfElements(tokens);
     case TK_NAME:
     case TK_TYPE_DEREF:
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
         return analyzeFuncCall(tokens);
       return analyzeToken(tokens);
-    case TK_BLOCK_MATCH:
-      return analyzeMatch(tokens);
     default:
       return analyzeToken(tokens);
   }
@@ -601,6 +662,15 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
             printAnalyzerParsedFile(b, tab+"    ");
           }
         }
+    }
+    break;
+    case OP_ELEM_LIST:
+    {
+      OperationElemList elemList = op->elemList;
+      cout << tab << "List of elements: " << (elemList.type == OperationElemList::ARRAY ? "Array" : "Tupple") << endl;
+      for(auto e : elemList.values) {
+        printAnalyzerParsedFile(e, tab+"  ");
+      }
     }
     break;
     default:

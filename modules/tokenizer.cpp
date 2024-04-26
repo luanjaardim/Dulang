@@ -72,7 +72,7 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"{",     TK_CUR_BRA_OPEN},
   {"}",     TK_CUR_BRA_CLOSE},
   {"[",     TK_SQR_BRA_OPEN},
-  {"]",     TK_SQR_BAR_CLOSE},
+  {"]",     TK_SQR_BRA_CLOSE},
   {"(",     TK_ROU_BRA_OPEN},
   {")",     TK_ROU_BRA_CLOSE},
   {"|",     TK_END_BAR},

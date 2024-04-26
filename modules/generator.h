@@ -22,6 +22,6 @@ struct Generator {
     string convertASTtoC(AnalyzedParsedFile *ast);
     string createFunc(Variable f, vector<Variable> args);
     string convertToCVariable(Variable v);
-    size_t getTaggedUnionId(Type t);
+    size_t getTaggedUnionOrTuppleId(Type t);
     size_t fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t);
 };

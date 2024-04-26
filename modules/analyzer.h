@@ -79,6 +79,14 @@ struct OperationMatch {
     vector<vector<AnalyzedParsedFile *>> branches;
 };
 
+struct OperationElemList {
+    enum {
+        ARRAY, TUPPLE
+    } type;
+    Type elemType;
+    vector<AnalyzedParsedFile *> values;
+};
+
 enum OperationType {
     OP_TOKEN, //default operation, only one token
     OP_FUNC_DEF, //function definition
@@ -88,6 +96,7 @@ enum OperationType {
     OP_LOOP, //while and loop
     OP_FUNC_CALL,
     OP_MATCH,
+    OP_ELEM_LIST, //for array, struct
 };
 
 struct Operation {
@@ -102,6 +111,7 @@ struct Operation {
         OperationLoop loop;
         OperationFuncCall funcCall;
         OperationMatch match;
+        OperationElemList elemList;
     };
 
     Operation(OperationToken tk, Position p) : pos(p), type(OP_TOKEN), tk(tk) {}
@@ -112,12 +122,14 @@ struct Operation {
     Operation(OperationLoop loop, Position p) : pos(p), type(OP_LOOP), loop(loop) {}
     Operation(OperationFuncCall funcCall, Position p) : pos(p), type(OP_FUNC_CALL), funcCall(funcCall) {}
     Operation(OperationMatch match, Position p) : pos(p), type(OP_MATCH), match(match) {}
+    Operation(OperationElemList elemList, Position p) : pos(p), type(OP_ELEM_LIST), elemList(elemList) {}
 };
 
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);
 Type analyzeType(ParsedFile *tokens);
 bool confirmType(Type *t, Type *s);
 void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab);
+Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf);
 
 enum ScopeType {
     SCOPE_GLOBAL,
