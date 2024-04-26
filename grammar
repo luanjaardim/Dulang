@@ -99,6 +99,7 @@ factor:
 
 primary:
   <primary> "." <primary>            $ field access
+  <primary> "." <num>                $ field access of tupples
   "@" <primary>                        $ dereference pointer
   <primary> "@" <num>                     $ dereference pointer with some offset
   NAME

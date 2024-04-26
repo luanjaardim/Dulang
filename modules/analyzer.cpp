@@ -481,6 +481,27 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
         );
       }
     break;
+    case TK_DOT:
+    {
+        AnalyzedParsedFile *child = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+        AnalyzedParsedFile *child2 = analyzeParsedFile(tokens->get_neighbor(CHILD(2)));
+        Type childType = getTypeFromAnalyzedParsedFile(child);
+        if(childType.base == TYPE_COMPOUND && child2->get_data()->type == OP_TOKEN && child2->get_data()->tk.type.base == TYPE_INT) {
+          int number = stoi(child2->get_data()->tk.tk->text);
+          if(number >= (int)childType.subTypes.size() || number < 0) {
+            printf("Error: index out of bounds at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+            exit(1);
+          }
+          t = childType.subTypes[number];
+        }
+        AnalyzedParsedFile *node = new AnalyzedParsedFile(
+          new Operation(OperationToken{.tk = tokens->get_data(), .type = t}, Position(tokens->get_data()->l, tokens->get_data()->c))
+        );
+        AnalyzedParsedFile::linkFatherAndChild(node, child);
+        AnalyzedParsedFile::linkFatherAndChild(node, child2);
+        return node;
+    }
+    break;
     case TK_TYPE_DEREF:
     case TK_TYPE_REF:
       {

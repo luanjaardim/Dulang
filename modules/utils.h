@@ -106,6 +106,7 @@ typedef enum {
   TK_END_BAR,
   TK_COLON,
   TK_COMMA,
+  TK_DOT,
   TK_QUEST,
   TK_EXCLA,
   TK_SEMICOLON,

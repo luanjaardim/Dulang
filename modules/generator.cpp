@@ -337,6 +337,25 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         {
           text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + " " +tk.tk->text + " " + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
         } break;
+        case TK_DOT:
+        {
+          AnalyzedParsedFile *child = ast->get_neighbor(CHILD(1));
+          AnalyzedParsedFile *child2 = ast->get_neighbor(CHILD(2));
+          Type t = getTypeFromAnalyzedParsedFile(child);
+          Variable *v;
+          if((v = defsGen.findDefinition(child->get_data()->tk.tk->text)) == NULL) {
+            printf("Error: trying to access a field of a variable that does not exist.\n");
+            printf("At line: %d, column: %d\n", (int)child->get_data()->pos.l, (int)child->get_data()->pos.e);
+            exit(1);
+          }
+          if(t.base == TYPE_COMPOUND && child2->get_data()->type == OP_TOKEN && child2->get_data()->tk.tk->type == TK_INT) {
+            //the field bounds were checked on analyzer
+            size_t field = stoi(child2->get_data()->tk.tk->text);
+            text = this->convertASTtoC(child) + ".FIELD_" + to_string(field);
+          }
+          else
+            text = this->convertASTtoC(child) + "." + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
+        } break;
         case TK_TYPE_REF:
         case TK_TYPE_DEREF:
         {
