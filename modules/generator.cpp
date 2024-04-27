@@ -425,8 +425,24 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         case TK_BLOCK_EMBED:
         {
               string c_code = ast->get_neighbor(RIGHT_LINK)->get_data()->tk.tk->text;
-              text = c_code.substr(1, c_code.size() - 2) + 
-              '\n';
+              c_code = c_code.substr(1, c_code.size() - 2) + '\n';
+              while(c_code.find('$') != string::npos) {
+                size_t pos = c_code.find('$');
+                if(c_code[pos + 1] != '{') {
+                  printf("Error: expected a '{' after the '$' at line: %d, column: %d\n", (int)ast->get_data()->pos.l, (int)ast->get_data()->pos.e);
+                  exit(1);
+                }
+                size_t end = c_code.find('}', pos);
+                string varName = c_code.substr(pos + 2, end - pos - 2);
+                cout << varName << endl;
+                Variable *v;
+                if((v = defsGen.findDefinition(varName)) == NULL) {
+                  printf("Error: variable %s not found\n", varName.c_str());
+                  exit(1);
+                }
+                c_code.replace(pos, end - pos + 1, getVariableName(*v));
+              }
+              text = c_code;
         }
         break;
         case TK_NAME:

@@ -5,8 +5,7 @@
 #include <unistd.h>
 #include <string>
 
-#include "modules/tokenizer.h"
-#include "modules/grammar.h"
+#include "modules/generator.h"
 
 using namespace std;
 
@@ -31,51 +30,31 @@ int main(int argc, char **argv) {
 
     string fileName = file.substr(0, pos);
 
-    TokenizedFile *tokFile = readToTokenizedFile(file.c_str());
     //Every word is turned into Tokens, with informations that helps on parsing
+    TokenizedFile *tokFile = readToTokenizedFile(file.c_str());
     // printTokenizedFile(*tokFile);
 
     //Initializing the grammar
     Grammar *gm = new Grammar();
     //Parsing the tokenized file
-    Node<Token *> *node = gm->parseTokenizedFile(tokFile);
+    ParsedFile *node = gm->parseTokenizedFile(tokFile);
     //Printing the AST
-    printAST(node, "");
+    // printAST(node, "");
 
 
+    //Translating the AST to a .c file
+    string fileToCreate = fileName + ".c";
+    Generator *g = new Generator();
+    g->translateFile(node, fileToCreate);
 
+    delete g;
     delete gm;
-    exit(1);
-    // ParsedFile pf = createParsedFile(&tokFile);
-    /* for(int i = 0; i < (int)pf.qtdBlocks; i++) */
-    /*     printLinkExprs(pf.blocks[i].head, 0); */
-
-    //adding .asm as the extension of the input file
-    string fileToCreate = fileName + ".asm";
-
-    //TODO: Implement the function that generates the .asm file with a ifstream
-
-    //Generating the .asm file and compiling it
-    // generateDulangFile(f, &pf);
-
-   /*
-    * Free mem
-    */
     destroyTokenizdFile(tokFile);
-    // destroyParsedFile(&pf);
 
-    //Compiling the nasm file
-    string command = "nasm -felf64 " + fileToCreate;
+    //Compiling the c file
+    string command = "gcc " + fileToCreate + " -o " + fileName;
     if(system(command.c_str()) == CMD_ERROR) {
-        fprintf(stderr, "Error! Could not compile the .asm file\n");
-        exit(1);
-    }
-
-    //Linking .o file, to create the executable
-    command.clear();
-    command = "ld " + fileName + ".o -o " + fileName;
-    if(system(command.c_str()) == CMD_ERROR) {
-        fprintf(stderr, "Error! Could not link the .o file\n");
+        fprintf(stderr, "Error! Could not compile the .c file\n");
         exit(1);
     }
 
