@@ -58,6 +58,7 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"for",   TK_BLOCK_FOR},
   {"match", TK_BLOCK_MATCH},
   {"load",  TK_BLOCK_LOAD},
+  {"embed", TK_BLOCK_EMBED},
   {"skip",  TK_BLOCK_SKIP},
   {"stop",  TK_BLOCK_STOP},
   {"back",  TK_BLOCK_BACK},
@@ -111,6 +112,7 @@ bool isValidChar(string word) {
 TokenType typeOfToken(string word) {
   int len = word.size();
   if(word[0] == '"') return TK_STR;
+  if(word[0] == '`') return TK_INLINE_C;
 
   if(word[0] == '\'' && isValidChar(word)) return TK_CHAR;
 
@@ -322,7 +324,7 @@ struct endOfBlock endOfCurrBlock(TokenizedFile tf) {
 }
 
 void printTokenizedFile(TokenizedFile p) {
-    const char *humanReadableType[MARKER+1] = {"Word", "Integer Number", "String", "Char", "Floating Point", "Builtin Word"};
+    const char *humanReadableType[MARKER+1] = {"Word", "Integer Number", "String", "Char", "Floating Point", "C Code", "Builtin Word"};
     for(size_t i = 0; i < p.lines.size(); i++) {
         for(size_t j = 0; j < p.lines[i]->tokens.size(); j++) {
             printf("[id: %d line: %d, col: %d, item: %s, type: %s]\n", (int)p.lines[i]->tokens[j]->id , (int)p.lines[i]->tokens[j]->l, (int)p.lines[i]->tokens[j]->c, p.lines[i]->tokens[j]->text.c_str(),
@@ -437,7 +439,7 @@ TokenizedFile *readToTokenizedFile(const char *file) {
   const vector<string> possibleCombinations = {
     "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::", ";;"
   };
-  const string singleEspChars = "()[]{}@#&|?,.\'\"";
+  const string singleEspChars = "()[]{}@#&|?,.`\'\"";
   const string specialChars = doubleEspChars + singleEspChars + '$'; //'$' for comments
 
   #define ADD_WORD_TILL(pos) fr.word = fr.word.substr(0, pos); \
@@ -485,7 +487,7 @@ TokenizedFile *readToTokenizedFile(const char *file) {
          exit(1);
        }
        advanceCurrPosTill(&fr, substrPos + toFind.size());
-    } else if(fr.word[0] == '\"' || fr.word[0] == '\'') {
+    } else if(fr.word[0] == '\"' || fr.word[0] == '\'' || fr.word[0] == '`') {
       //finding the next " that is not after a '\'
       substrPos = fr.currPos + 1;
       while((substrPos = fr.content.find(fr.word[0], substrPos)) 
@@ -495,8 +497,14 @@ TokenizedFile *readToTokenizedFile(const char *file) {
         substrPos++;
       }
       if(substrPos == string::npos || fr.content.find('\n', fr.currPos + 1) < substrPos) {
-        fprintf(stderr, "Error! String not closed, at line: %d\n", (int)fr.currLine);
-        exit(1);
+        if(fr.word[0] == '`' && substrPos == string::npos) {
+          fprintf(stderr, "Error! Inline C code not closed, at line: %d\n", (int)fr.currLine);
+          exit(1);
+        }
+        else if(fr.word[0] != '`') {
+          fprintf(stderr, "Error! String not closed, at line: %d\n", (int)fr.currLine);
+          exit(1);
+        }
       }
       fr.word = fr.content.substr(fr.currPos, substrPos - fr.currPos + 1);
       addWordAsToken(tf, &fr, &numWord);

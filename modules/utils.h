@@ -34,6 +34,7 @@ typedef enum {
   TK_STR,  //string (surrounded by `"`)
   TK_CHAR,
   TK_FLOAT,
+  TK_INLINE_C, //inline c code (surrounded by "`")
 
   MARKER, //used only for divide the generic tokens(above) from the builtin words(below)
 
@@ -86,6 +87,7 @@ typedef enum {
   TK_BLOCK_WHILE,
   TK_BLOCK_FOR,
   TK_BLOCK_LOAD,
+  TK_BLOCK_EMBED,
   TK_BLOCK_SKIP,
   TK_BLOCK_STOP,
   TK_BLOCK_BACK,

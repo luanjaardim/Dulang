@@ -10,6 +10,7 @@ stmt:
   <func_call>
   <match_tag_union>
   $TODO : include load and loadC statements
+  <embed_c>
   "back" <expr>
   "skip"
   "skip" NAME
@@ -44,6 +45,9 @@ match_tag_union:
 
 match_branch:
   <name> "|" <body>
+
+embed_c:
+  "embed" C_CODE
 
 body:
   <stmt>

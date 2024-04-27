@@ -422,6 +422,13 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
 
           }
         } break;
+        case TK_BLOCK_EMBED:
+        {
+              string c_code = ast->get_neighbor(RIGHT_LINK)->get_data()->tk.tk->text;
+              text = c_code.substr(1, c_code.size() - 2) + 
+              '\n';
+        }
+        break;
         case TK_NAME:
         {
           //wont exist any null return from findDefinition, all of them were solved at analyzer, i think.

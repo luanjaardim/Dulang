@@ -46,6 +46,8 @@ Element *getNextElement(TokenizedFile *tf) {
       return new Element(ElementValue(VAL_INDENT));
     if(text == "BLOCK")
       return new Element(ElementValue(VAL_BLOCK));
+    if(text == "C_CODE")
+      return new Element(ElementValue(VAL_C_CODE));
   }
   if(currToken(*tf) && currToken(*tf)->text == "[") { // if the pattern is: [ <elem> : separator_elem ]
     // printf("Separator\n");
@@ -158,7 +160,6 @@ Position findStartOfNextElement(
     tf->pos.goToPos(start);
     return Position();
   }
-  if(nextElem->type == VALUE && nextElem->value.type == VAL_NEXT) return Position(tf->pos.l, tf->pos.e + 1);
 
   TokenizedFile *copy = cloneTokenizedFile(*tf);
   Position currElem = tf->pos;
@@ -287,6 +288,9 @@ bool handleElementType(
         break;
       case VAL_CHAR:
         if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_CHAR) return false;
+        break;
+      case VAL_C_CODE:
+        if(getTokenIfBeforeAndAdvance(tf, *end)->type != TK_INLINE_C) return false;
         break;
       case VAL_BLOCK:
       case VAL_NEW_LINE:

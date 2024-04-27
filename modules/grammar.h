@@ -36,6 +36,7 @@ enum ElementValueType {
     VAL_INDENT,
     VAL_NEW_LINE,
     VAL_BLOCK,
+    VAL_C_CODE,
 };
 // uppercase text, it represents a type of a token: NUMBER, STRING, NAME, etc, or a marker: INDENT, DEDENT, NEW_LINE
 struct ElementValue {
