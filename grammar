@@ -67,21 +67,21 @@ expr:
 bitwise:
   <bitwise> "band" <bitwise>
   <bitwise> "bor" <bitwise>
-  <bitwise> "bnot" <bitwise>
   <bitwise> "shl" <num>
   <bitwise> "shr" <num>
+  "bnot" <bitwise>
   <boolean>
 
 boolean:
   <boolean> "and" <boolean>
   <boolean> "or" <boolean>
-  <boolean> "not" <boolean>
   <boolean> ">" <boolean>
   <boolean> ">=" <boolean>
   <boolean> "==" <boolean>
   <boolean> "!=" <boolean>
   <boolean> "<" <boolean>
   <boolean> "<=" <boolean>
+  "not" <boolean>
   <num>
 
 num:

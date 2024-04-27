@@ -538,8 +538,17 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
         && tokens->get_data()->type <= TK_BIT_XOR)
       {
         AnalyzedParsedFile *left = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+        if(tokens->get_data()->type == TK_LOG_NOT || tokens->get_data()->type == TK_BIT_NOT) {
+          t = left->get_data()->tk.type;
+          OperationToken tk = OperationToken{.tk = tokens->get_data(), .type = t};
+          AnalyzedParsedFile *node = new AnalyzedParsedFile(
+            new Operation(tk, Position(tokens->get_data()->l, tokens->get_data()->c))
+          );
+          AnalyzedParsedFile::linkFatherAndChild(node, left);
+          return node;
+        }
         AnalyzedParsedFile *right = analyzeParsedFile(tokens->get_neighbor(CHILD(2)));
-          if(left->get_data()->type != OP_TOKEN || right->get_data()->type != OP_TOKEN || left->get_data()->type != right->get_data()->type) {
+        if(left->get_data()->type != OP_TOKEN || right->get_data()->type != OP_TOKEN || left->get_data()->type != right->get_data()->type) {
           printf("Error: expected two tokens with the same type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
           exit(1);
         } else {

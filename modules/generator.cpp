@@ -372,6 +372,40 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         case TK_BLOCK_BACK: text = "return " + this->convertASTtoC(ast->get_neighbor(CHILD(1))) + ";\n"; break;
         case TK_BLOCK_SKIP: text = "continue;\n"; break; // TODO: continue for outter loops
         case TK_BLOCK_STOP: text = "break;\n"; break; // TODO: break for outter loops
+        case TK_LOG_OR:
+        case TK_LOG_AND:
+        case TK_LOG_NOT:
+        case TK_BIT_OR:
+        case TK_BIT_AND:
+        case TK_BIT_NOT:
+        case TK_BIT_XOR:
+        case TK_BIT_SHIFT_L:
+        case TK_BIT_SHIFT_R:
+        {
+          vector<pair<string, TokenType>> texts = {
+            {"||", TK_LOG_OR},
+            {"&&", TK_LOG_AND},
+            {"!", TK_LOG_NOT},
+            {"|", TK_BIT_OR},
+            {"&", TK_BIT_AND},
+            {"~", TK_BIT_NOT},
+            {"^", TK_BIT_XOR},
+            {"<<", TK_BIT_SHIFT_L},
+            {">>", TK_BIT_SHIFT_R},
+          };
+          for(auto t : texts) {
+            if(t.second == tk.tk->type && t.second != TK_LOG_NOT && t.second != TK_BIT_NOT) {
+              //two operands
+              text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + " " + t.first + " " + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
+              break;
+            }
+            else if(t.second == tk.tk->type) {
+              //one operand
+              text = t.first + this->convertASTtoC(ast->get_neighbor(CHILD(1)));
+              break;
+            }
+          }
+        } break;
 
         //operations with two operands
         case TK_NUM_ADD:
@@ -379,6 +413,12 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         case TK_NUM_MUL:
         case TK_NUM_DIV:
         case TK_NUM_MOD:
+        case TK_LOG_EQ:
+        case TK_LOG_NE:
+        case TK_LOG_GE:
+        case TK_LOG_LE:
+        case TK_LOG_GT:
+        case TK_LOG_LT:
         {
           text = this->convertASTtoC(ast->get_neighbor(CHILD(1))) + " " +tk.tk->text + " " + this->convertASTtoC(ast->get_neighbor(CHILD(2)));
         } break;
@@ -434,7 +474,6 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
                 }
                 size_t end = c_code.find('}', pos);
                 string varName = c_code.substr(pos + 2, end - pos - 2);
-                cout << varName << endl;
                 Variable *v;
                 if((v = defsGen.findDefinition(varName)) == NULL) {
                   printf("Error: variable %s not found\n", varName.c_str());
