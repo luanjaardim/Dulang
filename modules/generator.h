@@ -23,6 +23,6 @@ struct Generator {
     string createFunc(Variable f, vector<Variable> args);
     string convertToCVariable(Variable v);
     string typeAsCType(Type t);
-    size_t getTaggedUnionOrTuppleId(Type t);
+    size_t getTaggedUnionOrTupleId(Type t);
     int fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t);
 };

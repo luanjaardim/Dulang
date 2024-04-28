@@ -29,7 +29,7 @@ Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
       {
         Type t = getTypeFromAnalyzedParsedFile(op->accessField.field);
         if(t.base == TYPE_INT && op->accessField.field->get_data()->type == OP_TOKEN
-          && op->accessField.field->get_data()->tk.tk->type == TK_INT) { //tupple access
+          && op->accessField.field->get_data()->tk.tk->type == TK_INT) { //tuple access
           Type s = getTypeFromAnalyzedParsedFile(op->accessField.root);
           return s.subTypes[stoi(op->accessField.field->get_data()->tk.tk->text)];
         }
@@ -65,11 +65,12 @@ string typeString(Type t) {
       return typeText;
     }
     case TYPE_REF:
+    case TYPE_REF_MUT:
       {
         Type s = t.subTypes[0];
         if(s.base >= TYPE_FUNC && s.base <= TYPE_COMPOUND)
-          return "#(" + typeString(s) + ")";
-        return "#" + typeString(s);
+          return (t.base == TYPE_REF ? "#(" : "#mut(" )  + typeString(s) + ")";
+        return (t.base == TYPE_REF ? "#" : "#mut ") + typeString(s);
       }
     case TYPE_INT:
       return "int";
@@ -89,6 +90,7 @@ Type analyzeType(ParsedFile *tokens) {
     return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
 
   TokenType type = tokens->get_data()->type;
+  Type t;
   if(type == TK_TYPE_FN_ARROW || type == TK_TYPE_TAG_UNION || type == TK_TYPE_COMPOUND) {
     Type firstChild = analyzeType(tokens->get_neighbor(CHILD(1)));
     Type secondChild = analyzeType(tokens->get_neighbor(CHILD(2)));
@@ -99,15 +101,11 @@ Type analyzeType(ParsedFile *tokens) {
       subTypes.insert(subTypes.end(), secondChild.subTypes.begin(), secondChild.subTypes.end());
     else
       subTypes.push_back(secondChild);
-    return Type{
-      .textType = firstChild.textType + innerText[type - TK_TYPE_FN_ARROW] + secondChild.textType,
-      .base = types[type - TK_TYPE_FN_ARROW],
-      .subTypes = subTypes
-    }; 
+    t = Type{ .textType = "", .base = types[type - TK_TYPE_FN_ARROW], .subTypes = subTypes }; 
   } else if(type == TK_TYPE_REF) {
     size_t child = tokens->get_neighbors_size() > CHILD(1) ? CHILD(1) : RIGHT_LINK;
-    Type t = analyzeType(tokens->get_neighbor(child));
-    return Type{.textType = "#" + t.textType, .base = TYPE_REF, .subTypes = {t}};
+    t = analyzeType(tokens->get_neighbor(child));
+    t = Type{.textType = "", .base = TYPE_REF, .subTypes = {t}};
   } else if(type == TK_TYPE_INT) {
     return Type{.textType = "int", .base = TYPE_INT, .subTypes = {}};
   } else if(type == TK_TYPE_BYTE) {
@@ -117,10 +115,12 @@ Type analyzeType(ParsedFile *tokens) {
   } else if(type == TK_NAME) {
     return Type{.textType = tokens->get_data()->text, .base = TYPE_USER_DEFINED, .subTypes = {}};
   } else if(type == TK_ROU_BRA_OPEN) {
-    return analyzeType(tokens->get_neighbor(CHILD(1)));
+    t = analyzeType(tokens->get_neighbor(CHILD(1)));
   } else {
     return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
   }
+  t.textType = typeString(t);
+  return t;
 }
 
 // must be a name followed by a type as a child, and it will return a Variable
@@ -246,6 +246,34 @@ bool confirmType(Type *t, Type *s) {
   return true;
 }
 
+bool validLeftHandAssignment(AnalyzedParsedFile *node) {
+  Operation *op = node->get_data();
+  switch(op->type) {
+    case OP_TOKEN:
+    {
+      if(op->tk.tk->type != TK_NAME) return false;
+      return true;
+    }
+    case OP_DEREF:
+    {
+      Type t = getTypeFromAnalyzedParsedFile(op->deref.expr);
+      if(t.base == TYPE_REF_MUT) return true;
+      printf("Left Hand Assignment Error: Assign through a reference to a constant.\n");
+      return false;
+    }
+    case OP_ACCESS_FIELD:
+    {
+      // this will change with the existence of namespaces, here we only check for tuples
+      Variable v = *defs.findDefinition(op->accessField.root->get_data()->tk.tk->text);
+      if(v.mut) return true;
+      printf("Left Hand Assignment Error: Assign to constant variable.\n");
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
 AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
   OperationVarDef varDef;
   ParsedFile *tmp = tokens;
@@ -271,6 +299,7 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
     }
     tmp = tmp->get_neighbor(CHILD(1));
   } else if(tokens->get_data()->type == TK_TYPE_PARSE) {
+    name = tmp->get_neighbor(CHILD(1));
     varDef.var = analyzeParseType(tokens);
     tmp = tmp->get_neighbor(RIGHT_LINK);
     tmp = tmp->get_neighbor(CHILD(1));
@@ -313,6 +342,10 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
       defs.addDefinition(varDef.var); //push the variable to the scope
   }
   varDef.leftHandAssignment = analyzeParsedFile(name);
+  if(!validLeftHandAssignment(varDef.leftHandAssignment)) {
+    printf("Error: invalid left hand assignment at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    exit(1);
+  }
 
   return new AnalyzedParsedFile(
             new Operation(varDef, Position(tokens->get_data()->l, tokens->get_data()->c))
@@ -450,7 +483,7 @@ AnalyzedParsedFile *analyzeMatch(ParsedFile *tokens) {
 
 AnalyzedParsedFile *analyzeListOfElements(ParsedFile *tokens) {
   OperationElemList elemList;
-  elemList.type = tokens->get_data()->type == TK_SQR_BRA_OPEN ? OperationElemList::ARRAY : OperationElemList::TUPPLE;
+  elemList.type = tokens->get_data()->type == TK_SQR_BRA_OPEN ? OperationElemList::ARRAY : OperationElemList::TUPLE;
   elemList.elemType = elemList.type == OperationElemList::ARRAY ? Type{"", TYPE_REF, {}} : Type{"", TYPE_COMPOUND, {}};
   TokenType lastElement = elemList.type == OperationElemList::ARRAY ? TK_SQR_BRA_CLOSE : TK_CUR_BRA_CLOSE;
 
@@ -513,7 +546,7 @@ AnalyzedParsedFile *analyzeAccessField(ParsedFile *tokens) {
   if(rootType.base == TYPE_COMPOUND)
   {
     if(acField.field->get_data()->type != OP_TOKEN || acField.field->get_data()->tk.type.base != TYPE_INT) {
-      printf("Tupple field access error: expected an integer at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      printf("Tuple field access error: expected an integer at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
       exit(1);
     }
     int number = stoi(acField.field->get_data()->tk.tk->text);
@@ -789,7 +822,7 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
     case OP_ELEM_LIST:
     {
       OperationElemList elemList = op->elemList;
-      cout << tab << "List of elements: " << (elemList.type == OperationElemList::ARRAY ? "Array" : "Tupple") << endl;
+      cout << tab << "List of elements: " << (elemList.type == OperationElemList::ARRAY ? "Array" : "Tuple") << endl;
       for(auto e : elemList.values) {
         printAnalyzerParsedFile(e, tab+"  ");
       }

@@ -8,6 +8,7 @@ enum BaseType {
     TYPE_INT,
     TYPE_BYTE,
     TYPE_REF,
+    TYPE_REF_MUT,
     TYPE_FUNC,       //function, WARN: do not change it's position in the enum
     TYPE_TAG_UNION,  //enum
     TYPE_COMPOUND,   //struct
@@ -84,7 +85,7 @@ struct OperationMatch {
 
 struct OperationElemList {
     enum {
-        ARRAY, TUPPLE
+        ARRAY, TUPLE
     } type;
     Type elemType;
     vector<AnalyzedParsedFile *> values;

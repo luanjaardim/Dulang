@@ -58,7 +58,7 @@ expr:
   <expr> "?" <expr> ":" <expr>       $ ternary
   "fn" [<name>:","] ?("=>" <some_type>) "|" <body>       $ function definition
   "[" [<expr>:","] "]"                                   $ array creation
-  "{" [<expr>:","] "}"                                   $ tupple creation
+  "{" [<expr>:","] "}"                                   $ tuple creation
   <primary>
   <bitwise>
   <parse>
@@ -103,7 +103,7 @@ factor:
 
 primary:
   <primary> "." <primary>            $ field access
-  <primary> "." <num>                $ field access of tupples
+  <primary> "." <num>                $ field access of tuples
   "@" <primary>                        $ dereference pointer
   <primary> "@" <num>                     $ dereference pointer with some offset
   NAME
@@ -135,12 +135,12 @@ func_type:
   <some_type> "->" <some_type>               $ functions types
   "(" <some_type> "->" <some_type> ")"       $ functions types
   "(" <some_type> ")" "->" "(" <some_type> ")"       $ functions types
-  <tupple_type>
+  <tuple_type>
 
-tupple_type:
-  <tupple_type> "&" <tupple_type>            $ tupples
-  "(" <tupple_type> "&" <tupple_type> ")"    $ tupples
-  "(" <tupple_type> ")" "&" "(" <tupple_type> ")"    $ tupples
+tuple_type:
+  <tuple_type> "&" <tuple_type>            $ tuples
+  "(" <tuple_type> "&" <tuple_type> ")"    $ tuples
+  "(" <tuple_type> ")" "&" "(" <tuple_type> ")"    $ tuples
   <tag_type>
 
 tag_type:

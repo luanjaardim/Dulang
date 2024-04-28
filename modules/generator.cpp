@@ -18,6 +18,7 @@ string Generator::typeAsCType(Type t) {
     case TYPE_NONE:
       return "void";
     case TYPE_REF:
+    case TYPE_REF_MUT:
     {
       string innerType = typeAsCType(t.subTypes[0]);
       size_t pos;
@@ -39,8 +40,8 @@ string Generator::typeAsCType(Type t) {
     case TYPE_COMPOUND:
     case TYPE_TAG_UNION:
     {
-      size_t id = this->getTaggedUnionOrTuppleId(t);
-      return (t.base == TYPE_TAG_UNION ? "struct taggedUnion" : "struct tupple") + to_string(id);
+      size_t id = this->getTaggedUnionOrTupleId(t);
+      return (t.base == TYPE_TAG_UNION ? "struct taggedUnion" : "struct tuple") + to_string(id);
     }
     break;
     case TYPE_UNKNOWN:
@@ -57,6 +58,7 @@ string Generator::convertToCVariable(Variable v) {
     case TYPE_INT:
     case TYPE_BYTE:
     case TYPE_REF:
+    case TYPE_REF_MUT:
     case TYPE_NONE:
       {
       string text = typeAsCType(v.type);
@@ -68,9 +70,9 @@ string Generator::convertToCVariable(Variable v) {
       return text;
       }
     case TYPE_TAG_UNION:
-      return "struct taggedUnion" + to_string(getTaggedUnionOrTuppleId(v.type)) + " " + nameAndId;
+      return "struct taggedUnion" + to_string(getTaggedUnionOrTupleId(v.type)) + " " + nameAndId;
     case TYPE_COMPOUND:
-      return "struct tupple" + to_string(getTaggedUnionOrTuppleId(v.type)) + " " + nameAndId;
+      return "struct tuple" + to_string(getTaggedUnionOrTupleId(v.type)) + " " + nameAndId;
     case TYPE_FUNC: //probably wont be needed
     default:
       printf("Error at convertToCVariable: this type is not implemented yet: %s\n", typeAsCType(v.type).c_str());
@@ -100,7 +102,7 @@ int Generator::fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t) {
   exit(1);
 }
 
-size_t Generator::getTaggedUnionOrTuppleId(Type t) {
+size_t Generator::getTaggedUnionOrTupleId(Type t) {
   if(t.base != TYPE_TAG_UNION && t.base != TYPE_COMPOUND) {
     printf("Error: expected a tagged union, but got %s\n", typeAsCType(t).c_str());
     exit(1);
@@ -110,7 +112,7 @@ size_t Generator::getTaggedUnionOrTuppleId(Type t) {
     if(confirmType(&t, &s)) return index;
     index++;
   }
-  string text = (t.base == TYPE_TAG_UNION ? "struct taggedUnion" : "struct tupple") + to_string(index) + " {\n";
+  string text = (t.base == TYPE_TAG_UNION ? "struct taggedUnion" : "struct tuple") + to_string(index) + " {\n";
   if(t.base == TYPE_TAG_UNION)
     text += "  enum {\n";
   string enum_elements = "";
@@ -220,7 +222,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           if(varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(varDef.value);
             cout << t.textType << endl;
-            size_t taggedUnionId = getTaggedUnionOrTuppleId(varDef.var.type);
+            size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
             int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string id = to_string(typeId);
             if(typeId != -1)
@@ -242,7 +244,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           string value = this->convertASTtoC(varDef.value);
           if(varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(varDef.value);
-            size_t taggedUnionId = getTaggedUnionOrTuppleId(varDef.var.type);
+            size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
             int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string idStr = to_string(typeId);
             if(typeId != -1)
@@ -345,7 +347,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
         OperationMatch match = op->match;
         Type tagUnionType = match.expr->get_data()->tk.type;
-        size_t taggedUnionId = getTaggedUnionOrTuppleId(tagUnionType);
+        size_t taggedUnionId = getTaggedUnionOrTupleId(tagUnionType);
         string tagUnion = this->convertASTtoC(match.expr);
         text = "switch((" + tagUnion + ").type) {\n";
         for(size_t i = 0; i < match.castedVars.size(); i++) {
@@ -369,8 +371,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationElemList elemList = op->elemList;
       if(elemList.elemType.base == TYPE_COMPOUND) {
-        size_t id = getTaggedUnionOrTuppleId(elemList.elemType);
-        text = "(struct tupple" + to_string(id) + ")";
+        size_t id = getTaggedUnionOrTupleId(elemList.elemType);
+        text = "(struct tuple" + to_string(id) + ")";
       }
       text += "{";
       for(int i = 0; i < (int)elemList.values.size(); i++) {
