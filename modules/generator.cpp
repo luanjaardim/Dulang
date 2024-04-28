@@ -18,7 +18,7 @@ string Generator::typeAsCType(Type t) {
     case TYPE_NONE:
       return "void";
     case TYPE_REF:
-    case TYPE_REF_MUT:
+    case TYPE_REF_VAR:
     {
       string innerType = typeAsCType(t.subTypes[0]);
       size_t pos;
@@ -58,7 +58,7 @@ string Generator::convertToCVariable(Variable v) {
     case TYPE_INT:
     case TYPE_BYTE:
     case TYPE_REF:
-    case TYPE_REF_MUT:
+    case TYPE_REF_VAR:
     case TYPE_NONE:
       {
       string text = typeAsCType(v.type);
@@ -404,12 +404,13 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationAccessField acField = op->accessField;
       Type t = getTypeFromAnalyzedParsedFile(acField.root);
+      string root = this->convertASTtoC(acField.root);
       if(t.base == TYPE_COMPOUND) {
         //the field bounds were checked on analyzer
         size_t field = stoi(acField.field->get_data()->tk.tk->text);
-        text = this->convertASTtoC(acField.root) + ".FIELD_" + to_string(field);
+        text = (acField.root->get_data()->type == OP_DEREF ? "(" + root +")" : root) + ".FIELD_" + to_string(field);
       } else
-        text = this->convertASTtoC(acField.root) + "." + this->convertASTtoC(acField.field);
+        text = root + "." + this->convertASTtoC(acField.field);
     }
     break;
     case OP_TOKEN:

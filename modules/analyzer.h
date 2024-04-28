@@ -8,7 +8,7 @@ enum BaseType {
     TYPE_INT,
     TYPE_BYTE,
     TYPE_REF,
-    TYPE_REF_MUT,
+    TYPE_REF_VAR,
     TYPE_FUNC,       //function, WARN: do not change it's position in the enum
     TYPE_TAG_UNION,  //enum
     TYPE_COMPOUND,   //struct
@@ -98,7 +98,7 @@ struct OperationDeref {
 };
 
 struct OperationRef {
-    Type type; //TYPE_REF or TYPE_REF_MUT
+    Type type; //TYPE_REF or TYPE_REF_VAR
     AnalyzedParsedFile *expr;
 };
 

@@ -38,7 +38,7 @@ func_call:
   NAME "(" [<expr>:","] ")"
   "@" <primary> "(" [<expr>:","] ")"
   <primary> "@" NUMBER "(" [<expr>:","] ")"
-  NAME "." <primary> "(" [<expr>:","] ")"
+  <primary> "." <primary> "(" [<expr>:","] ")"
 
 match_tag_union:
   "match" <primary> "|" [<match_branch>:BLOCK]
@@ -104,6 +104,9 @@ factor:
 primary:
   <primary> "." <primary>            $ field access
   <primary> "." <num>                $ field access of tuples
+  <primary_snd>
+
+primary_snd:
   "@" <primary>                        $ dereference pointer
   <primary> "@" <num>                     $ dereference pointer with some offset
   NAME
@@ -114,6 +117,7 @@ name:
 
 atom:
   ?("#") <primary>                        $ reference to a name(declaration)
+  ?("#" "var") <primary>                  $ reference to a name(declaration)
   <comptime_val>
 
 comptime_val:
@@ -129,6 +133,7 @@ field:
 
 some_type:
   ?("#") "(" <some_type> ")"
+  ?("#" "var") "(" <some_type> ")"
   <func_type>
 
 func_type:
@@ -152,6 +157,7 @@ tag_type:
 basic_type:
   "(" <some_type> ")"
   "#" <some_type>                 $ pointer to a type
+  "#" "var" <some_type>              $ var pointer to a type
   "?" <some_type>                 $ nullable pointer to a type
   "#" "[" NUMBER "]" <some_type>  $ array of NUMBER elements
   "#" "*" <some_type>             $ pointer to an array null terminated

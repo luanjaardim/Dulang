@@ -65,7 +65,7 @@ string typeString(Type t) {
       return typeText;
     }
     case TYPE_REF:
-    case TYPE_REF_MUT:
+    case TYPE_REF_VAR:
       {
         Type s = t.subTypes[0];
         if(s.base >= TYPE_FUNC && s.base <= TYPE_COMPOUND)
@@ -257,17 +257,20 @@ bool validLeftHandAssignment(AnalyzedParsedFile *node) {
     case OP_DEREF:
     {
       Type t = getTypeFromAnalyzedParsedFile(op->deref.expr);
-      if(t.base == TYPE_REF_MUT) return true;
-      printf("Left Hand Assignment Error: Assign through a reference to a constant.\n");
+      if(t.base == TYPE_REF_VAR) return true;
+      printf("Left Hand Assignment Error: Assign through a constant reference.\n");
       return false;
     }
     case OP_ACCESS_FIELD:
     {
       // this will change with the existence of namespaces, here we only check for tuples
-      Variable v = *defs.findDefinition(op->accessField.root->get_data()->tk.tk->text);
-      if(v.mut) return true;
-      printf("Left Hand Assignment Error: Assign to constant variable.\n");
-      return false;
+      if(op->accessField.root->get_data()->type == OP_TOKEN && op->accessField.root->get_data()->tk.tk->type == TK_NAME) {
+        Variable v = *defs.findDefinition(op->accessField.root->get_data()->tk.tk->text);
+        if(v.mut) return true;
+        printf("Left Hand Assignment Error: Assign to constant variable.\n");
+        return false;
+      }
+      return validLeftHandAssignment(op->accessField.root);
     }
     default:
       return false;
@@ -310,11 +313,18 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
       varDef.var = *v;
       assignVariable = true;
     } else {
-      varDef.var.mut = false;
-      varDef.var.name = name->get_data()->text;
-      varDef.var.pos = Position(name->get_data()->l, name->get_data()->c);
-      varDef.var.id = name->get_data()->id;
-      varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
+      if(name->get_data()->type == TK_NAME) { // a variable that we don't know the type yet
+        varDef.var.mut = false;
+        varDef.var.name = name->get_data()->text;
+        varDef.var.pos = Position(name->get_data()->l, name->get_data()->c);
+        varDef.var.id = name->get_data()->id;
+        varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
+      } else { 
+        // a expression that uses a variable that we know the type: @a, b.1 ...
+        varDef.leftHandAssignment = analyzeParsedFile(name);
+        varDef.var.type = getTypeFromAnalyzedParsedFile(varDef.leftHandAssignment);
+        assignVariable = true;
+      }
     }
     tmp = tmp->get_neighbor(CHILD(2));
   }
@@ -341,7 +351,8 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
     if(!assignVariable)
       defs.addDefinition(varDef.var); //push the variable to the scope
   }
-  varDef.leftHandAssignment = analyzeParsedFile(name);
+  if(!varDef.leftHandAssignment)
+    varDef.leftHandAssignment = analyzeParsedFile(name);
   if(!validLeftHandAssignment(varDef.leftHandAssignment)) {
     printf("Error: invalid left hand assignment at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     exit(1);
@@ -515,7 +526,7 @@ AnalyzedParsedFile *analyzeDeref(ParsedFile *tokens) {
   OperationDeref deref;
   deref.expr = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
   Type innerType = getTypeFromAnalyzedParsedFile(deref.expr);
-  if(innerType.base != TYPE_REF && innerType.base != TYPE_REF_MUT) {
+  if(innerType.base != TYPE_REF && innerType.base != TYPE_REF_VAR) {
     printf("AnalyzeDeref Error: expected a reference type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     printf("Found: %s\n", innerType.textType.c_str());
     exit(1);
@@ -529,10 +540,21 @@ AnalyzedParsedFile *analyzeDeref(ParsedFile *tokens) {
 
 AnalyzedParsedFile *analyzeRef(ParsedFile *tokens) {
   OperationRef ref;
+  uint8_t typeOfRef = 0; //0 for constant reference
+  if(tokens->get_neighbors_size() == CHILD(1) &&
+     tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_VARIABLE)
+  {
+    tokens = tokens->get_neighbor(RIGHT_LINK);
+    typeOfRef++; //1 for mutable reference
+  }
   ref.expr = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
   if(ref.expr->get_data()->type == OP_TOKEN && ref.expr->get_data()->tk.tk->type == TK_NAME) {
     Variable v = *defs.findDefinition(ref.expr->get_data()->tk.tk->text);
-    ref.type = Type{.textType = "", .base = (v.mut ? TYPE_REF_MUT : TYPE_REF), .subTypes = {v.type}};
+    if(!v.mut && typeOfRef == 1) {
+      printf("Reference Error: Cannot create an variable reference to a constant at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
+    ref.type = Type{.textType = "", .base = (typeOfRef == 1 ? TYPE_REF_VAR : TYPE_REF), .subTypes = {v.type}};
     ref.type.textType = typeString(ref.type);
   }
   return new AnalyzedParsedFile(new Operation(ref, Position(tokens->get_data()->l, tokens->get_data()->c)));
