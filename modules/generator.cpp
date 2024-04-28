@@ -139,8 +139,16 @@ size_t Generator::getTaggedUnionOrTuppleId(Type t) {
 }
 
 string Generator::createFunc(Variable f, vector<Variable> args) {
-  string text = typeAsCType(f.type.subTypes[f.type.subTypes.size() - 1]);
-  text += " " + getVariableName(f) + "(";
+  string text = "";
+  string returnType = typeAsCType(f.type.subTypes[f.type.subTypes.size() - 1]);
+  string variableName = getVariableName(f);
+  if(returnType.find('$') != string::npos) {
+    string defReturnType = returnType;
+    returnType = variableName + "_ret";
+    defReturnType.replace(defReturnType.find('$'), 1, returnType);
+    text = "typedef " + defReturnType + ";\n";
+  }
+  text += returnType + " " + variableName + "(";
   for(auto v : args) {
     text += convertToCVariable(v);
     text += v.id != args[args.size() - 1].id ? "," : "";

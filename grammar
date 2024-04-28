@@ -128,19 +128,29 @@ field:
   NAME "::" <some_type> ?("=" <comptime_val>) $ TODO: use this kind of construction for struct with fields
 
 some_type:
-  "(" <some_type> ")"
-  <some_type> "->" <some_type>       $ functions types
+  ?("#") "(" <some_type> ")"
+  <func_type>
+
+func_type:
+  <some_type> "->" <some_type>               $ functions types
+  "(" <some_type> "->" <some_type> ")"       $ functions types
+  "(" <some_type> ")" "->" "(" <some_type> ")"       $ functions types
   <tupple_type>
 
 tupple_type:
-  <tupple_type> "&" <tupple_type>        $ tupples
+  <tupple_type> "&" <tupple_type>            $ tupples
+  "(" <tupple_type> "&" <tupple_type> ")"    $ tupples
+  "(" <tupple_type> ")" "&" "(" <tupple_type> ")"    $ tupples
   <tag_type>
 
 tag_type:
-  <tag_type> "^" <tag_type>          $ tagged union types
+  <tag_type> "^" <tag_type>                  $ tagged union types
+  "(" <tag_type> "^" <tag_type> ")"          $ tagged union types
+  "(" <tag_type> ")" "^" "(" <tag_type> ")"          $ tagged union types
   <basic_type>
 
 basic_type:
+  "(" <some_type> ")"
   "#" <some_type>                 $ pointer to a type
   "?" <some_type>                 $ nullable pointer to a type
   "#" "[" NUMBER "]" <some_type>  $ array of NUMBER elements

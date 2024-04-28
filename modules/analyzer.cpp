@@ -2,6 +2,7 @@
 #include "utils.h"
 
 DefinitionsHandler defs;
+Position confirmTypeErrPos;
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
 
@@ -88,7 +89,8 @@ Type analyzeType(ParsedFile *tokens) {
       .subTypes = subTypes
     }; 
   } else if(type == TK_TYPE_REF) {
-    Type t = analyzeType(tokens->get_neighbor(CHILD(1)));
+    size_t child = tokens->get_neighbors_size() > CHILD(1) ? CHILD(1) : RIGHT_LINK;
+    Type t = analyzeType(tokens->get_neighbor(child));
     return Type{.textType = "#" + t.textType, .base = TYPE_REF, .subTypes = {t}};
   } else if(type == TK_TYPE_INT) {
     return Type{.textType = "int", .base = TYPE_INT, .subTypes = {}};
@@ -98,6 +100,8 @@ Type analyzeType(ParsedFile *tokens) {
     return Type{.textType = "none", .base = TYPE_NONE, .subTypes = {}};
   } else if(type == TK_NAME) {
     return Type{.textType = tokens->get_data()->text, .base = TYPE_USER_DEFINED, .subTypes = {}};
+  } else if(type == TK_ROU_BRA_OPEN) {
+    return analyzeType(tokens->get_neighbor(CHILD(1)));
   } else {
     return Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
   }
@@ -140,6 +144,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   t.textType = typeString(t);
   funcDef.type = t;
 
+  confirmTypeErrPos = Position(tokens->get_data()->l, tokens->get_data()->c);
   if(!confirmType(thisFuncVarType, &(funcDef.type))) {
     printf("Error: type mismatch at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     printf("Expected: %s, Found: %s\n", thisFuncVarType->textType.c_str(), t.textType.c_str());
@@ -179,6 +184,22 @@ AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens) {
 }
 
 bool confirmType(Type *t, Type *s) {
+
+  if(t->base != TYPE_UNKNOWN && t->base != TYPE_REF) 
+    for(int i = 0; i < (int)t->subTypes.size(); i++)
+      if(t->subTypes[i].base == TYPE_FUNC) {
+          printf("Error: Function as subtype at line: %d, column: %d\n", (int)confirmTypeErrPos.l, (int)confirmTypeErrPos.e);
+          printf("Instead of passing a function, pass a reference to it! Try add '#'.\n");
+          exit(1);
+        }
+  if(s->base != TYPE_UNKNOWN && s->base != TYPE_REF) 
+    for(int i = 0; i < (int)s->subTypes.size(); i++)
+      if(s->subTypes[i].base == TYPE_FUNC) {
+          printf("Error: Function as subtype at line: %d, column: %d\n", (int)confirmTypeErrPos.l, (int)confirmTypeErrPos.e);
+          printf("Instead of passing a function, pass a reference to it! Try add '#'.\n");
+          exit(1);
+        }
+
   if(t->base == TYPE_UNKNOWN || s->base == TYPE_UNKNOWN) {
     *t = s->base == TYPE_UNKNOWN ? *t : *s;
     *s = t->base == TYPE_UNKNOWN ? *s : *t;
@@ -194,8 +215,8 @@ bool confirmType(Type *t, Type *s) {
         }
       return false;
     }
-    else if(t->base != s->base) return false; //same base type
-    else {
+    else if(t->base != s->base) return false;
+    else { //same base type
       if(t->subTypes.size() != s->subTypes.size()) return false;
       for(int i = 0; i < (int)t->subTypes.size(); i++) {
         if(!confirmType(&t->subTypes[i], &s->subTypes[i])) return false;
