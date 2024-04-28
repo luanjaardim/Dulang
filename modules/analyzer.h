@@ -48,6 +48,8 @@ struct OperationFuncDef {
 
 struct OperationVarDef {
     Variable var;
+    // this will always be NULL, unless it is an assignment
+    AnalyzedParsedFile *leftHandAssignment = NULL; //left hand side of the assignment
     AnalyzedParsedFile *value;
 };
 
@@ -88,6 +90,22 @@ struct OperationElemList {
     vector<AnalyzedParsedFile *> values;
 };
 
+struct OperationDeref {
+    Type type;
+    AnalyzedParsedFile *expr;
+    int offset = 0;
+};
+
+struct OperationRef {
+    Type type; //TYPE_REF or TYPE_REF_MUT
+    AnalyzedParsedFile *expr;
+};
+
+struct OperationAccessField {
+    Type type;
+    AnalyzedParsedFile *root, *field;
+};
+
 enum OperationType {
     OP_TOKEN, //default operation, only one token
     OP_FUNC_DEF, //function definition
@@ -98,6 +116,9 @@ enum OperationType {
     OP_FUNC_CALL,
     OP_MATCH,
     OP_ELEM_LIST, //for array, struct
+    OP_DEREF, //dereference a pointer
+    OP_REF, //returns a reference to something
+    OP_ACCESS_FIELD, //access a field of struct
 };
 
 struct Operation {
@@ -113,6 +134,9 @@ struct Operation {
         OperationFuncCall funcCall;
         OperationMatch match;
         OperationElemList elemList;
+        OperationDeref deref;
+        OperationRef ref;
+        OperationAccessField accessField;
     };
 
     Operation(OperationToken tk, Position p) : pos(p), type(OP_TOKEN), tk(tk) {}
@@ -124,6 +148,9 @@ struct Operation {
     Operation(OperationFuncCall funcCall, Position p) : pos(p), type(OP_FUNC_CALL), funcCall(funcCall) {}
     Operation(OperationMatch match, Position p) : pos(p), type(OP_MATCH), match(match) {}
     Operation(OperationElemList elemList, Position p) : pos(p), type(OP_ELEM_LIST), elemList(elemList) {}
+    Operation(OperationDeref deref, Position p) : pos(p), type(OP_DEREF), deref(deref) {}
+    Operation(OperationRef ref, Position p) : pos(p), type(OP_REF), ref(ref) {}
+    Operation(OperationAccessField accessField, Position p) : pos(p), type(OP_ACCESS_FIELD), accessField(accessField) {}
 };
 
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);

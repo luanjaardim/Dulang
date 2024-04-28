@@ -21,6 +21,22 @@ Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
       return op->funcDef.type;
     case OP_ELEM_LIST:
       return op->elemList.elemType;
+    case OP_DEREF:
+      return op->deref.type;
+    case OP_REF:
+      return op->ref.type;
+    case OP_ACCESS_FIELD:
+      {
+        Type t = getTypeFromAnalyzedParsedFile(op->accessField.field);
+        if(t.base == TYPE_INT && op->accessField.field->get_data()->type == OP_TOKEN
+          && op->accessField.field->get_data()->tk.tk->type == TK_INT) { //tupple access
+          Type s = getTypeFromAnalyzedParsedFile(op->accessField.root);
+          return s.subTypes[stoi(op->accessField.field->get_data()->tk.tk->text)];
+        }
+        else
+          return t;
+      }
+    break;
     case OP_TYPE_DEF:
     case OP_LOOP:
     case OP_COND:
@@ -28,7 +44,7 @@ Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
     case OP_MATCH:
       return Type{ .textType = "none" , .base = TYPE_NONE,  .subTypes = {}};
     default:
-      printf("Error: expected a type, but got %d\n", op->type);
+      printf("GetTypeFromAnalyzedParsedFile: unknown type\n");
       exit(1);
   }
 }
@@ -234,15 +250,16 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
   OperationVarDef varDef;
   ParsedFile *tmp = tokens;
   bool assignVariable = false;
+  ParsedFile *name;
   // cout << "Var: " << tokens->get_data()->text << endl;
   if(tokens->get_data()->type == TK_CONSTANT || tokens->get_data()->type == TK_VARIABLE) {
     //mutable?
     varDef.var.mut = tokens->get_data()->type == TK_VARIABLE;
     //name of the variable
-    Token *name = tmp->get_neighbor(CHILD(1))->get_data();
-    varDef.var.name = name->text;
-    varDef.var.pos = Position(name->l, name->c);
-    varDef.var.id = name->id;
+    name = tmp->get_neighbor(CHILD(1));
+    varDef.var.name = name->get_data()->text;
+    varDef.var.pos = Position(name->get_data()->l, name->get_data()->c);
+    varDef.var.id = name->get_data()->id;
 
     //type of the variable
     tmp = tmp->get_neighbor(RIGHT_LINK);
@@ -258,16 +275,16 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(RIGHT_LINK);
     tmp = tmp->get_neighbor(CHILD(1));
   } else if(tokens->get_data()->type == TK_ASSIGN) {
-    Token *name = tmp->get_neighbor(CHILD(1))->get_data();
+    name = tmp->get_neighbor(CHILD(1));
     Variable *v;
-    if((v = defs.findDefinition(name->text)) != NULL && v->mut) {
+    if((v = defs.findDefinition(name->get_data()->text)) != NULL && v->mut) {
       varDef.var = *v;
       assignVariable = true;
     } else {
       varDef.var.mut = false;
-      varDef.var.name = name->text;
-      varDef.var.pos = Position(name->l, name->c);
-      varDef.var.id = name->id;
+      varDef.var.name = name->get_data()->text;
+      varDef.var.pos = Position(name->get_data()->l, name->get_data()->c);
+      varDef.var.id = name->get_data()->id;
       varDef.var.type = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}};
     }
     tmp = tmp->get_neighbor(CHILD(2));
@@ -284,28 +301,18 @@ AnalyzedParsedFile *analyzeVar(ParsedFile *tokens) {
     varDef.var.type = varDef.value->get_data()->funcDef.type;
   } else {
     varDef.value = analyzeParsedFile(tmp);//goes to the value of the variable
-    Type *valueType;
-    switch(varDef.value->get_data()->type) {
-      case OP_TOKEN:
-        valueType = &(varDef.value->get_data()->tk.type); break;
-      case OP_FUNC_CALL:
-        valueType = &(varDef.value->get_data()->funcCall.returnType); break;
-      case OP_ELEM_LIST:
-        valueType = &(varDef.value->get_data()->elemList.elemType); break;
-      default:
-        printf("Error: trying to assign with an invalid value at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-        exit(1);
-    }
+    Type valueType = getTypeFromAnalyzedParsedFile(varDef.value);
 
     //confront variable type with value type
-    if(!confirmType(&varDef.var.type, valueType)) {
+    if(!confirmType(&varDef.var.type, &valueType)) {
       printf("Error: type mismatch at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-      printf("Expected: %s, Found: %s\n", varDef.var.type.textType.c_str(), valueType->textType.c_str());
+      printf("Expected: %s, Found: %s\n", varDef.var.type.textType.c_str(), valueType.textType.c_str());
       exit(1);
     }
     if(!assignVariable)
       defs.addDefinition(varDef.var); //push the variable to the scope
   }
+  varDef.leftHandAssignment = analyzeParsedFile(name);
 
   return new AnalyzedParsedFile(
             new Operation(varDef, Position(tokens->get_data()->l, tokens->get_data()->c))
@@ -440,6 +447,7 @@ AnalyzedParsedFile *analyzeMatch(ParsedFile *tokens) {
   }
   return new AnalyzedParsedFile(new Operation(match, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
+
 AnalyzedParsedFile *analyzeListOfElements(ParsedFile *tokens) {
   OperationElemList elemList;
   elemList.type = tokens->get_data()->type == TK_SQR_BRA_OPEN ? OperationElemList::ARRAY : OperationElemList::TUPPLE;
@@ -468,6 +476,57 @@ AnalyzedParsedFile *analyzeListOfElements(ParsedFile *tokens) {
   elemList.elemType.textType = typeString(elemList.elemType);
 
   return new AnalyzedParsedFile(new Operation(elemList, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
+
+AnalyzedParsedFile *analyzeDeref(ParsedFile *tokens) {
+  OperationDeref deref;
+  deref.expr = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+  Type innerType = getTypeFromAnalyzedParsedFile(deref.expr);
+  if(innerType.base != TYPE_REF && innerType.base != TYPE_REF_MUT) {
+    printf("AnalyzeDeref Error: expected a reference type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    printf("Found: %s\n", innerType.textType.c_str());
+    exit(1);
+  }
+  deref.type = innerType.subTypes[0];
+  deref.type.textType = typeString(deref.type);
+  deref.offset = tokens->get_neighbors_size() > CHILD(2) ? stoi(tokens->get_neighbor(CHILD(2))->get_data()->text) : 0;
+
+  return new AnalyzedParsedFile(new Operation(deref, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
+
+AnalyzedParsedFile *analyzeRef(ParsedFile *tokens) {
+  OperationRef ref;
+  ref.expr = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+  if(ref.expr->get_data()->type == OP_TOKEN && ref.expr->get_data()->tk.tk->type == TK_NAME) {
+    Variable v = *defs.findDefinition(ref.expr->get_data()->tk.tk->text);
+    ref.type = Type{.textType = "", .base = (v.mut ? TYPE_REF_MUT : TYPE_REF), .subTypes = {v.type}};
+    ref.type.textType = typeString(ref.type);
+  }
+  return new AnalyzedParsedFile(new Operation(ref, Position(tokens->get_data()->l, tokens->get_data()->c)));
+}
+
+AnalyzedParsedFile *analyzeAccessField(ParsedFile *tokens) {
+  OperationAccessField acField;
+  acField.root = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+  acField.field = analyzeParsedFile(tokens->get_neighbor(CHILD(2)));
+  Type rootType = getTypeFromAnalyzedParsedFile(acField.root);
+  if(rootType.base == TYPE_COMPOUND)
+  {
+    if(acField.field->get_data()->type != OP_TOKEN || acField.field->get_data()->tk.type.base != TYPE_INT) {
+      printf("Tupple field access error: expected an integer at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
+    int number = stoi(acField.field->get_data()->tk.tk->text);
+    if(number >= (int)rootType.subTypes.size() || number < 0) {
+      printf("Error: index out of bounds at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
+    acField.type = rootType.subTypes[number];
+  } else {
+    acField.type = getTypeFromAnalyzedParsedFile(acField.field);
+  }
+
+  return new AnalyzedParsedFile(new Operation(acField, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
@@ -623,10 +682,17 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
     case TK_CUR_BRA_OPEN:
       return analyzeListOfElements(tokens);
     case TK_NAME:
-    case TK_TYPE_DEREF:
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
         return analyzeFuncCall(tokens);
       return analyzeToken(tokens);
+    case TK_TYPE_DEREF:
+      if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
+        return analyzeFuncCall(tokens);
+      return analyzeDeref(tokens);
+    case TK_TYPE_REF:
+      return analyzeRef(tokens);
+    case TK_DOT:
+      return analyzeAccessField(tokens);
     default:
       return analyzeToken(tokens);
   }
@@ -659,10 +725,13 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
     case OP_VAR_DEF:
       {
         if(op->varDef.var.mut)
-          cout << tab << "Variable def: " << op->varDef.var.name << " Type: " << op->varDef.var.type.textType << endl;
+          cout << tab << "Variable def of type: " << op->varDef.var.type.textType << endl;
         else
-          cout << tab << "Constant def: " << op->varDef.var.name << " Type: " << op->varDef.var.type.textType << endl;
-        printAnalyzerParsedFile(op->varDef.value, tab+"  ");
+          cout << tab << "Constant def of type: " << op->varDef.var.type.textType << endl;
+        cout << tab+"  " << "Assigning to: \n";
+        printAnalyzerParsedFile(op->varDef.leftHandAssignment, tab+"    "); 
+        cout << tab+"  " << "Value: \n";
+        printAnalyzerParsedFile(op->varDef.value, tab+"    ");
         break;
       }
     case OP_COND:
@@ -724,6 +793,36 @@ void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab) {
       for(auto e : elemList.values) {
         printAnalyzerParsedFile(e, tab+"  ");
       }
+    }
+    break;
+    case OP_DEREF:
+    {
+      OperationDeref deref = op->deref;
+      cout << tab << "Deref with offset: " << deref.offset << endl;
+      cout << tab+"  " << "Expr of type " << deref.type.textType << " :\n";
+
+      printAnalyzerParsedFile(deref.expr, tab+"    ");
+    }
+    break;
+    case OP_REF:
+    {
+      OperationRef ref = op->ref;
+      if(ref.type.base == TYPE_REF)
+        cout << tab << "Ref: " << endl;
+      else
+        cout << tab << "Mutable ref: " << endl;
+      cout << tab+"  " << "Expr of type " << ref.type.textType << " :\n";
+      printAnalyzerParsedFile(ref.expr, tab+"    ");
+    }
+    break;
+    case OP_ACCESS_FIELD:
+    {
+      OperationAccessField acField = op->accessField;
+      cout << tab << "Access field. Return type: " << acField.type.textType << endl;
+      cout << tab+"  " << "Root: " << endl;
+      printAnalyzerParsedFile(acField.root, tab+"    ");
+      cout << tab+"  " << "Field: " << endl;
+      printAnalyzerParsedFile(acField.field, tab+"    ");
     }
     break;
     default:

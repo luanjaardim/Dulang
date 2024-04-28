@@ -199,44 +199,50 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     }
     break;
     case OP_VAR_DEF:
-      if(op->varDef.var.type.base == TYPE_FUNC && 
-        (op->varDef.value->get_data()->type == OP_FUNC_DEF ||
-        op->varDef.value->get_data()->type == OP_FUNC_CALL)
+    {
+      OperationVarDef varDef = op->varDef;
+      if(varDef.var.type.base == TYPE_FUNC && 
+        (varDef.value->get_data()->type == OP_FUNC_DEF ||
+        varDef.value->get_data()->type == OP_FUNC_CALL)
       ){
-        defsGen.addDefinition(op->varDef.var);
+        defsGen.addDefinition(varDef.var);
         defsGen.scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
-        text = this->convertASTtoC(op->varDef.value);
+        text = this->convertASTtoC(varDef.value);
         defsGen.popDefinitions();                         //end of function scope
       } else {
-        if(op->varDef.var.type.base == TYPE_FUNC) {
+        if(varDef.var.type.base == TYPE_FUNC) {
           printf("When passing a function to another constant, use a pointer to a function! Try add an '#'.\n");
-          printf("Error: type mismatch at line: %d, column: %d\n", (int)op->varDef.value->get_data()->pos.l, (int)op->varDef.value->get_data()->pos.e);
+          printf("Error: type mismatch at line: %d, column: %d\n", (int)varDef.value->get_data()->pos.l, (int)varDef.value->get_data()->pos.e);
           exit(1);
         }
         Variable *v;
-        if((v = defsGen.findDefinition(op->varDef.var.name)) != NULL && v->mut && op->varDef.var.mut) {
-          if(op->varDef.var.type.base == TYPE_TAG_UNION) {
-            Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
+        if((v = defsGen.findDefinition(varDef.var.name)) != NULL && v->mut && varDef.var.mut) {
+          if(varDef.var.type.base == TYPE_TAG_UNION) {
+            Type t = getTypeFromAnalyzedParsedFile(varDef.value);
             cout << t.textType << endl;
-            size_t taggedUnionId = getTaggedUnionOrTuppleId(op->varDef.var.type);
+            size_t taggedUnionId = getTaggedUnionOrTuppleId(varDef.var.type);
             int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string id = to_string(typeId);
             if(typeId != -1)
               text = getVariableName(*v) +
                   " = (struct taggedUnion" + id + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
-                  this->convertASTtoC(op->varDef.value) + "};\n";
+                  this->convertASTtoC(varDef.value) + "};\n";
             else
-              text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+              text = getVariableName(*v) + " = " + this->convertASTtoC(varDef.value) + ";\n";
           } else
-            text = getVariableName(*v) + " = " + this->convertASTtoC(op->varDef.value) + ";\n";
+            text = getVariableName(*v) + " = " + this->convertASTtoC(varDef.value) + ";\n";
         }
         else {
-          defsGen.addDefinition(op->varDef.var);
-          text = convertToCVariable(op->varDef.var) + " = ";
-          string value = this->convertASTtoC(op->varDef.value);
-          if(op->varDef.var.type.base == TYPE_TAG_UNION) {
-            Type t = getTypeFromAnalyzedParsedFile(op->varDef.value);
-            size_t taggedUnionId = getTaggedUnionOrTuppleId(op->varDef.var.type);
+         if(varDef.leftHandAssignment->get_data()->type != OP_TOKEN)
+            text = this->convertASTtoC(varDef.leftHandAssignment) + " = ";
+         else {
+            defsGen.addDefinition(varDef.var);
+            text = convertToCVariable(varDef.var) + " = ";
+          }
+          string value = this->convertASTtoC(varDef.value);
+          if(varDef.var.type.base == TYPE_TAG_UNION) {
+            Type t = getTypeFromAnalyzedParsedFile(varDef.value);
+            size_t taggedUnionId = getTaggedUnionOrTuppleId(varDef.var.type);
             int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string idStr = to_string(typeId);
             if(typeId != -1)
@@ -249,6 +255,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
 
         text += this->convertASTtoC(ast->get_neighbor(RIGHT_LINK));
       }
+    }
     break;
     case OP_FUNC_CALL:
     {
@@ -371,6 +378,36 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         if(i != (int)elemList.values.size() - 1) text += ",";
       }
       text += "}";
+    }
+    break;
+    case OP_REF:
+    {
+      OperationRef ref = op->ref;
+      text = "&" + this->convertASTtoC(ref.expr);
+    }
+    break;
+    case OP_DEREF:
+    {
+      OperationDeref deref = op->deref;
+      if(deref.offset != 0)
+        text = this->convertASTtoC(deref.expr) + "[" + to_string(deref.offset) + "]";
+      else
+        text = "*" + this->convertASTtoC(deref.expr);
+
+      if(deref.expr->get_data()->type == OP_DEREF && deref.expr->get_data()->deref.offset > deref.offset && deref.offset == 0)
+        text = "(" + text + ")";
+    }
+    break;
+    case OP_ACCESS_FIELD:
+    {
+      OperationAccessField acField = op->accessField;
+      Type t = getTypeFromAnalyzedParsedFile(acField.root);
+      if(t.base == TYPE_COMPOUND) {
+        //the field bounds were checked on analyzer
+        size_t field = stoi(acField.field->get_data()->tk.tk->text);
+        text = this->convertASTtoC(acField.root) + ".FIELD_" + to_string(field);
+      } else
+        text = this->convertASTtoC(acField.root) + "." + this->convertASTtoC(acField.field);
     }
     break;
     case OP_TOKEN:
@@ -505,7 +542,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     break;
     default:
       printf("not implemented yet:\n");
-      printAnalyzerParsedFile(ast, "");
+      printAnalyzerParsedFile(ast, "  ");
       exit(1);
   }
   return text;
