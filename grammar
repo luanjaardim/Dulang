@@ -62,7 +62,6 @@ expr:
   <primary>
   <bitwise>
   <parse>
-  <func_call>
 
 bitwise:
   <bitwise> "band" <bitwise>
@@ -119,6 +118,7 @@ atom:
   ?("#") <primary>                        $ reference to a name(declaration)
   ?("#" "var") <primary>                  $ reference to a name(declaration)
   <comptime_val>
+  <func_call>
 
 comptime_val:
   NUMBER

@@ -239,22 +239,20 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
          else {
             defsGen.addDefinition(varDef.var);
             text = convertToCVariable(varDef.var) + " = ";
-          }
-          string value = this->convertASTtoC(varDef.value);
-          if(varDef.var.type.base == TYPE_TAG_UNION) {
-            Type t = getTypeFromAnalyzedParsedFile(varDef.value);
-            size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
-            int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
-            string idStr = to_string(typeId);
-            if(typeId != -1)
-              text += "{.type = TYPE_" + idStr + ", .FIELD_" + idStr + " = " + value + "};\n";
-            else
-              text += value + ";\n";
-          } else
+         }
+         string value = this->convertASTtoC(varDef.value);
+         if(varDef.var.type.base == TYPE_TAG_UNION) {
+           Type t = getTypeFromAnalyzedParsedFile(varDef.value);
+           size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
+           int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
+           string idStr = to_string(typeId);
+           if(typeId != -1)
+             text += "{.type = TYPE_" + idStr + ", .FIELD_" + idStr + " = " + value + "};\n";
+           else
              text += value + ";\n";
+         } else
+            text += value + ";\n";
         }
-
-        text += this->convertASTtoC(ast->get_neighbor(RIGHT_LINK));
       }
     }
     break;
@@ -269,7 +267,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       vector<Variable> args;
       //the function call will create another function that uses the original one, but with the constants
       //parameters that were passed to the function
-      if(fnCall.returnType.base == TYPE_FUNC) { 
+      if(fnCall.returnType.base == TYPE_FUNC) {
           Variable v = *defsGen.getLastDefinition();
           for(int i = 0; i < (int)v.type.subTypes.size()-1; i++)
             args.push_back(Variable{
@@ -313,7 +311,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         this->prevDefinitions += localText;
       }
       else
-        text = localText + ")";
+        text = localText + (fnCall.returnType.base == TYPE_NONE ? ");\n" : ")");
     }
     break;
     case OP_COND:

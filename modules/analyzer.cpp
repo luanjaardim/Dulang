@@ -428,6 +428,10 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
     exit(1);
   }
   OperationFuncCall funcCall;
+  // When needed to determine if the funcCall is a statement or an expression, define here:
+  bool isStatement = false;
+  if(tokens->get_parent()->get_data()->type == TK_END_BAR) isStatement = true;
+
   funcCall.func = node;
   ParsedFile *tmp = tokens;
   tmp = tmp->get_neighbor(RIGHT_LINK);
@@ -461,6 +465,13 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
       exit(1);
     }
     funcCall.returnType = t.subTypes[t.subTypes.size() - 1];
+  }
+  if(isStatement && funcCall.returnType.base != TYPE_NONE) {
+    printf("Function call returns value that is discarted at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    exit(1);
+  } else if(!isStatement && funcCall.returnType.base == TYPE_NONE) {
+    printf("Function call returns nothing at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    exit(1);
   }
   funcCall.returnType.textType = typeString(funcCall.returnType);
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));

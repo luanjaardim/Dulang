@@ -1,8 +1,6 @@
 embed `#include<stdio.h>`
 
-print_int = fn num :: int => int |
-  embed `printf("%d\n", ${num});`
-  back 0
+print_int = fn num :: int => none | embed `printf("%d\n", ${num});`
 
 const main :: none -> int = fn |
   $ creating a function
@@ -14,17 +12,17 @@ const main :: none -> int = fn |
 
   $ dereferencing a pointer to a function and calling the function
   res = @g(20, 4)
-  _ = print_int(res)
+  print_int(res)
 
   $ creating a partial function from the original function
   sum1 = sum(1)
   res = sum1(5)
-  _ = print_int(res)
+  print_int(res)
 
   $ creating a partial function from a function pointer
   sum5 = @g(5)
   res = sum5(10)
-  _ = print_int(res)
+  print_int(res)
 
   $ a pointer to a function pointer
   sla = #g
@@ -32,4 +30,6 @@ const main :: none -> int = fn |
   $ partial application to a pointer to a pointer that points to a function...
   sla2 = @@sla(10)
   res = sla2(1000)
-  _ = print_int(res)
+  print_int(res)
+
+  back 0
