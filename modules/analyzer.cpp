@@ -4,8 +4,6 @@
 DefinitionsHandler defs;
 Position confirmTypeErrPos;
 
-AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
-
 Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf) {
   if(apf == NULL) {
     printf("Error: expected a type, but got NULL\n");
@@ -68,9 +66,9 @@ string typeString(Type t) {
     case TYPE_REF_VAR:
       {
         Type s = t.subTypes[0];
-        if(s.base >= TYPE_FUNC && s.base <= TYPE_COMPOUND)
-          return (t.base == TYPE_REF ? "#(" : "#mut(" )  + typeString(s) + ")";
-        return (t.base == TYPE_REF ? "#" : "#mut ") + typeString(s);
+        if((s.base >= TYPE_FUNC && s.base <= TYPE_COMPOUND) || ((s.base == TYPE_REF || s.base == TYPE_REF_VAR) && t.base != s.base))
+          return (t.base == TYPE_REF ? "#(" : "#var(" )  + typeString(s) + ")";
+        return (t.base == TYPE_REF ? "#" : "#var ") + typeString(s);
       }
     case TYPE_INT:
       return "int";
@@ -104,8 +102,14 @@ Type analyzeType(ParsedFile *tokens) {
     t = Type{ .textType = "", .base = types[type - TK_TYPE_FN_ARROW], .subTypes = subTypes }; 
   } else if(type == TK_TYPE_REF) {
     size_t child = tokens->get_neighbors_size() > CHILD(1) ? CHILD(1) : RIGHT_LINK;
+    bool mutableRef = false;
+    if(tokens->get_neighbor(child)->get_data()->type == TK_VARIABLE) {
+      tokens = tokens->get_neighbor(child);
+      child = tokens->get_neighbors_size() > CHILD(1) ? CHILD(1) : RIGHT_LINK;
+      mutableRef = true;
+    }
     t = analyzeType(tokens->get_neighbor(child));
-    t = Type{.textType = "", .base = TYPE_REF, .subTypes = {t}};
+    t = Type{.textType = "", .base = (mutableRef ? TYPE_REF_VAR : TYPE_REF), .subTypes = {t}};
   } else if(type == TK_TYPE_INT) {
     return Type{.textType = "int", .base = TYPE_INT, .subTypes = {}};
   } else if(type == TK_TYPE_BYTE) {
@@ -200,7 +204,6 @@ AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens) {
 }
 
 bool confirmType(Type *t, Type *s) {
-
   if(t->base != TYPE_UNKNOWN && t->base != TYPE_REF) 
     for(int i = 0; i < (int)t->subTypes.size(); i++)
       if(t->subTypes[i].base == TYPE_FUNC) {
@@ -418,14 +421,9 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
 }
 
 AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
-  AnalyzedParsedFile *node = analyzeToken(tokens);
-  if(node->get_data()->type != OP_TOKEN) { //this is not an error, but at the moment we only accept tokens
-    printf("Analyzer Error: expected a token at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-    exit(1);
-  }
-  OperationToken *op = &node->get_data()->tk;
-  Type *t = &op->type;
-  if(op->type.base != TYPE_FUNC) {
+  AnalyzedParsedFile *node = tokens->get_data()->type == TK_TYPE_DEREF ? analyzeDeref(tokens) : analyzeToken(tokens);
+  Type t = getTypeFromAnalyzedParsedFile(node);
+  if(t.base != TYPE_FUNC) {
     printf("Error: Expected a function at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     exit(1);
   }
@@ -436,33 +434,33 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
   if(tmp->get_neighbors_size() > CHILD(1)) {
     size_t i = 0;
     while(tmp->get_data()->type != TK_ROU_BRA_CLOSE) {
-      if(i == t->subTypes.size() - 1) {
+      if(i == t.subTypes.size() - 1) {
         printf("Error: Too many arguments at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
         exit(1);
       }
       node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
       // WARN: the code bellow can cause bugs, maybe
       Type *s = node->get_data()->type == OP_TOKEN ? &node->get_data()->tk.type : &node->get_data()->funcCall.returnType;
-      if(!confirmType(&t->subTypes[i], s)) {
+      if(!confirmType(&t.subTypes[i], s)) {
         printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
-        printf("Expected: %s, Found: %s\n", t->subTypes[i].textType.c_str(), s->textType.c_str());
+        printf("Expected: %s, Found: %s\n", t.subTypes[i].textType.c_str(), s->textType.c_str());
         exit(1);
       }
       funcCall.params.push_back(node);
       i++;
       tmp = tmp->get_neighbor(RIGHT_LINK);
     }
-    if(i < t->subTypes.size() - 1) {
+    if(i < t.subTypes.size() - 1) {
       funcCall.returnType.base = TYPE_FUNC;
-      funcCall.returnType.subTypes = vector(t->subTypes.begin() + i, t->subTypes.end());
+      funcCall.returnType.subTypes = vector(t.subTypes.begin() + i, t.subTypes.end());
     } else
-      funcCall.returnType = t->subTypes[i];
+      funcCall.returnType = t.subTypes[i];
   } else { //there is no arguments passed
-    if(t->subTypes[0].base != TYPE_NONE) {
-      printf("Error: received \"none\" when expecting \"%s\" at line: %d, column: %d\n", typeString(t->subTypes[0]).c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    if(t.subTypes[0].base != TYPE_NONE) {
+      printf("Error: received \"none\" when expecting \"%s\" at line: %d, column: %d\n", typeString(t.subTypes[0]).c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
       exit(1);
     }
-    funcCall.returnType = t->subTypes[t->subTypes.size() - 1];
+    funcCall.returnType = t.subTypes[t.subTypes.size() - 1];
   }
   funcCall.returnType.textType = typeString(funcCall.returnType);
   return new AnalyzedParsedFile(new Operation(funcCall, Position(tokens->get_data()->l, tokens->get_data()->c)));
@@ -548,15 +546,22 @@ AnalyzedParsedFile *analyzeRef(ParsedFile *tokens) {
     typeOfRef++; //1 for mutable reference
   }
   ref.expr = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+  Variable v;
   if(ref.expr->get_data()->type == OP_TOKEN && ref.expr->get_data()->tk.tk->type == TK_NAME) {
-    Variable v = *defs.findDefinition(ref.expr->get_data()->tk.tk->text);
+    v = *defs.findDefinition(ref.expr->get_data()->tk.tk->text);
     if(!v.mut && typeOfRef == 1) {
       printf("Reference Error: Cannot create an variable reference to a constant at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
       exit(1);
     }
-    ref.type = Type{.textType = "", .base = (typeOfRef == 1 ? TYPE_REF_VAR : TYPE_REF), .subTypes = {v.type}};
-    ref.type.textType = typeString(ref.type);
+  } else {
+    if(!validLeftHandAssignment(ref.expr) && typeOfRef) {
+      printf("Reference Error: Cannot create an variable reference to a constant at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
+    v.type = getTypeFromAnalyzedParsedFile(ref.expr);
   }
+  ref.type = Type{.textType = "", .base = (typeOfRef == 1 ? TYPE_REF_VAR : TYPE_REF), .subTypes = {v.type}};
+  ref.type.textType = typeString(ref.type);
   return new AnalyzedParsedFile(new Operation(ref, Position(tokens->get_data()->l, tokens->get_data()->c)));
 }
 
@@ -616,55 +621,6 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
         return new AnalyzedParsedFile(
           new Operation(OperationToken{.tk = tokens->get_data(), .type = v->type}, Position(tokens->get_data()->l, tokens->get_data()->c))
         );
-      }
-    break;
-    case TK_DOT:
-    {
-        AnalyzedParsedFile *child = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
-        AnalyzedParsedFile *child2 = analyzeParsedFile(tokens->get_neighbor(CHILD(2)));
-        Type childType = getTypeFromAnalyzedParsedFile(child);
-        if(childType.base == TYPE_COMPOUND && child2->get_data()->type == OP_TOKEN && child2->get_data()->tk.type.base == TYPE_INT) {
-          int number = stoi(child2->get_data()->tk.tk->text);
-          if(number >= (int)childType.subTypes.size() || number < 0) {
-            printf("Error: index out of bounds at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-            exit(1);
-          }
-          t = childType.subTypes[number];
-        }
-        AnalyzedParsedFile *node = new AnalyzedParsedFile(
-          new Operation(OperationToken{.tk = tokens->get_data(), .type = t}, Position(tokens->get_data()->l, tokens->get_data()->c))
-        );
-        AnalyzedParsedFile::linkFatherAndChild(node, child);
-        AnalyzedParsedFile::linkFatherAndChild(node, child2);
-        return node;
-    }
-    break;
-    case TK_TYPE_DEREF:
-    case TK_TYPE_REF:
-      {
-        AnalyzedParsedFile *child = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
-        if(child->get_data()->type != OP_TOKEN) {
-          printf("Error: expected a token at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-          exit(1);
-        }
-        if(tokens->get_data()->type == TK_TYPE_REF) {
-          t = Type{.textType = "", .base = TYPE_REF, .subTypes = {child->get_data()->tk.type}};
-          t.textType = typeString(t);
-        }
-        else if(tokens->get_data()->type == TK_TYPE_DEREF) {
-          if(child->get_data()->tk.type.base != TYPE_REF) {
-            printf("Error: expected a reference type at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
-            exit(1);
-          }
-          t = child->get_data()->tk.type.subTypes[0];
-        }
-        AnalyzedParsedFile *node = new AnalyzedParsedFile(
-          new Operation(OperationToken{.tk = tokens->get_data(), .type = t}, Position(tokens->get_data()->l, tokens->get_data()->c))
-        );
-        AnalyzedParsedFile::linkFatherAndChild(node, child);
-        if(tokens->get_neighbors_size() > CHILD(2))// index dereference
-          AnalyzedParsedFile::linkFatherAndChild(node, analyzeParsedFile(tokens->get_neighbor(CHILD(2))));
-        return node;
       }
     break;
     default:

@@ -70,7 +70,6 @@ typedef enum {
   TK_TYPE_INT,
   TK_TYPE_UINT,
   TK_TYPE_FLOAT,
-  TK_TYPE_CHAR,
   TK_TYPE_NONE,
   TK_TYPE_REF,
   TK_TYPE_DEREF,

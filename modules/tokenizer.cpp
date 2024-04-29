@@ -40,7 +40,6 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"int",   TK_TYPE_INT},
   {"uint",  TK_TYPE_UINT},
   {"float", TK_TYPE_FLOAT},
-  {"char",  TK_TYPE_CHAR},
   {"none",  TK_TYPE_NONE},
   {"#",     TK_TYPE_REF},
   {"@",     TK_TYPE_DEREF},

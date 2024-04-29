@@ -221,13 +221,12 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         if((v = defsGen.findDefinition(varDef.var.name)) != NULL && v->mut && varDef.var.mut) {
           if(varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(varDef.value);
-            cout << t.textType << endl;
             size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
             int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string id = to_string(typeId);
             if(typeId != -1)
               text = getVariableName(*v) +
-                  " = (struct taggedUnion" + id + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
+                  " = (struct taggedUnion" + to_string(taggedUnionId) + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
                   this->convertASTtoC(varDef.value) + "};\n";
             else
               text = getVariableName(*v) + " = " + this->convertASTtoC(varDef.value) + ";\n";
@@ -265,7 +264,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       string caller = this->convertASTtoC(op->funcCall.func);
       string localText = "";
       //check if the call is by a function pointer
-      bool isFuncPointerCall = fnCall.func->get_data()->type == OP_TOKEN && fnCall.func->get_data()->tk.tk->type == TK_TYPE_DEREF;
+      bool isFuncPointerCall = fnCall.func->get_data()->type == OP_DEREF;
 
       vector<Variable> args;
       //the function call will create another function that uses the original one, but with the constants
@@ -285,9 +284,9 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       // we will create a function as normal, but a global function pointer will be created
       // to store the function pointer, being used in the function call
       if(isFuncPointerCall && fnCall.returnType.base == TYPE_FUNC) {
-        AnalyzedParsedFile *tmp = fnCall.func->get_neighbor(CHILD(1));
-        while(tmp->get_data()->type == OP_TOKEN && tmp->get_data()->tk.tk->type == TK_TYPE_DEREF)
-          tmp = tmp->get_neighbor(CHILD(1));
+        AnalyzedParsedFile *tmp = fnCall.func;
+        while(tmp->get_data()->type == OP_DEREF)
+          tmp = tmp->get_data()->deref.expr;
         if(tmp->get_data()->type == OP_TOKEN && tmp->get_data()->tk.tk->type == TK_NAME) {
           Variable funcPntGlobal = *defsGen.findDefinition(tmp->get_data()->tk.tk->text);
           string nameWithId = getVariableName(funcPntGlobal);

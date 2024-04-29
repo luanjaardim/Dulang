@@ -90,6 +90,7 @@ Dulang has a basic type system, with the following types:
 - `byte`: 8 bits integer
 - `none`: a type that represents nothing, used to define functions that don't receive any argument, or return nothing
 - `#<type>`: a pointer to a type, like `#byte` is a pointer to a byte, `#int` is a pointer to an integer, and so on
+- `#var <type>`: a variable pointer to a type, acts the same as the previous one, but allows changing the value that points to
 - `<type> & <type>`: tuple type, for example `int & byte & #int`: the first element is a `int`, the second is a `byte` and the third is a `#int`
 - `<type> ^ <type>`: tagged union type, a type that can be one of it's inner types, one at a time, like `int ^ byte`: it can be an integer or a byte, but not both at the same time, you can check it with the `match` keyword(see below)
 - `<type> -> <type>`: function type, for example `int -> int`: a function that receives an integer and returns an integer, the last type is the return type, the others are the arguments types

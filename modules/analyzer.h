@@ -154,11 +154,25 @@ struct Operation {
     Operation(OperationAccessField accessField, Position p) : pos(p), type(OP_ACCESS_FIELD), accessField(accessField) {}
 };
 
+AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeTypeDef(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeVar(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeCond(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeMatch(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeListOfElements(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeDeref(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeRef(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeAccessField(ParsedFile *tokens);
+AnalyzedParsedFile *analyzeToken(ParsedFile *tokens);
 AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);
+
 Type analyzeType(ParsedFile *tokens);
+Variable analyzeParseType(ParsedFile *tokens);
 bool confirmType(Type *t, Type *s);
-void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab);
 Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf);
+void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab);
 
 enum ScopeType {
     SCOPE_GLOBAL,
