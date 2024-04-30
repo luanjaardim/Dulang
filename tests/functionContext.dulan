@@ -1,0 +1,33 @@
+embed `#include <stdio.h>`
+
+var global_val = 10
+
+main = fn => int |
+  main_global = global_val
+  main_val = 2
+
+  func = fn => #(none -> none) |
+    func_global = global_val
+    func_main = main_val
+    var func_val = 35
+
+    inner_func = fn => none |
+      inner_func_val = 4
+
+      embed `printf("%d\n%d\n%d\n%d\n%d\n%d\n%d\n",
+                  ${global_val},
+                  ${main_global},
+                  ${main_val},
+                  ${func_global},
+                  ${func_main},
+                  ${func_val},
+                  ${inner_func_val});`
+
+    back #inner_func      $ returning the pointer to the function defined inside func
+
+  ret_func = func()
+  @ret_func()
+  $ we can repeat this function the number of times we want
+  @ret_func()
+
+  back 0
