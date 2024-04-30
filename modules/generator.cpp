@@ -180,12 +180,17 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         string contextType = "struct context_" + funcName;
         string context = contextType + " {\n";
         for(auto d : prevDefinedVars) {
-          string defineVar = "  " + convertToCVariable(d);
-          string variableName = getVariableName(d);
+          Variable v = d;
+          if(v.mut) {
+            v.type = Type{ .textType = "", .base = TYPE_REF_VAR, .subTypes = {d.type} };
+            v.type.textType = typeAsCType(d.type);
+          }
+          string defineVar = "  " + convertToCVariable(v);
+          string variableName = getVariableName(v);
 
           context += defineVar + ";\n";
           funcDef += defineVar + " = g_context_" + funcName + "." + variableName + ";\n";
-          text += variableName + ", "; // TODO: pass as reference, for variables can be changed
+          text += (v.mut ? "&": "") + variableName + ", "; // TODO: pass as reference, for variables can be changed
         }
         context += "};\n";
         context += contextType + " g_context_" + funcName + " = {};\n";
@@ -219,19 +224,20 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         }
         Variable *v;
         if((v = defsGen.findDefinition(varDef.var.name)) != NULL && v->mut && varDef.var.mut) {
+          string variableName = (defsGen.variablePassedFromContext(*v)) ? "(*" + getVariableName(*v) + ")" : getVariableName(*v);
           if(varDef.var.type.base == TYPE_TAG_UNION) {
             Type t = getTypeFromAnalyzedParsedFile(varDef.value);
             size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
             int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
             string id = to_string(typeId);
             if(typeId != -1)
-              text = getVariableName(*v) +
+              text = variableName +
                   " = (struct taggedUnion" + to_string(taggedUnionId) + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
                   this->convertASTtoC(varDef.value) + "};\n";
             else
-              text = getVariableName(*v) + " = " + this->convertASTtoC(varDef.value) + ";\n";
+              text = variableName + " = " + this->convertASTtoC(varDef.value) + ";\n";
           } else
-            text = getVariableName(*v) + " = " + this->convertASTtoC(varDef.value) + ";\n";
+            text = variableName + " = " + this->convertASTtoC(varDef.value) + ";\n";
         }
         else {
          if(varDef.leftHandAssignment->get_data()->type != OP_TOKEN)
@@ -519,12 +525,10 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
                 }
                 size_t end = c_code.find('}', pos);
                 string varName = c_code.substr(pos + 2, end - pos - 2);
-                Variable *v;
-                if((v = defsGen.findDefinition(varName)) == NULL) {
-                  printf("Error: variable %s not found\n", varName.c_str());
-                  exit(1);
-                }
-                c_code.replace(pos, end - pos + 1, getVariableName(*v));
+                Variable v = *defsGen.findDefinition(varName); //wont exist any null return from findDefinition, all of them were solved at analyzer
+                c_code.replace(pos, end - pos + 1,
+                       defsGen.variablePassedFromContext(v) && v.mut ? "(*" + getVariableName(v) + ")" : getVariableName(v)
+                );
               }
               text = c_code;
         }
@@ -533,7 +537,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         {
           //wont exist any null return from findDefinition, all of them were solved at analyzer, i think.
           Variable v = *defsGen.findDefinition(tk.tk->text);
-          text = getVariableName(v);
+          text = defsGen.variablePassedFromContext(v) && v.mut ? "(*" + getVariableName(v) + ")" : getVariableName(v);
         } break;
         default:
           text = tk.tk->text;

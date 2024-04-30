@@ -205,12 +205,17 @@ struct DefinitionsHandler {
         printf("Trying to get last definition that does not exist"); 
         exit(1);
     }
-    Variable *findDefinition(string name) {
+    Variable *findDefinition(string name) { 
+        int scope, index;
+        return findDefinitionAux(name, &scope, &index);
+    }
+    Variable *findDefinitionAux(string name, int *scope, int *index) {
         for( int i = (int)scopes.size() - 1; i >= 0; i--) {
             for(int j = (int)scopes[i].defs.size() - 1; j >= 0; j--) {
                 if(scopes[i].defs[j].name == name) {
                     //add the definition to the next scopes, as used by them, this will be part of the context of the fuction
                     if(i > 0) //do not add if from global scope, and only add if it is a function
+                    // TODO: only check this if in analyzer
                         for(int k = i + 1; k < (int)scopes.size(); k++) {
                             if(scopes[k].type == SCOPE_FUNC) {
                                 bool add = true;
@@ -220,11 +225,23 @@ struct DefinitionsHandler {
                                     scopes[k].defsFromPrevScope.push_back(scopes[i].defs[j]);
                             }
                         }
+                    *scope = i;
+                    *index = j;
                     return &scopes[i].defs[j];
                 }
             }
         }
         return NULL;
+    }
+    bool variablePassedFromContext(Variable v) {
+        int scope, index;
+        findDefinitionAux(v.name, &scope, &index);
+        if(scope == 0) return false;
+        // if we find another function in the context, then it was passed from the context
+        for(int i = scope + 1; i < (int)scopes.size(); i++) {
+            if(scopes[i].type == SCOPE_FUNC) return true;
+        }
+        return false;
     }
     void printDefinitions() {
         for(int i = 0; i < (int)scopes.size(); i++) {

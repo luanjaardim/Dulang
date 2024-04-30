@@ -663,6 +663,22 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
           AnalyzedParsedFile::linkFatherAndChild(node, right);
           return node;
         }
+      } else if(tokens->get_data()->type == TK_BLOCK_EMBED) {
+        //found every variable that is used in the embedded code and check if it exists
+        ParsedFile *tmp = tokens->get_neighbor(RIGHT_LINK);
+        string code = tmp->get_data()->text;
+        code = code.substr(1, code.size() - 2);
+        size_t start = 0;
+        while((start = code.find("${", start)) != string::npos) {
+          size_t end = code.find("}", start);
+          string var = code.substr(start + 2, end - start - 2);
+          Variable *v = defs.findDefinition(var);
+          if(v == NULL) {
+            printf("Error: Expected an already defined variable at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+            exit(1);
+          }
+          start = end;
+        }
       }
       { t = Type{.textType = "unknown", .base = TYPE_UNKNOWN, .subTypes = {}}; }
   }

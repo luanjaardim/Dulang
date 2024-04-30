@@ -1,54 +1,44 @@
 embed `#include <stdio.h>`
 
-$ creating a function for run the match, so we can repeat many times
-match_func = fn ref_to_pnt_func :: #var(#(none -> int)), tagUnion :: int ^ byte ^ #byte => int |
-
-  match tagUnion |
-
-    $ branch of match if tagUnion is an int
-    num :: int |
-      its_int = fn => int |
-        embed `printf("it's an integer!!\n");` ;; back 0
-
-      @ref_to_pnt_func = #its_int
-
-    $ branch of match if tagUnion is a byte
-    num :: byte |
-      its_byte = fn => int |
-        embed `printf("it's a byte!!\n");` ;; back 0
-
-      @ref_to_pnt_func = #its_byte
-
-    str :: #byte |
-      its_string = fn => int |
-        embed `printf("it's a string!!\n");` ;; back 0
-
-      @ref_to_pnt_func = #its_string
-
-
-  back 0
-
 const main :: none -> int = fn |
 
   var tagUnion :: int ^ byte ^ #byte = 'a' 
 
   $ pnt_func will receive the function defined inside the branch tagUnion goes
-  $ only putting main here to initialization...
-  var pnt_func :: #(none -> int) = #main 
+  $ only declaring dummy_func for the first value of pnt_func
+  const dummy_func = fn => none | a = 0
+  var pnt_func :: #(none -> none) = #dummy_func
 
+  $ creating a function for run the match, so we can repeat many times
+  match_func = fn => none |
+    match tagUnion |
+
+      $ branch of match if tagUnion is an int
+      num :: int |
+        its_int = fn => none | embed `printf("it's an integer!!\n");`
+        pnt_func = #its_int
+
+      $ branch of match if tagUnion is a byte
+      num :: byte |
+        its_byte = fn => none | embed `printf("it's a byte!!\n");`
+        pnt_func = #its_byte
+
+      $ branch of match if tagUnion is a pointer to bytes
+      str :: #byte |
+        its_string = fn => none | embed `printf("it's a string!!\n");`
+        pnt_func = #its_string
 
   $ calling the function that pnt_func get inside the match
-  ref_to_pnt = #var pnt_func
-  _ = match_func(ref_to_pnt, tagUnion)
-  _ = @pnt_func()
+  match_func()
+  @pnt_func()
 
   $ changing the type of taggedUnion
   tagUnion = 1
-  _ = match_func(ref_to_pnt, tagUnion)
-  _ = @pnt_func()
+  match_func()
+  @pnt_func()
 
   tagUnion = "hellow world!!"
-  _ = match_func(ref_to_pnt, tagUnion)
-  _ = @pnt_func()
+  match_func()
+  @pnt_func()
 
   back 0

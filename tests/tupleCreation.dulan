@@ -1,6 +1,6 @@
 embed `#include<stdio.h>`
 
-print = fn a :: int ^ #byte ^ byte => int |
+print = fn a :: int ^ #byte ^ byte => none |
   match a |
     str :: #byte |
       embed `printf("it's a string: %s\n", ${str});`
@@ -8,7 +8,6 @@ print = fn a :: int ^ #byte ^ byte => int |
       embed `printf("it's an integer: %d\n", ${num});`
     char :: byte |
       embed `printf("it's a char: %c\n", ${char});`
-  back 0
 
 const main :: int -> ##byte -> int = fn argc, argv |
   $ a tuple of int & byte and a tuple of int & int & int & int
@@ -18,10 +17,10 @@ const main :: int -> ##byte -> int = fn argc, argv |
   var to_print :: int ^ #byte ^ byte = ""
 
   to_print = a.1        $ acessing the second element of the tupple a
-  _ = print(to_print)
+  print(to_print)
 
   to_print = b.1        $ the second element of b
-  _ = print(to_print)
+  print(to_print)
 
   $ a mutable reference to the second field of b
   d = #var b.1
@@ -30,11 +29,11 @@ const main :: int -> ##byte -> int = fn argc, argv |
   @d = "world hello"
 
   to_print = b.1
-  _ = print(to_print)
+  print(to_print)
 
   $ assign to a field of b, only possible because it was defined as var
   b.0 = 69
   to_print = b.0
-  _ = print(to_print)
+  print(to_print)
 
   back 0
