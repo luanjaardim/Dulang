@@ -213,7 +213,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         varDef.value->get_data()->type == OP_FUNC_CALL)
       ){
         defsGen.addDefinition(varDef.var);
-        defsGen.scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
+        defsGen.scopes.push_back(new Scope(SCOPE_FUNC, funcScope()));      //start of function scope
         text = this->convertASTtoC(varDef.value);
         defsGen.popDefinitions();                         //end of function scope
       } else {
@@ -330,7 +330,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       else 
         text += "{\n";
 
-      defsGen.scopes.push_back(Scope(SCOPE_COND));
+      defsGen.scopes.push_back(new Scope(SCOPE_COND));
       for(auto op : cond.ops)
         text += "  " + this->convertASTtoC(op);
       text += "\n}\n";
@@ -340,7 +340,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     {
       OperationLoop loop = op->loop;
       text = "while(" + this->convertASTtoC(loop.expr) + ") {\n";
-      defsGen.scopes.push_back(Scope(SCOPE_LOOP));
+      defsGen.scopes.push_back(new Scope(SCOPE_LOOP, loopScope()));
       for(auto op : loop.ops)
         text += "  " + this->convertASTtoC(op);
       text += "}\n";
@@ -358,7 +358,7 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
           int curId = fromTaggedUnionIdGetTypeId(taggedUnionId, v.type);
           text += "  case TYPE_" + to_string(curId) + ":\n{\n";
           text += convertToCVariable(v) + " = (" + tagUnion + ").FIELD_" + to_string(curId) + ";\n"; 
-          defsGen.scopes.push_back(Scope(SCOPE_MATCH_BRANCH));
+          defsGen.scopes.push_back(new Scope(SCOPE_MATCH_BRANCH));
           defsGen.addDefinition(v);
 
           for(auto op : match.branches[i])

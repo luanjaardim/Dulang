@@ -19,7 +19,7 @@ stmt:
 
 assignment:
   ?("const") <primary> ?("::" <some_type>) "=" <expr>
-  "var" <primary> "::" <some_type> "=" <expr>
+  "var" <primary> ?("::" <some_type>) "=" <expr>
 
 cond_stmt:
   "if" <expr> "|" <body>

@@ -144,7 +144,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   OperationFuncDef funcDef;
   Type t;
   t.base = TYPE_FUNC;
-  defs.scopes.push_back(Scope(SCOPE_FUNC));      //start of function scope
+  defs.scopes.push_back(new Scope(SCOPE_FUNC, funcScope()));      //start of function scope
   while(tmp->get_data()->type != TK_END_BAR && tmp->get_data()->type != TK_FN_RETURN) {
     if(tmp->get_neighbors_size() > CHILD(1)) {
       funcDef.args.push_back(analyzeParseType(tmp->get_neighbor(CHILD(1)))); //get the arguments
@@ -159,7 +159,8 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
     t.subTypes.push_back(analyzeType(tmp->get_neighbor(CHILD(1)))); //return type
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
-  Type *thisFuncVarType = &defs.getLastDefinition()->type;
+  Variable *thisFuncVar = defs.getLastDefinition();
+  Type *thisFuncVarType = &thisFuncVar->type;
   //get the function type as text
   t.textType = typeString(t);
   funcDef.type = t;
@@ -174,16 +175,50 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
   for(int i = 0; i < (int)funcDef.args.size(); i++) {
     Variable *v = &funcDef.args[i];
     v->type = funcDef.type.subTypes[i]; //update the type of the arguments
+    if(v->type.base == TYPE_UNKNOWN) {
+      printf("Infer Type Error: could not infer type of argument \"%s\" at line: %d, column: %d\n", v->name.c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+    }
     defs.addDefinition(*v); //push the arguments to the scope
   }
 
   //goes to the operations
+  Type funcCurRetType = Type{"none", TYPE_NONE, {}};
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
-    funcDef.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
+    defs.scopes.back()->returnType = Type{"none", TYPE_NONE, {}};
+    AnalyzedParsedFile *op = analyzeParsedFile(tmp->get_neighbor(i));
+    funcDef.ops.push_back(op);
+
+    if(funcCurRetType.base == TYPE_NONE)
+      funcCurRetType = defs.scopes.back()->returnType;
+    else if(funcCurRetType.base != defs.scopes.back()->returnType.base && defs.scopes.back()->returnType.base != TYPE_NONE) {
+      printf("Scope Return Type Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_neighbor(i)->get_data()->l, (int)tmp->get_neighbor(i)->get_data()->c);
+      printf("Expected: %s, Found: %s\n", funcCurRetType.textType.c_str(), defs.scopes.back()->returnType.textType.c_str());
+      exit(1);
+    }
+
+    if(op->get_data()->type == OP_TOKEN && op->get_data()->tk.tk->type == TK_BLOCK_BACK) {
+      if(i < (int)tmp->get_neighbors_size() - 1) {
+        printf("Early return: unreachable code after line: %d\n", (int)tmp->get_neighbor(i)->get_data()->l);
+        exit(1);
+      }
+      funcCurRetType = defs.scopes.back()->returnType;
+      break;
+    } else if(i == (int)tmp->get_neighbors_size() - 1) {
+      printf("Scope Return Type Error: missing back statement after line: %d\n", (int)tmp->get_neighbor(i)->get_data()->l);
+      exit(1);
+    }
   }
+  if(!confirmType(&defs.scopes.back()->returnType, &thisFuncVarType->subTypes[thisFuncVarType->subTypes.size() -1])) {
+      printf("The function expected to send back a type %s, found %s, at line: %d, column: %d\n", funcDef.type.subTypes[funcDef.type.subTypes.size() - 1].textType.c_str(), defs.scopes.back()->returnType.textType.c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      exit(1);
+  }
+  //possible update the return type
+  funcDef.type.subTypes[funcDef.type.subTypes.size() - 1] = defs.scopes.back()->returnType;
+
   //this will be used on generator to know the variables passed with context
-  funcDef.defsFromPrevScopes = defs.scopes.back().defsFromPrevScope;
+  funcDef.defsFromPrevScopes = defs.scopes.back()->func.defsFromPrevScopes;
   defs.popDefinitions(); //pop the variables of the scope
 
   return new AnalyzedParsedFile(new Operation(funcDef, Position(tokens->get_data()->l, tokens->get_data()->c)));
@@ -222,7 +257,6 @@ bool confirmType(Type *t, Type *s) {
   if(t->base == TYPE_UNKNOWN || s->base == TYPE_UNKNOWN) {
     *t = s->base == TYPE_UNKNOWN ? *t : *s;
     *s = t->base == TYPE_UNKNOWN ? *s : *t;
-    return true;
   }
   else {
     if((t->base == TYPE_TAG_UNION && s->base != TYPE_TAG_UNION) || (t->base != TYPE_TAG_UNION && s->base == TYPE_TAG_UNION)) {
@@ -391,7 +425,7 @@ AnalyzedParsedFile *analyzeCond(ParsedFile *tokens) {
   cond.type = condType;
 
   //get body
-  defs.scopes.push_back(Scope(SCOPE_COND));
+  defs.scopes.push_back(new Scope(SCOPE_COND));
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i) == NULL) continue;
     cond.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
@@ -410,7 +444,7 @@ AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
     tmp = tmp->get_neighbor(RIGHT_LINK);
   }
   //get body
-  defs.scopes.push_back(Scope(SCOPE_LOOP));
+  defs.scopes.push_back(new Scope(SCOPE_LOOP, loopScope()));
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     loop.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
@@ -461,13 +495,13 @@ AnalyzedParsedFile *analyzeFuncCall(ParsedFile *tokens) {
       funcCall.returnType = t.subTypes[i];
   } else { //there is no arguments passed
     if(t.subTypes[0].base != TYPE_NONE) {
-      printf("Error: received \"none\" when expecting \"%s\" at line: %d, column: %d\n", typeString(t.subTypes[0]).c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+      printf("Function Call Error: received \"none\" when expecting at least a \"%s\" at line: %d, column: %d\n", typeString(t.subTypes[0]).c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
       exit(1);
     }
     funcCall.returnType = t.subTypes[t.subTypes.size() - 1];
   }
   if(isStatement && funcCall.returnType.base != TYPE_NONE) {
-    printf("Function call returns value that is discarted at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+    printf("Function call back's value cannot be discarted at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
     exit(1);
   } else if(!isStatement && funcCall.returnType.base == TYPE_NONE) {
     printf("Function call returns nothing at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
@@ -488,7 +522,7 @@ AnalyzedParsedFile *analyzeMatch(ParsedFile *tokens) {
   for(int branch = CHILD(1); branch < (int)tmp->get_neighbors_size(); branch++) {
     ParsedFile *node = tmp->get_neighbor(branch);
     Variable v = analyzeParseType(node->get_neighbor(CHILD(1)));
-    defs.scopes.push_back(Scope(SCOPE_MATCH_BRANCH));
+    defs.scopes.push_back(new Scope(SCOPE_MATCH_BRANCH));
     defs.addDefinition(v);
     match.castedVars.push_back(v);
     match.branches.push_back({});
@@ -603,6 +637,21 @@ AnalyzedParsedFile *analyzeAccessField(ParsedFile *tokens) {
 AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
   Type t;
   switch(tokens->get_data()->type) {
+    case TK_BLOCK_BACK:
+    {
+        AnalyzedParsedFile *child = analyzeParsedFile(tokens->get_neighbor(CHILD(1)));
+        Type returnType = getTypeFromAnalyzedParsedFile(child);
+        if(defs.scopes.back()->returnType.base != TYPE_NONE && defs.scopes.back()->returnType.base != returnType.base) {
+          printf("The function expected to send back a type %s, found %s, at line: %d, column: %d\n", defs.scopes.back()->returnType.textType.c_str(), returnType.textType.c_str(), (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+          exit(1);
+        } else if(defs.scopes.size() == 1) { //only the global
+          printf("You cannot send back a value from the global scope, at line: %d, column: %d\n", (int)tokens->get_data()->l, (int)tokens->get_data()->c);
+          exit(1);
+        }
+        defs.scopes.back()->returnType = returnType;
+        defs.scopes.back()->returnType.textType = typeString(returnType);
+    }
+    break;
     case TK_TYPE_PARSE:
     {
       t = analyzeType(tokens->get_neighbor(CHILD(2)));

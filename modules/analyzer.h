@@ -171,6 +171,7 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens);
 Type analyzeType(ParsedFile *tokens);
 Variable analyzeParseType(ParsedFile *tokens);
 bool confirmType(Type *t, Type *s);
+string typeString(Type t);
 Type getTypeFromAnalyzedParsedFile(AnalyzedParsedFile *apf);
 void printAnalyzerParsedFile(AnalyzedParsedFile *parsedFile, string tab);
 
@@ -182,24 +183,55 @@ enum ScopeType {
     SCOPE_MATCH_BRANCH,
 };
 
+struct funcScope {
+    vector<Variable> defsFromPrevScopes; //definitions from other scopes that were used in this scope
+    funcScope() {
+        defsFromPrevScopes = {};
+    }
+};
+struct loopScope {
+    string label;
+    loopScope() {
+        label = "";
+    }
+};
+
 struct Scope {
-    AnalyzedParsedFile *scopeMainNode;
     ScopeType type;
-    Type returnType;
+    Position pos;
+    Type returnType = { .textType = "none", .base = TYPE_NONE, .subTypes = {} };
     vector<Variable> defs = {};
-    vector<Variable> defsFromPrevScope = {}; //definitions from other scopes that were used in this scope
+    union {
+        funcScope func;
+        loopScope loop;
+    };
+    // Scope(ScopeType type, Position pos) : type(type), pos(pos) { }
+    // Scope(ScopeType type, funcScope func, Position pos) : type(type), func(func), pos(pos) { }
+    // Scope(ScopeType type, loopScope loop, Position pos) : type(type), loop(loop), pos(pos) { }
     Scope(ScopeType type) : type(type) { }
+    Scope(ScopeType type, funcScope func) : type(type), func(func) { }
+    Scope(ScopeType type, loopScope loop) : type(type), loop(loop) { }
+    ~Scope() {}
 };
 
 struct DefinitionsHandler {
-    vector<Scope> scopes = {Scope(SCOPE_GLOBAL)};
+    ~DefinitionsHandler() {
+        for(auto s : scopes) delete s;
+    }
+    vector<Scope *> scopes = {new Scope(SCOPE_GLOBAL)};
 
-    void addDefinition(Variable v) { scopes.back().defs.push_back(v); }
-    void popDefinitions() { scopes.pop_back(); }
+    void addDefinition(Variable v) { scopes.back()->defs.push_back(v); }
+    void popDefinitions() {
+        ScopeType type = scopes.back()->type;
+        Type returnType = scopes.back()->returnType;
+        scopes.pop_back();
+        if(scopes.size() > 1 && type != SCOPE_FUNC) //do not pass the return type back if it is the global scope
+            scopes.back()->returnType = returnType;
+    }
     Variable *getLastDefinition() {
         for(int i = (int)scopes.size() - 1; i >= 0; i--) {
-            if(scopes[i].defs.size() > 0) {
-                return &scopes[i].defs.back();
+            if(scopes[i]->defs.size() > 0) {
+                return &scopes[i]->defs.back();
             }
         }
         printf("Trying to get last definition that does not exist"); 
@@ -210,24 +242,24 @@ struct DefinitionsHandler {
         return findDefinitionAux(name, &scope, &index);
     }
     Variable *findDefinitionAux(string name, int *scope, int *index) {
-        for( int i = (int)scopes.size() - 1; i >= 0; i--) {
-            for(int j = (int)scopes[i].defs.size() - 1; j >= 0; j--) {
-                if(scopes[i].defs[j].name == name) {
+        for(int i = (int)scopes.size() - 1; i >= 0; i--) {
+            for(int j = (int)scopes[i]->defs.size() - 1; j >= 0; j--) {
+                if(scopes[i]->defs[j].name == name) {
                     //add the definition to the next scopes, as used by them, this will be part of the context of the fuction
                     if(i > 0) //do not add if from global scope, and only add if it is a function
                     // TODO: only check this if in analyzer
                         for(int k = i + 1; k < (int)scopes.size(); k++) {
-                            if(scopes[k].type == SCOPE_FUNC) {
+                            if(scopes[k]->type == SCOPE_FUNC) {
                                 bool add = true;
-                                for( auto v : scopes[k].defsFromPrevScope) //already added
-                                    if(v.id == scopes[i].defs[j].id) add = false;
+                                for( auto v : scopes[k]->func.defsFromPrevScopes) //already added
+                                    if(v.id == scopes[i]->defs[j].id) add = false;
                                 if(add)
-                                    scopes[k].defsFromPrevScope.push_back(scopes[i].defs[j]);
+                                    scopes[k]->func.defsFromPrevScopes.push_back(scopes[i]->defs[j]);
                             }
                         }
                     *scope = i;
                     *index = j;
-                    return &scopes[i].defs[j];
+                    return &scopes[i]->defs[j];
                 }
             }
         }
@@ -237,17 +269,17 @@ struct DefinitionsHandler {
         int scope, index;
         findDefinitionAux(v.name, &scope, &index);
         if(scope == 0) return false;
-        // if we find another function in the context, then it was passed from the context
+        // if we find an function, that it was defined in a outter function, therefore passed from the context
         for(int i = scope + 1; i < (int)scopes.size(); i++) {
-            if(scopes[i].type == SCOPE_FUNC) return true;
+            if(scopes[i]->type == SCOPE_FUNC) return true;
         }
         return false;
     }
     void printDefinitions() {
         for(int i = 0; i < (int)scopes.size(); i++) {
             printf("Scope %d\n", i);
-            for(int j = 0; j < (int)scopes[i].defs.size(); j++) {
-                printf("  %s\n", scopes[i].defs[j].name.c_str());
+            for(int j = 0; j < (int)scopes[i]->defs.size(); j++) {
+                printf("  %s\n", scopes[i]->defs[j].name.c_str());
             }
         }
     }
