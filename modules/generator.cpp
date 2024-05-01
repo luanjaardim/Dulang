@@ -376,6 +376,8 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       if(elemList.elemType.base == TYPE_COMPOUND) {
         size_t id = getTaggedUnionOrTupleId(elemList.elemType);
         text = "(struct tuple" + to_string(id) + ")";
+      } else if(elemList.elemType.base == TYPE_NONE) {
+        break; // WARN: maybe at some point we will need to return something here
       }
       text += "{";
       for(int i = 0; i < (int)elemList.values.size(); i++) {

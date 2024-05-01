@@ -542,24 +542,27 @@ AnalyzedParsedFile *analyzeListOfElements(ParsedFile *tokens) {
   TokenType lastElement = elemList.type == OperationElemList::ARRAY ? TK_SQR_BRA_CLOSE : TK_CUR_BRA_CLOSE;
 
   ParsedFile *tmp = tokens;
-  while(tmp->get_data()->type != lastElement) {
-    AnalyzedParsedFile *node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
-    Type type = getTypeFromAnalyzedParsedFile(node);
-    elemList.values.push_back(node);
+  if(tmp->get_neighbors_size() > CHILD(1))
+    while(tmp->get_data()->type != lastElement) {
+      AnalyzedParsedFile *node = analyzeParsedFile(tmp->get_neighbor(CHILD(1)));
+      Type type = getTypeFromAnalyzedParsedFile(node);
+      elemList.values.push_back(node);
 
-    if(elemList.elemType.base == TYPE_COMPOUND)
-      elemList.elemType.subTypes.push_back(type);
-    else if(elemList.elemType.base == TYPE_REF) {
-      if(elemList.elemType.subTypes.empty()) {
+      if(elemList.elemType.base == TYPE_COMPOUND)
         elemList.elemType.subTypes.push_back(type);
-      } else if(!confirmType(&elemList.elemType.subTypes[0], &type)) {
-        printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
-        printf("Expected: %s, Found: %s\n", elemList.elemType.subTypes[0].textType.c_str(), type.textType.c_str());
-        exit(1);
+      else if(elemList.elemType.base == TYPE_REF) {
+        if(elemList.elemType.subTypes.empty()) {
+          elemList.elemType.subTypes.push_back(type);
+        } else if(!confirmType(&elemList.elemType.subTypes[0], &type)) {
+          printf("Error: type mismatch at line: %d, column: %d\n", (int)tmp->get_data()->l, (int)tmp->get_data()->c);
+          printf("Expected: %s, Found: %s\n", elemList.elemType.subTypes[0].textType.c_str(), type.textType.c_str());
+          exit(1);
+        }
       }
+      tmp = tmp->get_neighbor(RIGHT_LINK);
     }
-    tmp = tmp->get_neighbor(RIGHT_LINK);
-  }
+  if(elemList.elemType.base == TYPE_COMPOUND && elemList.elemType.subTypes.empty())
+    elemList.elemType.base = TYPE_NONE;
   elemList.elemType.textType = typeString(elemList.elemType);
 
   return new AnalyzedParsedFile(new Operation(elemList, Position(tokens->get_data()->l, tokens->get_data()->c)));
