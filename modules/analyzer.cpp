@@ -438,13 +438,21 @@ AnalyzedParsedFile *analyzeCond(ParsedFile *tokens) {
 AnalyzedParsedFile *analyzeLoop(ParsedFile *tokens) {
   ParsedFile *tmp = tokens;
   OperationLoop loop;
-  if(tmp->get_data()->type == TK_BLOCK_WHILE) {
-    loop.expr = analyzeToken(tmp->get_neighbor(CHILD(1)));
-    //goes to the operations
-    tmp = tmp->get_neighbor(RIGHT_LINK);
+  Scope *scp = new Scope(SCOPE_LOOP, loopScope());
+  if(tmp->get_data()->type == TK_NAME) {
+    scp->loop.label = tmp->get_data()->text;
+    loop.label = tmp->get_data()->text;
+    tmp = tmp->get_neighbor(RIGHT_LINK)->get_neighbor(RIGHT_LINK);
   }
+
+  if(tmp->get_data()->type == TK_BLOCK_WHILE)
+    loop.expr = analyzeToken(tmp->get_neighbor(CHILD(1)));
+  else if(tmp->get_data()->type == TK_BLOCK_LOOP)
+    loop.expr = NULL;
+  //goes to the operations
+  tmp = tmp->get_neighbor(RIGHT_LINK);
   //get body
-  defs.scopes.push_back(new Scope(SCOPE_LOOP, loopScope()));
+  defs.scopes.push_back(scp);
   for(int i = CHILD(1); i < (int)tmp->get_neighbors_size(); i++) {
     if(tmp->get_neighbor(i)->get_data() == NULL) continue;
     loop.ops.push_back(analyzeParsedFile(tmp->get_neighbor(i)));
@@ -674,6 +682,30 @@ AnalyzedParsedFile *analyzeToken(ParsedFile *tokens) {
     case TK_CHAR:
       { t = Type{.textType = "byte", .base = TYPE_BYTE, .subTypes = {}}; }
     break;
+    case TK_BLOCK_STOP:
+    case TK_BLOCK_SKIP:
+    {
+      t = Type{.textType = "none", .base = TYPE_NONE, .subTypes = {}};
+      AnalyzedParsedFile *child = NULL;
+      if(tokens->get_neighbor(RIGHT_LINK) != NULL) {
+        Token *tk = tokens->get_neighbor(RIGHT_LINK)->get_data();
+        for(int i = (int)defs.scopes.size() - 1; i >= 0; i--) {
+            if(defs.scopes[i]->type == SCOPE_FUNC) {
+              printf("Error: Loop label \"%s\" not found inside the current function at line: %d, column: %d\n", tk->text.c_str(), (int)tk->l, (int)tk->c);
+              exit(1);
+            } else if(defs.scopes[i]->type == SCOPE_LOOP && defs.scopes[i]->loop.label == tk->text) {
+              child = new AnalyzedParsedFile(new Operation(OperationToken{.tk = tk, .type = t}, Position(tk->l, tk->c)));
+              break;
+            }
+        }
+      }
+      AnalyzedParsedFile *node = new AnalyzedParsedFile(
+        new Operation(OperationToken{.tk = tokens->get_data(), .type = t}, Position(tokens->get_data()->l, tokens->get_data()->c))
+      );
+      if(child)
+        AnalyzedParsedFile::linkFatherAndChild(node, child);
+      return node;
+    }
     case TK_NAME:
       {
         Variable *v = defs.findDefinition(tokens->get_data()->text);
@@ -765,6 +797,7 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
     case TK_BLOCK_ELSE:
       return analyzeCond(tokens);
     case TK_BLOCK_WHILE:
+    case TK_BLOCK_LOOP:
       return analyzeLoop(tokens);
     case TK_BLOCK_MATCH:
       return analyzeMatch(tokens);
@@ -774,6 +807,8 @@ AnalyzedParsedFile *analyzeParsedFile(ParsedFile *tokens) {
     case TK_NAME:
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)
         return analyzeFuncCall(tokens);
+      else if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_COLON)
+        return analyzeLoop(tokens);
       return analyzeToken(tokens);
     case TK_TYPE_DEREF:
       if(tokens->get_neighbor(RIGHT_LINK) && tokens->get_neighbor(RIGHT_LINK)->get_data()->type == TK_ROU_BRA_OPEN)

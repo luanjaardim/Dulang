@@ -339,11 +339,15 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
     case OP_LOOP:
     {
       OperationLoop loop = op->loop;
-      text = "while(" + this->convertASTtoC(loop.expr) + ") {\n";
+      if(loop.label != "")
+        text = loop.label + "_continue:\n";
+      text += "while(" + (loop.expr != NULL ? this->convertASTtoC(loop.expr) : "1") + ") {\n";
       defsGen.scopes.push_back(new Scope(SCOPE_LOOP, loopScope()));
       for(auto op : loop.ops)
         text += "  " + this->convertASTtoC(op);
       text += "}\n";
+      if(loop.label != "")
+        text += loop.label + "_break:\n";
     }
     break;
     case OP_MATCH:
@@ -423,8 +427,15 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
       OperationToken tk = op->tk;
       switch(tk.tk->type) {
         case TK_BLOCK_BACK: text = "return " + this->convertASTtoC(ast->get_neighbor(CHILD(1))) + ";\n"; break;
-        case TK_BLOCK_SKIP: text = "continue;\n"; break; // TODO: continue for outter loops
-        case TK_BLOCK_STOP: text = "break;\n"; break; // TODO: break for outter loops
+        case TK_BLOCK_SKIP:
+        case TK_BLOCK_STOP:
+        {
+          text = tk.tk->type == TK_BLOCK_SKIP ? "continue" : "break";
+          if(ast->get_neighbors_size() > CHILD(1))
+            text = "goto " + ast->get_neighbor(CHILD(1))->get_data()->tk.tk->text  + "_" + text;
+          text += ";\n";
+        }
+        break;
         case TK_LOG_OR:
         case TK_LOG_AND:
         case TK_LOG_NOT:

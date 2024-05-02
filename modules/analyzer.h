@@ -67,6 +67,7 @@ struct OperationCond {
 };
 
 struct OperationLoop {
+    string label;
     AnalyzedParsedFile *expr;
     vector<AnalyzedParsedFile *> ops;
 };
