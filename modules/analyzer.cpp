@@ -205,7 +205,7 @@ AnalyzedParsedFile *analyzeFunc(ParsedFile *tokens) {
       }
       funcCurRetType = defs.scopes.back()->returnType;
       break;
-    } else if(i == (int)tmp->get_neighbors_size() - 1) {
+    } else if(i == (int)tmp->get_neighbors_size() - 1 && funcCurRetType.base != TYPE_NONE) {
       printf("Scope Return Type Error: missing back statement after line: %d\n", (int)tmp->get_neighbor(i)->get_data()->l);
       exit(1);
     }

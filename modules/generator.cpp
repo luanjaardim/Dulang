@@ -160,6 +160,17 @@ string Generator::createFunc(Variable f, vector<Variable> args) {
   return text;
 }
 
+string Generator::getValueForTaggedUnion(Type tagUnionType, AnalyzedParsedFile *value) {
+  Type valueType = getTypeFromAnalyzedParsedFile(value);
+  size_t id = getTaggedUnionOrTupleId(tagUnionType);
+  int typeId = fromTaggedUnionIdGetTypeId(id, valueType);
+  if(typeId == -1)
+    return this->convertASTtoC(value);
+
+  string idStr = to_string(typeId);
+  return "(struct taggedUnion" + to_string(id) + ") {.type = TYPE_" + idStr + ", .FIELD_" + idStr + " = " + this->convertASTtoC(value) + "}";
+}
+
 string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
   if(ast == NULL) return "";
   // printAnalyzerParsedFile(ast, "");
@@ -225,39 +236,23 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         Variable *v;
         if((v = defsGen.findDefinition(varDef.var.name)) != NULL && v->mut && varDef.var.mut) {
           string variableName = (defsGen.variablePassedFromContext(*v)) ? "(*" + getVariableName(*v) + ")" : getVariableName(*v);
-          if(varDef.var.type.base == TYPE_TAG_UNION) {
-            Type t = getTypeFromAnalyzedParsedFile(varDef.value);
-            size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
-            int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
-            string id = to_string(typeId);
-            if(typeId != -1)
-              text = variableName +
-                  " = (struct taggedUnion" + to_string(taggedUnionId) + ") {.type = TYPE_" + id + ", .FIELD_" + id + " = " +
-                  this->convertASTtoC(varDef.value) + "};\n";
-            else
-              text = variableName + " = " + this->convertASTtoC(varDef.value) + ";\n";
-          } else
+          if(varDef.var.type.base == TYPE_TAG_UNION)
+            text = variableName + " = " + this->getValueForTaggedUnion(varDef.var.type, varDef.value) + ";\n";
+          else
             text = variableName + " = " + this->convertASTtoC(varDef.value) + ";\n";
         }
         else {
-         if(varDef.leftHandAssignment->get_data()->type != OP_TOKEN)
-            text = this->convertASTtoC(varDef.leftHandAssignment) + " = ";
-         else {
-            defsGen.addDefinition(varDef.var);
-            text = convertToCVariable(varDef.var) + " = ";
-         }
-         string value = this->convertASTtoC(varDef.value);
-         if(varDef.var.type.base == TYPE_TAG_UNION) {
-           Type t = getTypeFromAnalyzedParsedFile(varDef.value);
-           size_t taggedUnionId = getTaggedUnionOrTupleId(varDef.var.type);
-           int typeId = fromTaggedUnionIdGetTypeId(taggedUnionId, t);
-           string idStr = to_string(typeId);
-           if(typeId != -1)
-             text += "{.type = TYPE_" + idStr + ", .FIELD_" + idStr + " = " + value + "};\n";
-           else
+          if(varDef.leftHandAssignment->get_data()->type != OP_TOKEN)
+             text = this->convertASTtoC(varDef.leftHandAssignment) + " = ";
+          else {
+             defsGen.addDefinition(varDef.var);
+             text = convertToCVariable(varDef.var) + " = ";
+          }
+          string value = this->convertASTtoC(varDef.value);
+          if(varDef.var.type.base == TYPE_TAG_UNION)
+              text += this->getValueForTaggedUnion(varDef.var.type, varDef.value) + ";\n";
+          else
              text += value + ";\n";
-         } else
-            text += value + ";\n";
         }
       }
     }
@@ -284,11 +279,12 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
             });
           localText = createFunc(v, args) + "  return ";
       }
+      AnalyzedParsedFile *func = fnCall.func;
       // partial function call with a function pointer
       // we will create a function as normal, but a global function pointer will be created
       // to store the function pointer, being used in the function call
       if(isFuncPointerCall && fnCall.returnType.base == TYPE_FUNC) {
-        AnalyzedParsedFile *tmp = fnCall.func;
+        AnalyzedParsedFile *tmp = func;
         while(tmp->get_data()->type == OP_DEREF)
           tmp = tmp->get_data()->deref.expr;
         if(tmp->get_data()->type == OP_TOKEN && tmp->get_data()->tk.tk->type == TK_NAME) {
@@ -306,8 +302,12 @@ string Generator::convertASTtoC(AnalyzedParsedFile *ast) {
         }
       }
       localText += (isFuncPointerCall ? "(" + caller + ")" : caller) + "(";
+      Type funcType = getTypeFromAnalyzedParsedFile(func);
       for(int i = 0; i < (int)fnCall.params.size(); i++) {
-        localText += this->convertASTtoC(fnCall.params[i]);
+        if(funcType.subTypes[i].base == TYPE_TAG_UNION)
+          localText += this->getValueForTaggedUnion(funcType.subTypes[i], fnCall.params[i]);
+        else
+          localText += this->convertASTtoC(fnCall.params[i]);
         if(fnCall.returnType.base == TYPE_FUNC || i != (int)fnCall.params.size() - 1) localText += ",";
       }
       if(fnCall.returnType.base == TYPE_FUNC) {

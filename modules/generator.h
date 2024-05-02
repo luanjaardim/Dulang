@@ -25,4 +25,5 @@ struct Generator {
     string typeAsCType(Type t);
     size_t getTaggedUnionOrTupleId(Type t);
     int fromTaggedUnionIdGetTypeId(size_t tagUnionId, Type t);
+    string getValueForTaggedUnion(Type tagUnionType, AnalyzedParsedFile *value);
 };

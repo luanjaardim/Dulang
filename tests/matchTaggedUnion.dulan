@@ -6,7 +6,7 @@ const main :: none -> int = fn |
 
   $ pnt_func will receive the function defined inside the branch tagUnion goes
   $ only declaring dummy_func for the first value of pnt_func
-  const dummy_func = fn => none | a = 0
+  const dummy_func = fn | back {}
   var pnt_func :: #(none -> none) = #dummy_func
 
   $ creating a function for run the match, so we can repeat many times
