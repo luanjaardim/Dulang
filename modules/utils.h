@@ -18,6 +18,7 @@
 #include <utility>
 #include <algorithm>
 #include <numeric>
+#include <regex>
 
 using namespace std;
 
@@ -97,6 +98,13 @@ typedef enum {
   TK_ASSIGN,
   TK_VARIABLE,
   TK_CONSTANT,
+  TK_SUM_ASSIGN,
+  TK_SUB_ASSIGN,
+  TK_MUL_ASSIGN,
+  TK_DIV_ASSIGN,
+  TK_MOD_ASSIGN,
+  TK_INC_ASSIGN,
+  TK_DEC_ASSIGN,
 
   //symbols
   TK_CUR_BRA_OPEN,
@@ -114,6 +122,8 @@ typedef enum {
   TK_SEMICOLON,
   TK_DOUB_SEMICOLON,
   TK_FN_RETURN,
+  TK_NEW_LINE,
+  TK_EOF,
 
   //special tokens
   SYSCALL_TK,
