@@ -125,10 +125,6 @@ typedef enum {
   TK_NEW_LINE,
   TK_EOF,
 
-  //special tokens
-  SYSCALL_TK,
-  PRINT_INT, 
-
   COUNT_OF_TK_TYPES
 } TokenType;
 

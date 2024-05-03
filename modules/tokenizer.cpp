@@ -93,15 +93,13 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {"=>",    TK_FN_RETURN},
   {"\n",    TK_NEW_LINE},
   {"\0",    TK_EOF},
-  {"\0",    TK_EOF},
-  {"\0",    TK_EOF}, // TODO: investigate the size of this array
 };
 
 char Lexer::nextChar() {
   if(fileIndex >= content.size()) return '\0';
-  if(content[fileIndex] == '\n') {
+  if(content[fileIndex-1] == '\n') {
     pos.l++;
-    pos.e = 0;
+    pos.e = 1;
   } else pos.e++;
   return content[fileIndex++];
 }
@@ -123,7 +121,7 @@ Token Lexer::nextWord() {
   consumeWhiteSpaces();
   this->curWord.clear();
   Position pos = { this->pos.l, this->pos.e };
-  while(this->specialChars.find(this->curChar) == string::npos) {
+  while(this->specialChars.find(this->curChar) == string::npos && this->curChar != '\0') {
     this->curWord.push_back(this->curChar);
     this->curChar = nextChar();
   }
@@ -133,7 +131,15 @@ Token Lexer::nextWord() {
   }
   if(this->curWord.size() == 1) {
     if(this->curWord[0] == '$') { //comments
-      // TODO: discard comments
+      this->curWord.clear();
+      if(this->curChar == '$') { //block comments
+        size_t pos = this->content.find("$$", this->fileIndex);
+        this->fileIndex = pos == string::npos ? this->content.size() : pos + 2;
+      } else {
+        size_t pos = this->content.find('\n', this->fileIndex);
+        this->fileIndex = pos == string::npos ? this->content.size() : pos;
+      }
+      return nextWord();
     } else if(this->curWord[0] == '\'' || this->curWord[0] == '\"' || this->curWord[0] == '`') {
       char endChar = this->curWord[0];
       while(this->curChar != endChar) {
@@ -164,7 +170,7 @@ Token Lexer::nextWord() {
   else if(regex_match(this->curWord, regex("`.*`")))
     return { this->tokenId++, TK_INLINE_C, pos, this->curWord };
 
-  for(size_t i = 0; i < LEN_BUILTIN_WORDS; i++) {
+  for(size_t i = 0; i < LEN_BUILTIN_WORDS-1; i++) { //compare with every builtin word, except EOF
     if(!this->curWord.compare(builtinWords[i].symbol)) {
       return { this->tokenId++, builtinWords[i].tokenType, pos, this->curWord };
     }
@@ -172,6 +178,7 @@ Token Lexer::nextWord() {
   if(regex_match(this->curWord, regex("([A-Za-z]+[0-9_\\.]*)+"))) {
     return { this->tokenId++, TK_NAME, pos, this->curWord };
   }
+  if(!this->curWord.empty() && this->curWord[0] == '\0') return { this->tokenId++, TK_EOF, pos, this->curWord };
 
   printf("Next Word Error: Unrecognized token %s at line %lu and column %lu\n", this->curWord.c_str(), pos.l, pos.e);
   exit(1);
@@ -179,7 +186,8 @@ Token Lexer::nextWord() {
 
   const char *humanReadableType[MARKER+1] = {"Word", "Integer Number", "String", "Char", "Floating Point", "C Code", "Builtin Word"};
 void Lexer::printToken(Token token) {
-  printf("[id: %lu line: %lu, col: %lu, item: %s, type: %s]\n", token.id, token.pos.l, token.pos.e, token.text.c_str(), humanReadableType[token.type > MARKER ? MARKER : token.type]);
+  string str = token.text == "\n" ? "\\n" : token.text;
+  printf("[item: %s, type: %s, line: %lu, col: %lu, id: %lu]\n", str.c_str(), humanReadableType[token.type > MARKER ? MARKER : token.type], token.pos.l, token.pos.e, token.id);
 }
 
 #endif

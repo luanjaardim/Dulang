@@ -23,16 +23,17 @@ typedef struct Lexer {
     const vector<string> possibleCombinations = {
       "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::", ";;"
     };
-    const string espChars = " \t\n@#&|?,.()[]{}\'\"`\0";
+    const string espChars = " \t\n@#&|?,.()[]{}\'\"`";
     const string specialChars = doubleEspChars + espChars + '$'; //'$' for comments
 
-    Lexer(const char *file) : file(file), pos(Position(0, 0)) {
+    Lexer(const char *file) : file(file), pos(Position(1, 1)) {
       if(!this->file.is_open()) {
           cerr << "Error: could not open file " << file << endl;
           exit(1);
       }
       content = string((std::istreambuf_iterator<char>(this->file)), std::istreambuf_iterator<char>());
-      curChar = nextChar();
+      curChar = content.empty() ? '\0' : content[0];
+      fileIndex = 1;
     }
     void consumeWhiteSpaces();
     void consumeComment();
