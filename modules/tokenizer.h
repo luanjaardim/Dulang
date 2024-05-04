@@ -23,7 +23,7 @@ typedef struct Lexer {
     const vector<string> possibleCombinations = {
       "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::", ";;"
     };
-    const string espChars = " \t\n@#&|?,.()[]{}\'\"`";
+    const string espChars = " \t\n@#&|?,()[]{}\'\"`";
     const string specialChars = doubleEspChars + espChars + '$'; //'$' for comments
 
     Lexer(const char *file) : file(file), pos(Position(1, 1)) {

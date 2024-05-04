@@ -119,7 +119,6 @@ void Lexer::consumeWhiteSpaces() {
 
 Token Lexer::nextWord() {
   consumeWhiteSpaces();
-  this->curWord.clear();
   Position pos = { this->pos.l, this->pos.e };
   while(this->specialChars.find(this->curChar) == string::npos && this->curChar != '\0') {
     this->curWord.push_back(this->curChar);
@@ -165,35 +164,49 @@ Token Lexer::nextWord() {
       }
     }
   }
+  Token tk = { 0, TK_NAME, pos, "" };
   if(regex_match(this->curWord, regex("[0-9_]+")))
-    return { this->tokenId++, TK_INT, pos, this->curWord };
-  else if(regex_match(this->curWord, regex("[0-9_]*\\.[0-9_]*(e-?[0-9_])?")))
-    return { this->tokenId++, TK_FLOAT, pos, this->curWord };
+    tk = { ++this->tokenId, TK_INT, pos, this->curWord };
+  else if(regex_match(this->curWord, regex("[0-9_]*\\.[0-9_]*(e[-+]?[0-9_])?")))
+    tk =  { ++this->tokenId, TK_FLOAT, pos, this->curWord };
+  else if(regex_match(this->curWord, regex("([a-zA-Z](\\w)*\\.)+[a-zA-Z](\\w)*")))
+    tk = { ++this->tokenId, TK_DOTTED_NAME, pos, this->curWord };
   else if(regex_match(this->curWord, regex("\"[^\"]*\"")))
-    return { this->tokenId++, TK_STR, pos, this->curWord };
+    tk = { ++this->tokenId, TK_STR, pos, this->curWord };
   else if(regex_match(this->curWord, regex("\'[^\']*\'")))
-    return { this->tokenId++, TK_CHAR, pos, this->curWord };
+    tk = { ++this->tokenId, TK_CHAR, pos, this->curWord };
   else if(regex_match(this->curWord, regex("`.*`")))
-    return { this->tokenId++, TK_INLINE_C, pos, this->curWord };
+    tk = { ++this->tokenId, TK_INLINE_C, pos, this->curWord };
 
   for(size_t i = 0; i < LEN_BUILTIN_WORDS-1; i++) { //compare with every builtin word, except EOF
     if(!this->curWord.compare(builtinWords[i].symbol)) {
-      return { this->tokenId++, builtinWords[i].tokenType, pos, this->curWord };
+      tk = { ++this->tokenId, builtinWords[i].tokenType, pos, this->curWord };
     }
   }
-  if(regex_match(this->curWord, regex("([A-Za-z]+[0-9_\\.]*)+"))) {
-    return { this->tokenId++, TK_NAME, pos, this->curWord };
-  }
-  if(!this->curWord.empty() && this->curWord[0] == '\0') return { this->tokenId++, TK_EOF, pos, this->curWord };
+  if(regex_match(this->curWord, regex("[A-Z][A-Za-z0-9_]*")))
+    tk = { ++this->tokenId, TK_CAP_NAME, pos, this->curWord }; //capitalized words
+  else if(regex_match(this->curWord, regex("([A-Za-z]+[0-9_]*)+")))
+    tk = { ++this->tokenId, TK_NAME, pos, this->curWord }; //words
+  if(!this->curWord.empty() && this->curWord[0] == '\0') tk = { ++this->tokenId, TK_EOF, pos, this->curWord };
 
-  printf("Next Word Error: Unrecognized token %s at line %lu and column %lu\n", this->curWord.c_str(), pos.l, pos.e);
-  exit(1);
+  if(tk.id) {
+    this->curWord.clear();
+    return tk;
+  }
+  else if(tk.id == 0 && this->curChar == '\n') {
+    printf("Next Word Error: Unrecognized token %s at line %lu and column %lu\n", this->curWord.c_str(), pos.l, pos.e);
+    exit(1);
+  }
+  this->curWord.push_back(this->curChar);
+  this->curChar = nextChar();
+  return nextWord(); //try again with the next char, used on 1.e-2, as '-' is a special char
 }
 
-  const char *humanReadableType[MARKER+1] = {"Word", "Integer Number", "String", "Char", "Floating Point", "C Code", "Builtin Word"};
+  const char *humanReadableType[MARKER+1] = {"Word", "Capitalized Word", "Integer Number", "String", "Char", "Floating Point", "Dotted Name", "C Code", "Builtin Word"};
 void Lexer::printToken(Token token) {
-  string str = token.text == "\n" ? "\\n" : token.text;
-  printf("[item: %s, type: %s, line: %lu, col: %lu, id: %lu]\n", str.c_str(), humanReadableType[token.type > MARKER ? MARKER : token.type], token.pos.l, token.pos.e, token.id);
+  if(token.type == TK_NEW_LINE) printf("\tnew_line\n");
+  else
+    printf("[item: %s, type: %s, line: %lu, col: %lu, id: %lu]\n", token.text.c_str(), humanReadableType[token.type > MARKER ? MARKER : token.type], token.pos.l, token.pos.e, token.id);
 }
 
 #endif

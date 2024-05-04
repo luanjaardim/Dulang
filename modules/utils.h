@@ -31,10 +31,12 @@ using namespace std;
 
 typedef enum {
   TK_NAME, //any name created by the user(that does not matches any of the builtin types)
+  TK_CAP_NAME, //name with first letter in uppercase
   TK_INT,  //any number (not floating point)
   TK_STR,  //string (surrounded by `"`)
   TK_CHAR,
   TK_FLOAT,
+  TK_DOTTED_NAME, //name with dots (e.g. name.name2.name3)
   TK_INLINE_C, //inline c code (surrounded by "`")
 
   MARKER, //used only for divide the generic tokens(above) from the builtin words(below)
