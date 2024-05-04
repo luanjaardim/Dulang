@@ -133,8 +133,14 @@ Token Lexer::nextWord() {
     if(this->curWord[0] == '$') { //comments
       this->curWord.clear();
       if(this->curChar == '$') { //block comments
-        size_t pos = this->content.find("$$", this->fileIndex);
-        this->fileIndex = pos == string::npos ? this->content.size() : pos + 2;
+        char prevChar = nextChar();
+        this->curChar = nextChar();
+        while(this->curChar != '\0') {
+          prevChar = this->curChar;
+          this->curChar = nextChar();
+          if(prevChar == '$' && this->curChar == '$') break;
+        }
+        this->curChar = nextChar();
       } else {
         size_t pos = this->content.find('\n', this->fileIndex);
         this->fileIndex = pos == string::npos ? this->content.size() : pos;
