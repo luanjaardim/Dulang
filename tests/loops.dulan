@@ -1,0 +1,23 @@
+embed `#include <stdio.h>`
+
+print = fn str :: #byte | embed `printf("%s\n", ${str});`
+
+main = fn => int |
+  var cnt = 10
+  outter_loop : while cnt |
+    cnt = cnt - 1
+    print("outter loop begin")
+    inner_loop : loop |
+      if cnt % 2 |
+        stop inner_loop     $ goes to line 15, end of loop scope
+        $ only stop would do the same
+
+      print("inside inner_loop")
+      skip outter_loop      $ goes to line 7, begin of while scope
+
+    if cnt == 1 |
+      stop outter_loop      $ goes to line 19, end of while scope
+    print("outter loop end")
+
+  print("end of everything")
+  back 0
