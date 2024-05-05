@@ -196,7 +196,9 @@ Token Lexer::nextToken() {
     tk = { ++this->tokenId, TK_DOTTED_NAME, pos, this->curWord };
   else if(regex_match(this->curWord, regex("\"[^\"]*\"")))
     tk = { ++this->tokenId, TK_STR, pos, this->curWord };
-  else if(regex_match(this->curWord, regex("\'[^\']*\'")))
+  else if(regex_match(this->curWord, regex("\'([^(\\\\)(\\n)(\\\\')])\'")))  // four backslashes = one backslash in the readable string
+    tk = { ++this->tokenId, TK_CHAR, pos, this->curWord };
+  else if(regex_match(this->curWord, regex("\'\\\\[ntr0\'\\\\]\'")))
     tk = { ++this->tokenId, TK_CHAR, pos, this->curWord };
   else if(regex_match(this->curWord, regex("`.*`")))
     tk = { ++this->tokenId, TK_INLINE_C, pos, this->curWord };
