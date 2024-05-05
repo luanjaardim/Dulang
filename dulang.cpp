@@ -5,7 +5,8 @@
 #include <unistd.h>
 #include <string>
 
-#include "modules/generator.h"
+// #include "modules/generator.h"
+#include "modules/grammar.h"
 
 using namespace std;
 
@@ -31,32 +32,40 @@ int main(int argc, char **argv) {
     string fileName = file.substr(0, pos);
 
     //Every word is turned into Tokens, with informations that helps on parsing
-    TokenizedFile *tokFile = readToTokenizedFile(file.c_str());
+    Lexer *lex = new Lexer(file.c_str());
+    Token tk;
+    while((tk = lex->nextToken()).type != TK_EOF) {
+        lex->printToken(tk);
+    }
+
+    // Grammar *gm = new Grammar();
+    
+    exit(0);
     // printTokenizedFile(*tokFile);
 
     //Initializing the grammar
-    Grammar *gm = new Grammar();
-    //Parsing the tokenized file
-    ParsedFile *node = gm->parseTokenizedFile(tokFile);
-    //Printing the AST
-    // printAST(node, "");
-
-
-    //Translating the AST to a .c file
-    string fileToCreate = fileName + ".c";
-    Generator *g = new Generator();
-    g->translateFile(node, fileToCreate);
-
-    delete g;
-    delete gm;
-    destroyTokenizdFile(tokFile);
+    // Grammar *gm = new Grammar();
+    // //Parsing the tokenized file
+    // ParsedFile *node = gm->parseTokenizedFile(tokFile);
+    // //Printing the AST
+    // // printAST(node, "");
+    //
+    //
+    // //Translating the AST to a .c file
+    // string fileToCreate = fileName + ".c";
+    // Generator *g = new Generator();
+    // g->translateFile(node, fileToCreate);
+    //
+    // delete g;
+    // delete gm;
+    // destroyTokenizdFile(tokFile);
 
     //Compiling the c file
-    string command = "gcc " + fileToCreate + " -o " + fileName;
-    if(system(command.c_str()) == CMD_ERROR) {
-        fprintf(stderr, "Error! Could not compile the .c file\n");
-        exit(1);
-    }
+    // string command = "gcc " + fileToCreate + " -o " + fileName;
+    // if(system(command.c_str()) == CMD_ERROR) {
+    //     fprintf(stderr, "Error! Could not compile the .c file\n");
+    //     exit(1);
+    // }
 
     return 0;
 }

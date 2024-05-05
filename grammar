@@ -1,3 +1,11 @@
+
+@ stmt -> '(' stmt ')' | 'if' expr 'then' stmt
+@ expr -> Name 
+        | Number 
+        | String
+
+
+$$
 $ the whole program is a list of block statements
 root:
   [<stmt>:BLOCK]
@@ -9,7 +17,6 @@ stmt:
   <type_def>
   <func_call>
   <match_tag_union>
-  $TODO : include load and loadC statements
   <embed_c>
   "back" <expr>
   "skip"
@@ -167,3 +174,4 @@ basic_type:
   "uint"                     $ unsigned 4-bytes
   "none"                     $ void type, nothing to return
   NAME                       $ user types
+$$
