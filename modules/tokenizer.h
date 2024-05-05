@@ -19,6 +19,9 @@ typedef struct Lexer {
     char curChar;
     size_t fileIndex = 0;
 
+    bool readNewLine = false; //used to update the indentation
+    vector<size_t> indentations = {1}; //stores every indentation level, first is always 1, global indentation
+
     const string doubleEspChars = ";=-+*/%<!>:"; 
     const vector<string> possibleCombinations = {
       "==", "!=", ">=", "<=", "++", "--", "+=", "-=", "*=", "/=", "%=", "<<", ">>", "<>", "->", "<-", "=>", "::", ";;"
@@ -32,6 +35,7 @@ typedef struct Lexer {
           exit(1);
       }
       content = string((std::istreambuf_iterator<char>(this->file)), std::istreambuf_iterator<char>());
+      this->file.close();
       curChar = content.empty() ? '\0' : content[0];
       fileIndex = 1;
     }
@@ -39,7 +43,7 @@ typedef struct Lexer {
     void consumeComment();
     char nextChar();
     char peekChar();
-    Token nextWord();
+    Token nextToken();
     void printToken(Token token);
 } Lexer;
 

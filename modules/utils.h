@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <numeric>
 #include <regex>
+#include <set>
 
 using namespace std;
 
@@ -125,7 +126,12 @@ typedef enum {
   TK_DOUB_SEMICOLON,
   TK_FN_RETURN,
   TK_NEW_LINE,
+
+  //special types
+  TK_INDENT,
+  TK_DEDENT,
   TK_EOF,
+
 
   COUNT_OF_TK_TYPES
 } TokenType;

@@ -92,6 +92,10 @@ static const struct Symb builtinWords[LEN_BUILTIN_WORDS] = {
   {";;",    TK_DOUB_SEMICOLON},
   {"=>",    TK_FN_RETURN},
   {"\n",    TK_NEW_LINE},
+
+  // do not change the position bellow, used on nextToken
+  {"",      TK_INDENT}, //indentation identifier, do not needs text, only something to tell that happened
+  {"",      TK_DEDENT}, //dedentation identifier
   {"\0",    TK_EOF},
 };
 
@@ -117,9 +121,28 @@ void Lexer::consumeWhiteSpaces() {
     }
 }
 
-Token Lexer::nextWord() {
+Token Lexer::nextToken() {
   consumeWhiteSpaces();
   Position pos = { this->pos.l, this->pos.e };
+  if(this->readNewLine) {
+    if(this->indentations.back() != pos.e && this->curChar != '\0') {
+      Token tk = { ++this->tokenId, TK_INDENT, pos, "" };
+      if(this->indentations.back() > pos.e) {
+        this->indentations.pop_back();
+        if(binary_search(this->indentations.begin(), this->indentations.end(), pos.e) == false) {
+          printf("Indentation Error: Expected %lu spaces, but got %lu at line %lu and column %lu\n", this->indentations.back(), pos.e, pos.l, pos.e);
+          exit(1);
+        }
+        tk.type = TK_DEDENT;
+      } else {
+        this->indentations.push_back(pos.e);
+        this->readNewLine = false; //we do not set it false on dedent, because we can dedent multiple times at once
+      }
+      tk.text = tk.type == TK_INDENT ? "indent" : "dedent";
+      return tk;
+    }
+    this->readNewLine = false;
+  }
   while(this->specialChars.find(this->curChar) == string::npos && this->curChar != '\0') {
     this->curWord.push_back(this->curChar);
     this->curChar = nextChar();
@@ -144,7 +167,7 @@ Token Lexer::nextWord() {
         size_t pos = this->content.find('\n', this->fileIndex);
         this->fileIndex = pos == string::npos ? this->content.size() : pos;
       }
-      return nextWord();
+      return nextToken();
     } else if(this->curWord[0] == '\'' || this->curWord[0] == '\"' || this->curWord[0] == '`') {
       char endChar = this->curWord[0];
       while(this->curChar != endChar) {
@@ -178,7 +201,7 @@ Token Lexer::nextWord() {
   else if(regex_match(this->curWord, regex("`.*`")))
     tk = { ++this->tokenId, TK_INLINE_C, pos, this->curWord };
 
-  for(size_t i = 0; i < LEN_BUILTIN_WORDS-1; i++) { //compare with every builtin word, except EOF
+  for(size_t i = 0; i != TK_INDENT; i++) { //compare with every builtin word, except the ones after TK_INDENT
     if(!this->curWord.compare(builtinWords[i].symbol)) {
       tk = { ++this->tokenId, builtinWords[i].tokenType, pos, this->curWord };
     }
@@ -191,6 +214,7 @@ Token Lexer::nextWord() {
 
   if(tk.id) {
     this->curWord.clear();
+    if(tk.type == TK_NEW_LINE) this->readNewLine = true;
     return tk;
   }
   else if(tk.id == 0 && this->curChar == '\n') {
@@ -199,12 +223,13 @@ Token Lexer::nextWord() {
   }
   this->curWord.push_back(this->curChar);
   this->curChar = nextChar();
-  return nextWord(); //try again with the next char, used on 1.e-2, as '-' is a special char
+  return nextToken(); //try again with the next char, used on 1.e-2, as '-' is a special char
 }
 
   const char *humanReadableType[MARKER+1] = {"Word", "Capitalized Word", "Integer Number", "String", "Char", "Floating Point", "Dotted Name", "C Code", "Builtin Word"};
 void Lexer::printToken(Token token) {
   if(token.type == TK_NEW_LINE) printf("\tnew_line\n");
+  else if(token.type == TK_INDENT || token.type == TK_DEDENT) printf("\t%s\n", token.text.c_str());
   else
     printf("[item: %s, type: %s, line: %lu, col: %lu, id: %lu]\n", token.text.c_str(), humanReadableType[token.type > MARKER ? MARKER : token.type], token.pos.l, token.pos.e, token.id);
 }
