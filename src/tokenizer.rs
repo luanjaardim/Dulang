@@ -1,7 +1,7 @@
-use std::io::Read;
+use std::{fmt::write, io::Read};
 
-#[derive(Debug, Clone, Copy)]
-enum TokenType {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TokenType {
     Str, Int, Real, Char, Comment, Id,
 
     // Numerical Operations
@@ -26,7 +26,6 @@ enum TokenType {
 }
 use TokenType::*;
 
-#[derive(Debug)]
 pub struct Token {
     c : usize,
     l : usize,
@@ -44,11 +43,27 @@ impl Token {
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr, 
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
+                "=" => Assign,
                 _ => TokenType::Id
             }), 
             text: String::from(text)
         }
 
+    }
+}
+
+// this will omit the position
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Token({:?}, {})", self.t, self.text)
+    }
+}
+
+// this will show the position, the type and the text
+// NOTE: The Debug do not show the position for a better ASTNode printing, so the Display will show
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Token({:?}, {}) at (lin: {}, col: {})", self.t, self.text, self.l, self.c)
     }
 }
 

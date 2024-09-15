@@ -4,10 +4,9 @@ mod tokenizer;
 fn main() -> Result<(), Box<dyn std::error::Error>>{
 
 
-    let mut t = tokenizer::Tokenizer::new("src/text.txt")?;
-    while let Some(tk) = t.get_next_token() {
-        println!("{:?}", tk);
-    }
+    let t = tokenizer::Tokenizer::new("src/text.txt")?;
+    let p = grammar::Parser::new(t);
+    println!("{:#?}", p.parse().unwrap());
 
     Ok(())
 }
