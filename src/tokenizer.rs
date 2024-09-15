@@ -30,7 +30,7 @@ use TokenType::*;
 pub struct Token {
     c : usize,
     l : usize,
-    t : TokenType,
+    pub t : TokenType,
     pub text : String,
 }
 
@@ -155,5 +155,12 @@ impl Tokenizer {
             if c == '\n' { self.l += 1; self.c = 0; } else { self.c += 1; }
             self.pos += 1;
         }
+    }
+}
+
+impl Iterator for Tokenizer {
+    type Item = Token;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.get_next_token()
     }
 }

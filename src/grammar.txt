@@ -1,0 +1,35 @@
+# nl -> end of line (new line)
+
+
+root ::== ( sttm )*
+sttm ::==
+	BACK expr nl
+	BREAK expr nl
+	SKIP
+	ID ASSIGN expr nl
+
+expr ::==
+	bitwise
+
+bitwise ::==
+	BNOT bitwise
+	comparison ( (BAND | BOR | BXOR | SHL | SHR) comparison )*
+
+comparison ::==
+	NOT comparison
+	arith ((GRT | GRE | LET | LEE | EQ | NEQ) arith)*
+
+arith ::== factor ((ADD | SUB) factor)*
+
+factor ::== unary ((MUL | DIV) unary)*
+
+unary ::==
+	(ADD | SUB) unary
+	primary
+
+primary ::==
+	"(" expr ")"
+	INT
+	REAL
+	STRING
+	CHAR
