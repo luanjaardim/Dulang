@@ -1,4 +1,4 @@
-use std::{fmt::write, io::Read};
+use std::io::Read;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
@@ -17,7 +17,7 @@ pub enum TokenType {
     // Control Keywords
     Skip, Stop, Back,                       // skip, stop, back
 
-    Assign, Fn, TypeInf,                    // =, =>, ::
+    Assign, FnBar, FnReturn, TypeInf,       // =, |, ->, ::
 
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,    // {, }, (, ),
@@ -26,6 +26,7 @@ pub enum TokenType {
 }
 use TokenType::*;
 
+#[derive(Clone)]
 pub struct Token {
     c : usize,
     l : usize,
@@ -43,9 +44,10 @@ impl Token {
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr, 
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
-                "=" => Assign,
-                _ => TokenType::Id
-            }), 
+                "=" => Assign, "->" => FnReturn, "|" => FnBar, "::" => TypeInf,
+                _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
+                _ => panic!("Token type is unkown: {text}")
+            }),
             text: String::from(text)
         }
 
@@ -67,6 +69,7 @@ impl std::fmt::Display for Token {
     }
 }
 
+#[derive(Clone)]
 pub struct Tokenizer {
     path: String,
     content: String,
@@ -79,8 +82,8 @@ pub struct Tokenizer {
 impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
-    const SEPARATORS: [&'static str; 19] = [
-      "=>", "==", ">=", "<=", "!=", "::", "->", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
+    const SEPARATORS: [&'static str; 20] = [
+      "=>", "==", ">=", "<=", "!=", "::", "|", "->", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
     ];
 
     // NOTE: the order is important here, as every Real contains Int it must goes first
@@ -103,7 +106,7 @@ impl Tokenizer {
         Ok(t)
     }
 
-    pub fn get_next_token(&mut self) -> Option<Token> {
+    pub fn next(&mut self) -> Option<Token> {
 
         // check if the previous separator can be already returned
         if self.prev_sep.is_some() { return self.prev_sep.take() }
@@ -156,6 +159,8 @@ impl Tokenizer {
         ret
     }
 
+    pub fn peek(&self) -> Option<Token> { self.clone().next() }
+
     fn match_patterns(&self) -> Option<(regex::Match, TokenType)> {
         let text = &self.content[self.pos..];
         let p = Tokenizer::PATTERNS.iter().find(|p|
@@ -176,6 +181,6 @@ impl Tokenizer {
 impl Iterator for Tokenizer {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
-        self.get_next_token()
+        self.next()
     }
 }

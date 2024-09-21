@@ -1,7 +1,7 @@
 # nl -> end of line (new line)
 
 
-root ::== ( sttm )*
+body ::== ( sttm )*
 sttm ::==
 	BACK expr nl
 	BREAK expr nl
@@ -9,7 +9,15 @@ sttm ::==
 	ID ASSIGN expr nl
 
 expr ::==
+	func
 	bitwise
+
+func ::==
+	"|" ( args "," )* "|" ( "->" type )? expr
+	"|" ( args "," )* "|" ( "->" type )? "{" body "}"
+
+args ::==
+	ID ("::" type)?
 
 bitwise ::==
 	BNOT bitwise
@@ -24,12 +32,20 @@ arith ::== factor ((ADD | SUB) factor)*
 factor ::== unary ((MUL | DIV) unary)*
 
 unary ::==
-	(ADD | SUB) unary
 	primary
+	(ADD | SUB) unary
 
 primary ::==
 	"(" expr ")"
-	INT
+	INTEGER
 	REAL
 	STRING
 	CHAR
+
+type ::==
+	"i32"
+	"u32"
+	"char"
+	"f32"
+	"f64"
+	"bool"

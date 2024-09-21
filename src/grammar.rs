@@ -2,14 +2,20 @@ use std::{error::Error, fmt::{write, Debug}};
 
 use crate::tokenizer::*;
 
-type Body = Vec<ASTNode>;
 type Node = Box<ASTNode>;
+type Body = Vec<Node>;
+type Var = (Token, Option<Token>);
 
 #[derive(Debug)]
 pub enum ASTNode {
-    Assign{
-        var: Token,
+    Assign {
+        var: Token, // TODO: change var type to Var, as we can define the type of a variable
         expr: Node,
+    },
+    Func {
+        args: Vec<Var>,
+        ret: Option<Token>, // any Token of a type
+        body: Body,
     },
     Conditional {
         cond: Option<Node>, // Else will have a cond None
@@ -35,6 +41,7 @@ pub enum ASTNode {
 pub enum ParseError {
     TokenNotExpected(Token, Vec<TokenType>),
     ExpectedToken,
+    GeneralError(String),
     NotImplemented
 }
 
@@ -45,24 +52,40 @@ impl std::fmt::Debug for ParseError {
                 write!(f, "Received {tk:?}, but expected Tokens of type {expected:?}")
             },
             Self::ExpectedToken => write!(f, "Expected a Token, but received nothing."),
+            Self::GeneralError(s) => write!(f, "ParseError: {s}"),
             Self::NotImplemented => write!(f, "Still in development!"),
         }
     }
 }
 
 pub struct Parser {
-    tokenizer: core::iter::Peekable<Tokenizer>,
+    tokenizer: Tokenizer,
 }
 
 impl Parser {
 
     pub fn new(tokenizer: Tokenizer) -> Self {
-        Parser {
-            tokenizer: tokenizer.into_iter().peekable(),
-        }
+        Parser { tokenizer }
     }
 
-    pub fn parse(mut self) -> Result<Vec<Node>, ParseError>  {
+    pub fn clone_state(&self) -> Self {
+        Parser { tokenizer: self.tokenizer.clone() }
+    }
+
+    fn assert_next(&mut self, possible_next_tokens_types: Vec<TokenType>) -> Result<(), ParseError> {
+        let (tk, next_tk_type) = match self.tokenizer.next() {
+            Some(tk @ Token { t, .. }) => (tk, t),
+            None => return Err(ParseError::ExpectedToken)
+        };
+        if possible_next_tokens_types.iter().any(|poss_tk_type| *poss_tk_type == next_tk_type ) { return Ok(()) }
+        Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types))
+    }
+
+    pub fn parse(mut self) -> Result<Body, ParseError>  {
+        Ok(self.body()?)
+    }
+
+    fn body(&mut self) -> Result<Body, ParseError>  {
         let mut ast = vec![];
         while self.tokenizer.peek().is_some() {
             ast.push(self.sttm()?);
@@ -86,7 +109,33 @@ impl Parser {
     }
 
     fn expr(&mut self) -> Result<Node, ParseError> {
-        self.bitwise()
+        // saving the current state of the Tokenizer
+        // if the Parse fail for any branch it's easy to rollback
+        let backup = self.clone_state();
+        if let ret @ Ok(_) = self.bitwise() { return ret }
+        *self = backup.clone_state(); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.func() { return ret }
+
+        match backup.tokenizer.peek() {
+            Some(tk) =>
+                Err(ParseError::GeneralError(
+                    format!("Fail to parse an expression for: {}.", tk)
+            )),
+            None => Err(ParseError::ExpectedToken),
+        }
+    }
+
+    fn func(&mut self) -> Result<Node, ParseError> {
+        // Start of the function args '|'
+        self.assert_next(vec![TokenType::FnBar])?;
+
+        // TODO: parse args
+
+        // End of the function args '|'
+        self.assert_next(vec![TokenType::FnBar])?;
+
+        // TODO: implement args parsing and return type parse
+        Ok(Box::new(ASTNode::Func { args: vec![], ret: None, body: self.body()? }))
     }
 
     fn bitwise(&mut self) -> Result<Node, ParseError> {
@@ -229,5 +278,8 @@ impl Parser {
         }
     }
 
+    fn _type_(&mut self) -> Result<Node, ParseError> {
+        Err(ParseError::NotImplemented)
+    }
 
 }
