@@ -72,13 +72,19 @@ impl Parser {
         Parser { tokenizer: self.tokenizer.clone() }
     }
 
-    fn assert_next(&mut self, possible_next_tokens_types: Vec<TokenType>) -> Result<(), ParseError> {
-        let (tk, next_tk_type) = match self.tokenizer.next() {
+    fn assert_peek(&mut self, possible_next_tokens_types: &Vec<TokenType>) -> Result<Token, ParseError> {
+        let (tk, next_tk_type) = match self.tokenizer.peek() {
             Some(tk @ Token { t, .. }) => (tk, t),
             None => return Err(ParseError::ExpectedToken)
         };
-        if possible_next_tokens_types.iter().any(|poss_tk_type| *poss_tk_type == next_tk_type ) { return Ok(()) }
-        Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types))
+        if possible_next_tokens_types.iter().any(|poss_tk_type| *poss_tk_type == next_tk_type ) { return Ok(tk) }
+        Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types.clone()))
+    }
+
+    fn assert_next(&mut self, possible_next_tokens_types: &Vec<TokenType>) -> Result<Token, ParseError> {
+        let ret = self.assert_peek(possible_next_tokens_types);
+        self.tokenizer.next();
+        ret
     }
 
     pub fn parse(mut self) -> Result<Body, ParseError>  {
@@ -97,6 +103,7 @@ impl Parser {
         match self.tokenizer.next() {
             Some(var @ Token { t: TokenType::Id, ..}) => {
                 match self.tokenizer.next() {
+                    // Found a variable declaration
                     Some(Token { t: TokenType::Assign, .. }) =>
                         Ok(Box::new(ASTNode::Assign { var, expr: self.expr()? })),
                     Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Assign])),
@@ -127,15 +134,37 @@ impl Parser {
 
     fn func(&mut self) -> Result<Node, ParseError> {
         // Start of the function args '|'
-        self.assert_next(vec![TokenType::FnBar])?;
+        _ = self.assert_next(&vec![TokenType::FnBar])?;
 
         // TODO: parse args
 
         // End of the function args '|'
-        self.assert_next(vec![TokenType::FnBar])?;
+        _ = self.assert_next(&vec![TokenType::FnBar])?;
 
         // TODO: implement args parsing and return type parse
         Ok(Box::new(ASTNode::Func { args: vec![], ret: None, body: self.body()? }))
+    }
+
+    /// Function to parse chained binary expressions, such as:
+    ///     factor ((ADD | SUB) factor)*  =>  1 + 1 - 2 + 1 + 3
+    ///     comparison ( (BAND | BOR | BXOR | SHL | SHR) comparison )*  =>  1 band 2 bor 0
+    fn parse_generic_chained_binary(
+        &mut self,
+        mut method: impl FnMut(&mut Self) -> Result<Node, ParseError>,
+        possible_operators: Vec<TokenType>
+    ) -> Result<Node, ParseError> {
+        let mut l = method(self)?;
+        loop {
+            let op = self.assert_peek(&possible_operators);
+            l = match op {
+                Ok(tk) => {
+                    _ = self.tokenizer.next(); // Consume the Token peeked in assert_peek
+                    Box::new(ASTNode::Binary { op: tk, l, r: method(self)? })
+                }
+                Err(_) => break,
+            };
+        }
+        Ok(l)
     }
 
     fn bitwise(&mut self) -> Result<Node, ParseError> {
@@ -148,25 +177,13 @@ impl Parser {
                 }))
             }
             _ => {
-                let mut l = self.comparison()?;
-                loop {
-                    l = match self.tokenizer.peek() {
-                        Some(Token { t: TokenType::Bxor, .. }) |
-                        Some(Token { t: TokenType::Band, .. }) |
-                        Some(Token { t: TokenType::Bor, .. }) |
-                        Some(Token { t: TokenType::Shl, .. }) |
-                        Some(Token { t: TokenType::Shr, .. }) =>
-                            Box::new(
-                                ASTNode::Binary {
-                                    op: self.tokenizer.next().unwrap(),
-                                    l,
-                                    r: self.comparison()?
-                                }
-                            ),
-                        _ => break,
-                    }
-                }
-                Ok(l)
+                Ok(self.parse_generic_chained_binary(|s| s.comparison(), vec![
+                        TokenType::Bxor,
+                        TokenType::Band,
+                        TokenType::Bor,
+                        TokenType::Shl,
+                        TokenType::Shr,
+                ])?)
             }
         }
     }
@@ -181,66 +198,30 @@ impl Parser {
                 }))
             }
             _ => {
-                let mut l = self.arith()?;
-                loop {
-                    l = match self.tokenizer.peek() {
-                        Some(Token { t: TokenType::GrT, .. }) |
-                        Some(Token { t: TokenType::GrE, .. }) |
-                        Some(Token { t: TokenType::LeT, .. }) |
-                        Some(Token { t: TokenType::LeE, .. }) |
-                        Some(Token { t: TokenType::Neq, .. }) |
-                        Some(Token { t: TokenType::Eq, .. }) =>
-                            Box::new(
-                                ASTNode::Binary {
-                                    op: self.tokenizer.next().unwrap(),
-                                    l,
-                                    r: self.arith()?
-                                }
-                            ),
-                        _ => break,
-                    }
-                }
-                Ok(l)
+                Ok(self.parse_generic_chained_binary(|s| s.arith(), vec![
+                        TokenType::GrT,
+                        TokenType::GrE,
+                        TokenType::LeT,
+                        TokenType::LeE,
+                        TokenType::Neq,
+                        TokenType::Eq,
+                ])?)
             }
         }
     }
 
     fn arith(&mut self) -> Result<Node, ParseError> {
-        let mut l = self.factor()?;
-        loop {
-            l = match self.tokenizer.peek() {
-                Some(Token { t: TokenType::Add, .. }) |
-                Some(Token { t: TokenType::Sub, .. }) =>
-                    Box::new(
-                        ASTNode::Binary {
-                            op: self.tokenizer.next().unwrap(),
-                            l,
-                            r: self.factor()?
-                        }
-                    ),
-                _ => break,
-            }
-        }
-        Ok(l)
+        Ok(self.parse_generic_chained_binary(
+            |s| s.factor(),
+            vec![ TokenType::Add, TokenType::Sub ]
+        )?)
     }
 
     fn factor(&mut self) -> Result<Node, ParseError> {
-        let mut l = self.unary()?;
-        loop {
-            l = match self.tokenizer.peek() {
-                Some(Token { t: TokenType::Mul, .. }) |
-                Some(Token { t: TokenType::Div, .. }) =>
-                    Box::new(
-                        ASTNode::Binary {
-                            op: self.tokenizer.next().unwrap(),
-                            l,
-                            r: self.unary()?
-                        }
-                    ),
-                _ => break,
-            }
-        }
-        Ok(l)
+        Ok(self.parse_generic_chained_binary(
+            |s| s.unary(),
+            vec![ TokenType::Mul, TokenType::Div ]
+        )?)
     }
 
     fn unary(&mut self) -> Result<Node, ParseError> {
