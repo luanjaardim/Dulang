@@ -1,5 +1,3 @@
-use std::{error::Error, fmt::{write, Debug}};
-
 use crate::tokenizer::*;
 
 type Node = Box<ASTNode>;
@@ -87,6 +85,29 @@ impl Parser {
         ret
     }
 
+    /// Function to parse chained binary expressions, such as:
+    ///     factor ((ADD | SUB) factor)*  =>  1 + 1 - 2 + 1 + 3
+    ///     comparison ( (BAND | BOR | BXOR | SHL | SHR) comparison )*  =>  1 band 2 bor 0
+    fn parse_generic_chained_binary(
+        &mut self,
+        mut method: impl FnMut(&mut Self) -> Result<Node, ParseError>,
+        possible_operators: Vec<TokenType>
+    ) -> Result<Node, ParseError> {
+        let mut l = method(self)?;
+        loop {
+            let op = self.assert_peek(&possible_operators);
+            l = match op {
+                Ok(tk) => {
+                    _ = self.tokenizer.next(); // Consume the Token peeked in assert_peek
+                    Box::new(ASTNode::Binary { op: tk, l, r: method(self)? })
+                }
+                Err(_) => break,
+            };
+        }
+        Ok(l)
+    }
+
+
     pub fn parse(mut self) -> Result<Body, ParseError>  {
         Ok(self.body()?)
     }
@@ -136,35 +157,43 @@ impl Parser {
         // Start of the function args '|'
         _ = self.assert_next(&vec![TokenType::FnBar])?;
 
-        // TODO: parse args
+        let mut args = vec![];
+        while let Some(Token { t: TokenType::Id, .. }) = self.tokenizer.peek() {
+            let tk = self.tokenizer.next().unwrap();
+            match self.tokenizer.peek() {
+                Some(Token { t: TokenType::TypeInf, .. }) => {
+                    _ = self.tokenizer.next();
+                    args.push((tk, Some(self._type_()?)));
+                    // Discart the comma after the type
+                    if self.assert_peek(&vec![TokenType::Comma]).is_ok() { _ = self.tokenizer.next(); }
+                },
+                Some(Token { t: TokenType::Comma, .. }) => {
+                    _ = self.tokenizer.next();
+                    args.push((tk, None));
+                }
+                Some(Token { t: TokenType::FnBar, .. }) => {
+                    args.push((tk, None));
+                    break
+                },
+                _ => break,
+            }
+        }
 
         // End of the function args '|'
         _ = self.assert_next(&vec![TokenType::FnBar])?;
 
-        // TODO: implement args parsing and return type parse
-        Ok(Box::new(ASTNode::Func { args: vec![], ret: None, body: self.body()? }))
+        // TODO: parse return type and possible body inside '{}'
+        Ok(Box::new(ASTNode::Func { args, ret: None, body: self.body()? }))
     }
 
-    /// Function to parse chained binary expressions, such as:
-    ///     factor ((ADD | SUB) factor)*  =>  1 + 1 - 2 + 1 + 3
-    ///     comparison ( (BAND | BOR | BXOR | SHL | SHR) comparison )*  =>  1 band 2 bor 0
-    fn parse_generic_chained_binary(
-        &mut self,
-        mut method: impl FnMut(&mut Self) -> Result<Node, ParseError>,
-        possible_operators: Vec<TokenType>
-    ) -> Result<Node, ParseError> {
-        let mut l = method(self)?;
-        loop {
-            let op = self.assert_peek(&possible_operators);
-            l = match op {
-                Ok(tk) => {
-                    _ = self.tokenizer.next(); // Consume the Token peeked in assert_peek
-                    Box::new(ASTNode::Binary { op: tk, l, r: method(self)? })
-                }
-                Err(_) => break,
-            };
-        }
-        Ok(l)
+    fn args(&mut self) -> Result<Var, ParseError> {
+        Ok((
+            self.assert_next(&vec![TokenType::Id])?,
+            match self.tokenizer.peek() {
+                Some(Token { t: TokenType::TypeInf, .. }) => Some(self.tokenizer.next().unwrap()),
+                _ => None
+            }
+        ))
     }
 
     fn bitwise(&mut self) -> Result<Node, ParseError> {
@@ -238,10 +267,10 @@ impl Parser {
     }
     fn primary(&mut self) -> Result<Node, ParseError> {
         match self.tokenizer.next() {
-            Some(tk @ Token { t: TokenType::Int, .. }) |
+            Some(tk @ Token { t: TokenType::Integer, .. }) |
             Some(tk @ Token { t: TokenType::Str, .. }) |
             Some(tk @ Token { t: TokenType::Real, .. }) |
-            Some(tk @ Token { t: TokenType::Char, .. }) => {
+            Some(tk @ Token { t: TokenType::Character, .. }) => {
                 Ok(Box::new(ASTNode::Leaf(tk)))
             },
             Some(Token { t: TokenType::OpParen, .. }) => {
@@ -253,14 +282,21 @@ impl Parser {
                 }
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
-                TokenType::Real, TokenType::Int, TokenType::Char, TokenType::Str, TokenType::OpParen
+                TokenType::Real, TokenType::Integer, TokenType::Character, TokenType::Str, TokenType::OpParen
             ])),
             None => Err(ParseError::ExpectedToken)
         }
     }
 
-    fn _type_(&mut self) -> Result<Node, ParseError> {
-        Err(ParseError::NotImplemented)
+    fn _type_(&mut self) -> Result<Token, ParseError> {
+        self.assert_next(&vec![
+            TokenType::I32,
+            TokenType::U32,
+            TokenType::Char,
+            TokenType::F32,
+            TokenType::F64,
+            TokenType::Bool,
+        ])
     }
 
 }

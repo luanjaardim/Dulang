@@ -2,7 +2,7 @@ use std::io::Read;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
-    Str, Int, Real, Char, Comment, Id,
+    Str, Integer, Real, Character, Comment, Id,
 
     // Numerical Operations
     Add, Sub, Mul, Div,                     // +, -. *, /
@@ -16,6 +16,9 @@ pub enum TokenType {
     If, Elif, Else, While, Loop, Switch,    // if, elif, else, while, loop, switch
     // Control Keywords
     Skip, Stop, Back,                       // skip, stop, back
+
+    // Types
+    I32, U32, Char, F32, F64, Bool,
 
     Assign, FnBar, FnReturn, TypeInf,       // =, |, ->, ::
 
@@ -45,6 +48,7 @@ impl Token {
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr, 
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
                 "=" => Assign, "->" => FnReturn, "|" => FnBar, "::" => TypeInf,
+                "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool,
                 _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
                 _ => panic!("Token type is unkown: {text}")
             }),
@@ -86,11 +90,11 @@ impl Tokenizer {
       "=>", "==", ">=", "<=", "!=", "::", "|", "->", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
     ];
 
-    // NOTE: the order is important here, as every Real contains Int it must goes first
+    // NOTE: the order is important here, as every Real contains Integer it must goes first
     const PATTERNS: [(&'static str, TokenType); 5] = [
         (r#"^(\$[^\$]*\n|\$\$[^\$]*\$\$)"#, Comment),
-        (r#"^(\".*\"|\'\'(\w|\W)*\'\')"#, Str), (r"^\'(.|\\[rnt])\'", Char),
-        (r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)", Real), (r"^\d+", Int),
+        (r#"^(\".*\"|\'\'(\w|\W)*\'\')"#, Str), (r"^\'(.|\\[rnt])\'", Character),
+        (r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)", Real), (r"^\d+", Integer),
     ];
 
     pub fn new(path: &str) -> Result<Tokenizer, std::io::Error> {
