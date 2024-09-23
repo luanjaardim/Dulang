@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
@@ -75,9 +75,8 @@ impl std::fmt::Display for Token {
 
 #[derive(Clone)]
 pub struct Tokenizer {
-    path: String,
-    content: String,
-    pos: usize,          //index in content
+    s: Rc<String>,
+    pos: usize,          //index in s
     l: usize,            //count the number of '\n'
     c: usize,            //reset with '\n'
     prev_sep: Option<Token>,     //used to store the previous Token separator, if there were another token before it
@@ -97,18 +96,21 @@ impl Tokenizer {
         (r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)", Real), (r"^\d+", Integer),
     ];
 
-    pub fn new(path: &str) -> Result<Tokenizer, std::io::Error> {
-        let mut f = std::fs::File::open(path)?;
-        let mut t = Tokenizer {
-            path: String::from(path),
-            content: String::new(),
-            pos: 0, l: 0, c: 0,
-            prev_sep: None
-        };
-
-        f.read_to_string(&mut t.content)?;
-        Ok(t)
+    pub fn new(content_to_tokenize: Rc<String>) -> Self {
+        Tokenizer {
+            s: content_to_tokenize, pos: 0, l: 0, c: 0, prev_sep: None
+        }
     }
+
+    /// Return the current state of the Tokenizer cursor: (pos, l, c)
+    ///     pos -> The position as an index of the file text
+    ///     l -> Line of the cursor
+    ///     c -> Column in the line of the cursor
+    pub fn get_state(&self) -> (usize, usize, usize) { (self.pos, self.l, self.c) }
+
+    /// Set the state of the cursor, useful to store and go back to a previous position in the file
+    /// Receives a tuple that is expected to be as follow: (pos, l, c)
+    pub fn set_state(&mut self, state: (usize, usize, usize)) { (self.pos, self.l, self.c) = state; }
 
     pub fn next(&mut self) -> Option<Token> {
 
@@ -121,14 +123,14 @@ impl Tokenizer {
         // here we can search for some general pattern (Strings, Real Numbers, Comments, and return the Token early)
         if let Some((m, t)) = self.match_patterns() {
             let len = m.range().len();
-            let text = self.content[self.pos..self.pos+len].to_string();
+            let text = self.s[self.pos..self.pos+len].to_string();
             self.pos += len;
             self.c += len;
             // TODO: if it's a comment -> recursion
             return Some(Token { c: self.c, l: self.l, t, text })
         }
 
-        let rest = &self.content[self.pos..];
+        let rest = &self.s[self.pos..];
         // now we are looking only to the next word(the first chars that are not whitespaces)
         let word = match rest.chars().enumerate().find(|e| e.1.is_ascii_whitespace()) {
             Some((pos, _)) => &rest[0..pos],
@@ -166,7 +168,7 @@ impl Tokenizer {
     pub fn peek(&self) -> Option<Token> { self.clone().next() }
 
     fn match_patterns(&self) -> Option<(regex::Match, TokenType)> {
-        let text = &self.content[self.pos..];
+        let text = &self.s[self.pos..];
         let p = Tokenizer::PATTERNS.iter().find(|p|
             regex::Regex::new(p.0).unwrap().is_match(text)
         )?;
@@ -174,7 +176,7 @@ impl Tokenizer {
     }
 
     fn skip_ascii_whitespaces(&mut self) {
-        for c in self.content[self.pos..].chars() {
+        for c in self.s[self.pos..].chars() {
             if !c.is_ascii_whitespace() { break }
             if c == '\n' { self.l += 1; self.c = 0; } else { self.c += 1; }
             self.pos += 1;

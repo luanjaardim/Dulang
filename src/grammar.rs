@@ -1,4 +1,6 @@
 use crate::tokenizer::*;
+use std::rc::Rc;
+use std::io::Read;
 
 type Node = Box<ASTNode>;
 type Body = Vec<Node>;
@@ -57,17 +59,22 @@ impl std::fmt::Debug for ParseError {
 }
 
 pub struct Parser {
+    path: String,
     tokenizer: Tokenizer,
 }
 
 impl Parser {
 
-    pub fn new(tokenizer: Tokenizer) -> Self {
-        Parser { tokenizer }
-    }
+    pub fn new(path: &str) -> Result<Self, std::io::Error>{
+        let mut f = std::fs::File::open(path)?;
+        let mut s = String::new();
+        f.read_to_string(&mut s)?;
 
-    pub fn clone_state(&self) -> Self {
-        Parser { tokenizer: self.tokenizer.clone() }
+        Ok(Parser {
+            path: String::from(path),
+            tokenizer: Tokenizer::new(Rc::new(s)),
+            prev_tk: None,
+        })
     }
 
     fn assert_peek(&mut self, possible_next_tokens_types: &[TokenType]) -> Result<Token, ParseError> {
@@ -106,7 +113,6 @@ impl Parser {
         }
         Ok(l)
     }
-
 
     pub fn parse(mut self) -> Result<Body, ParseError>  {
         Ok(self.body()?)
