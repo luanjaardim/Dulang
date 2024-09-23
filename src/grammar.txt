@@ -6,17 +6,17 @@ sttm ::==
 	BACK expr nl
 	BREAK expr nl
 	SKIP
-	ID ASSIGN expr nl
+	var ASSIGN expr nl
 
 expr ::==
 	func
 	bitwise
 
 func ::==
-	"|" ( args "," )* "|" ( "->" type )? expr
-	"|" ( args "," )* "|" ( "->" type )? "{" body "}"
+	"|" (var)? ( "," var )* "|" ( "->" type )? expr
+	"|" (var)? ( "," var )* "|" ( "->" type )? "{" body "}"
 
-args ::==
+var ::==
 	ID ("::" type)?
 
 bitwise ::==

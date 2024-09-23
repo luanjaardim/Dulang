@@ -7,7 +7,7 @@ type Var = (Token, Option<Token>);
 #[derive(Debug)]
 pub enum ASTNode {
     Assign {
-        var: Token, // TODO: change var type to Var, as we can define the type of a variable
+        var: Var,
         expr: Node,
     },
     Func {
@@ -121,15 +121,12 @@ impl Parser {
     }
 
     fn sttm(&mut self) -> Result<Node, ParseError> {
-        match self.tokenizer.next() {
-            Some(var @ Token { t: TokenType::Id, ..}) => {
-                match self.tokenizer.next() {
-                    // Found a variable declaration
-                    Some(Token { t: TokenType::Assign, .. }) =>
-                        Ok(Box::new(ASTNode::Assign { var, expr: self.expr()? })),
-                    Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Assign])),
-                    None => Err(ParseError::ExpectedToken)
-                }
+        match self.tokenizer.peek() {
+            // Var definition
+            Some(Token { t: TokenType::Id, ..}) => {
+                let var = self.var()?;
+                _ = self.assert_next(&[TokenType::Assign])?;
+                Ok(Box::new(ASTNode::Assign { var, expr: self.expr()? }))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
             None => Err(ParseError::ExpectedToken)
