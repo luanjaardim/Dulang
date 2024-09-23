@@ -70,16 +70,16 @@ impl Parser {
         Parser { tokenizer: self.tokenizer.clone() }
     }
 
-    fn assert_peek(&mut self, possible_next_tokens_types: &Vec<TokenType>) -> Result<Token, ParseError> {
+    fn assert_peek(&mut self, possible_next_tokens_types: &[TokenType]) -> Result<Token, ParseError> {
         let (tk, next_tk_type) = match self.tokenizer.peek() {
             Some(tk @ Token { t, .. }) => (tk, t),
             None => return Err(ParseError::ExpectedToken)
         };
         if possible_next_tokens_types.iter().any(|poss_tk_type| *poss_tk_type == next_tk_type ) { return Ok(tk) }
-        Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types.clone()))
+        Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types.to_vec()))
     }
 
-    fn assert_next(&mut self, possible_next_tokens_types: &Vec<TokenType>) -> Result<Token, ParseError> {
+    fn assert_next(&mut self, possible_next_tokens_types: &[TokenType]) -> Result<Token, ParseError> {
         let ret = self.assert_peek(possible_next_tokens_types);
         self.tokenizer.next();
         ret
@@ -155,42 +155,30 @@ impl Parser {
 
     fn func(&mut self) -> Result<Node, ParseError> {
         // Start of the function args '|'
-        _ = self.assert_next(&vec![TokenType::FnBar])?;
+        _ = self.assert_next(&[TokenType::FnBar])?;
 
         let mut args = vec![];
-        while let Some(Token { t: TokenType::Id, .. }) = self.tokenizer.peek() {
-            let tk = self.tokenizer.next().unwrap();
-            match self.tokenizer.peek() {
-                Some(Token { t: TokenType::TypeInf, .. }) => {
-                    _ = self.tokenizer.next();
-                    args.push((tk, Some(self._type_()?)));
-                    // Discart the comma after the type
-                    if self.assert_peek(&vec![TokenType::Comma]).is_ok() { _ = self.tokenizer.next(); }
-                },
-                Some(Token { t: TokenType::Comma, .. }) => {
-                    _ = self.tokenizer.next();
-                    args.push((tk, None));
-                }
-                Some(Token { t: TokenType::FnBar, .. }) => {
-                    args.push((tk, None));
-                    break
-                },
-                _ => break,
-            }
+        // Take args as function parameters till find a FnBar: '|'
+        while self.assert_peek(&[TokenType::FnBar]).is_err() {
+            args.push(self.var()?);
+            if self.assert_peek(&[TokenType::Comma]).is_ok() { _ = self.tokenizer.next(); }
         }
 
         // End of the function args '|'
-        _ = self.assert_next(&vec![TokenType::FnBar])?;
+        _ = self.assert_next(&[TokenType::FnBar])?;
 
         // TODO: parse return type and possible body inside '{}'
         Ok(Box::new(ASTNode::Func { args, ret: None, body: self.body()? }))
     }
 
-    fn args(&mut self) -> Result<Var, ParseError> {
+    fn var(&mut self) -> Result<Var, ParseError> {
         Ok((
-            self.assert_next(&vec![TokenType::Id])?,
+            self.assert_next(&[TokenType::Id])?,
             match self.tokenizer.peek() {
-                Some(Token { t: TokenType::TypeInf, .. }) => Some(self.tokenizer.next().unwrap()),
+                Some(Token { t: TokenType::TypeInf, .. }) => {
+                    _ = self.tokenizer.next();
+                    Some(self._type_()?)
+                },
                 _ => None
             }
         ))
@@ -289,7 +277,7 @@ impl Parser {
     }
 
     fn _type_(&mut self) -> Result<Token, ParseError> {
-        self.assert_next(&vec![
+        self.assert_next(&[
             TokenType::I32,
             TokenType::U32,
             TokenType::Char,
