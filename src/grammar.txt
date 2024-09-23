@@ -2,6 +2,9 @@
 
 
 body ::== ( sttm )*
+
+inner-body ::== "{" body "}"
+
 sttm ::==
 	BACK expr nl
 	BREAK expr nl

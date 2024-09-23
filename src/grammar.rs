@@ -120,6 +120,14 @@ impl Parser {
         Ok(ast)
     }
 
+    /// Parse a list of statements inside curly brackets.
+    fn inner_body(&mut self) -> Result<Body, ParseError>  {
+        _ = self.assert_next(&[TokenType::OpCurly])?;
+        let body = self.body()?;
+        _ = self.assert_next(&[TokenType::ClCurly])?;
+        Ok(body)
+    }
+
     fn sttm(&mut self) -> Result<Node, ParseError> {
         match self.tokenizer.peek() {
             // Var definition
@@ -165,7 +173,7 @@ impl Parser {
         _ = self.assert_next(&[TokenType::FnBar])?;
 
         // TODO: parse return type and possible body inside '{}'
-        Ok(Box::new(ASTNode::Func { args, ret: None, body: self.body()? }))
+        Ok(Box::new(ASTNode::Func { args, ret: None, body: self.inner_body()? }))
     }
 
     fn var(&mut self) -> Result<Var, ParseError> {
