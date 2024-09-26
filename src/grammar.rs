@@ -49,7 +49,7 @@ impl std::fmt::Debug for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TokenNotExpected(tk, expected) => {
-                write!(f, "Received {tk:?}, but expected Tokens of type {expected:?}")
+                write!(f, "Received {tk}, but expected Tokens of type {expected:?}")
             },
             Self::ExpectedToken => write!(f, "Expected a Token, but received nothing."),
             Self::GeneralError(s) => write!(f, "ParseError: {s}"),
@@ -61,6 +61,7 @@ impl std::fmt::Debug for ParseError {
 pub struct Parser {
     path: String,
     tokenizer: Tokenizer,
+    prev_tk: Token,
 }
 
 impl Parser {
@@ -73,12 +74,30 @@ impl Parser {
         Ok(Parser {
             path: String::from(path),
             tokenizer: Tokenizer::new(Rc::new(s)),
-            prev_tk: None,
+            prev_tk: Token::nl(0), // Initial value for the previous token
         })
     }
 
+    fn peek_tk(&self) -> Option<Token> {
+        let tk = self.tokenizer.peek();
+        let (l, _) = tk?.position();
+        let (cur_l, _) = self.prev_tk.position();
+        if l != cur_l { Some(Token::nl(l)) } else { self.tokenizer.peek() }
+    }
+
+    fn next_tk(&mut self) -> Option<Token> {
+        if let tk @ Token { t: TokenType::Nl, .. } = self.peek_tk()? {
+            self.prev_tk = tk;
+        } else {
+            self.prev_tk = self.tokenizer.next()?;
+        }
+        // The None value is handled with the '?' in self.tokenizer.next()
+        Some(self.prev_tk.clone())
+    }
+
+    /// Verifies if the next token type is one of the `possible_next_tokens`
     fn assert_peek(&mut self, possible_next_tokens_types: &[TokenType]) -> Result<Token, ParseError> {
-        let (tk, next_tk_type) = match self.tokenizer.peek() {
+        let (tk, next_tk_type) = match self.peek_tk() {
             Some(tk @ Token { t, .. }) => (tk, t),
             None => return Err(ParseError::ExpectedToken)
         };
@@ -86,10 +105,11 @@ impl Parser {
         Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types.to_vec()))
     }
 
+    /// Advances the Tokenizer cursor if the next token type is one of the `possible_next_tokens`
     fn assert_next(&mut self, possible_next_tokens_types: &[TokenType]) -> Result<Token, ParseError> {
-        let ret = self.assert_peek(possible_next_tokens_types);
-        self.tokenizer.next();
-        ret
+        let ret = self.assert_peek(possible_next_tokens_types)?;
+        self.next_tk();
+        Ok(ret)
     }
 
     /// Function to parse chained binary expressions, such as:
@@ -105,7 +125,7 @@ impl Parser {
             let op = self.assert_peek(&possible_operators);
             l = match op {
                 Ok(tk) => {
-                    _ = self.tokenizer.next(); // Consume the Token peeked in assert_peek
+                    _ = self.next_tk(); // Consume the Token peeked in assert_peek
                     Box::new(ASTNode::Binary { op: tk, l, r: method(self)? })
                 }
                 Err(_) => break,
@@ -114,14 +134,21 @@ impl Parser {
         Ok(l)
     }
 
-    pub fn parse(mut self) -> Result<Body, ParseError>  {
-        Ok(self.body()?)
+    pub fn parse(mut self) -> Result<Body, std::io::Error>  {
+        use std::io::{Error, ErrorKind};
+        match self.body() {
+            Err(e) => Err(Error::new(ErrorKind::InvalidInput, format!("({}) {e:?}", self.prev_tk))),
+            Ok(e) => Ok(e)
+        }
     }
 
     fn body(&mut self) -> Result<Body, ParseError>  {
         let mut ast = vec![];
-        while self.tokenizer.peek().is_some() {
+        while self.peek_tk().is_some() {
             ast.push(self.sttm()?);
+            if self.peek_tk().is_some() {
+                _ = self.assert_next(&[TokenType::Nl])?;
+            }
         }
         Ok(ast)
     }
@@ -135,7 +162,7 @@ impl Parser {
     }
 
     fn sttm(&mut self) -> Result<Node, ParseError> {
-        match self.tokenizer.peek() {
+        match self.peek_tk() {
             // Var definition
             Some(Token { t: TokenType::Id, ..}) => {
                 let var = self.var()?;
@@ -148,14 +175,16 @@ impl Parser {
     }
 
     fn expr(&mut self) -> Result<Node, ParseError> {
-        // saving the current state of the Tokenizer
+        // Saving the current state of the Tokenizer
         // if the Parse fail for any branch it's easy to rollback
-        let backup = self.clone_state();
-        if let ret @ Ok(_) = self.bitwise() { return ret }
-        *self = backup.clone_state(); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.func() { return ret }
+        let backup = self.tokenizer.get_state();
 
-        match backup.tokenizer.peek() {
+        if let ret @ Ok(_) = self.bitwise() { return ret }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.func() { return ret }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+
+        match self.peek_tk() {
             Some(tk) =>
                 Err(ParseError::GeneralError(
                     format!("Fail to parse an expression for: {}.", tk)
@@ -172,7 +201,7 @@ impl Parser {
         // Take args as function parameters till find a FnBar: '|'
         while self.assert_peek(&[TokenType::FnBar]).is_err() {
             args.push(self.var()?);
-            if self.assert_peek(&[TokenType::Comma]).is_ok() { _ = self.tokenizer.next(); }
+            if self.assert_peek(&[TokenType::Comma]).is_ok() { _ = self.next_tk(); }
         }
 
         // End of the function args '|'
@@ -185,9 +214,9 @@ impl Parser {
     fn var(&mut self) -> Result<Var, ParseError> {
         Ok((
             self.assert_next(&[TokenType::Id])?,
-            match self.tokenizer.peek() {
+            match self.peek_tk() {
                 Some(Token { t: TokenType::TypeInf, .. }) => {
-                    _ = self.tokenizer.next();
+                    _ = self.next_tk();
                     Some(self._type_()?)
                 },
                 _ => None
@@ -196,11 +225,11 @@ impl Parser {
     }
 
     fn bitwise(&mut self) -> Result<Node, ParseError> {
-        match self.tokenizer.peek() {
+        match self.peek_tk() {
             Some(Token { t: TokenType::Bnot, ..})  => {
                 Ok(Box::new(
                     ASTNode::Unary {
-                        op: self.tokenizer.next().unwrap(),
+                        op: self.next_tk().unwrap(),
                         e: self.bitwise()?
                 }))
             }
@@ -217,11 +246,11 @@ impl Parser {
     }
 
     fn comparison(&mut self) -> Result<Node, ParseError> {
-        match self.tokenizer.peek() {
+        match self.peek_tk() {
             Some(Token { t: TokenType::Not, ..})  => {
                 Ok(Box::new(
                     ASTNode::Unary {
-                        op: self.tokenizer.next().unwrap(),
+                        op: self.next_tk().unwrap(),
                         e: self.comparison()?
                 }))
             }
@@ -253,11 +282,11 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Node, ParseError> {
-        Ok(match self.tokenizer.peek() {
+        Ok(match self.peek_tk() {
             Some(Token { t: TokenType::Add, .. }) |
             Some(Token { t: TokenType::Sub, .. }) => {
                 Box::new(ASTNode::Unary {
-                    op: self.tokenizer.next().unwrap(),
+                    op: self.next_tk().unwrap(),
                     e: self.unary()? 
                 })
             },
@@ -265,7 +294,7 @@ impl Parser {
         })
     }
     fn primary(&mut self) -> Result<Node, ParseError> {
-        match self.tokenizer.next() {
+        match self.next_tk() {
             Some(tk @ Token { t: TokenType::Integer, .. }) |
             Some(tk @ Token { t: TokenType::Str, .. }) |
             Some(tk @ Token { t: TokenType::Real, .. }) |
@@ -274,7 +303,7 @@ impl Parser {
             },
             Some(Token { t: TokenType::OpParen, .. }) => {
                 let expr = self.expr()?;
-                match self.tokenizer.next() {
+                match self.next_tk() {
                     Some(Token { t: TokenType::ClParen, .. }) => Ok(expr),
                     Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::ClParen])),
                     None => Err(ParseError::ExpectedToken)

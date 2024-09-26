@@ -24,7 +24,10 @@ pub enum TokenType {
 
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,    // {, }, (, ),
-    Comma, Dot, Semicolon,                  // ',' , '.' , ';'
+    Comma, Dot, Semicolon,                 // ',' , '.' , ';'
+
+    Nl,                                    // New line '\n'
+
     //RealAdd, RealSub, RealMul, RealDiv,   // +., -., *., /. (Maybe?)
 }
 use TokenType::*;
@@ -56,6 +59,10 @@ impl Token {
         }
 
     }
+
+    pub fn nl(next_line: usize) -> Token { Token { c: 0, l: next_line, t: Nl, text: "\\n".to_string() } }
+
+    pub fn position(&self) -> (usize, usize) { (self.l, self.c) }
 }
 
 // this will omit the position
@@ -114,24 +121,26 @@ impl Tokenizer {
 
     pub fn next(&mut self) -> Option<Token> {
 
-        // check if the previous separator can be already returned
+        // Check if the previous separator can be already returned
         if self.prev_sep.is_some() { return self.prev_sep.take() }
 
-        // skip whitespaces
+        // Skip whitespaces
         self.skip_ascii_whitespaces();
 
-        // here we can search for some general pattern (Strings, Real Numbers, Comments, and return the Token early)
+        // Here we can search for some general pattern (Strings, Real Numbers, Comments, and return the Token early)
         if let Some((m, t)) = self.match_patterns() {
             let len = m.range().len();
             let text = self.s[self.pos..self.pos+len].to_string();
             self.pos += len;
             self.c += len;
-            // TODO: if it's a comment -> recursion
-            return Some(Token { c: self.c, l: self.l, t, text })
+            return match t {
+                Comment => self.next(), // Continue search if it's a comment
+                _ => Some(Token { c: self.c, l: self.l, t, text }),
+            }
         }
 
         let rest = &self.s[self.pos..];
-        // now we are looking only to the next word(the first chars that are not whitespaces)
+        // Now we are looking only to the next word(the first chars that are not whitespaces)
         let word = match rest.chars().enumerate().find(|e| e.1.is_ascii_whitespace()) {
             Some((pos, _)) => &rest[0..pos],
             None => if rest.is_empty() { return None } else { rest }
