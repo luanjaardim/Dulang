@@ -134,30 +134,37 @@ impl Parser {
         Ok(l)
     }
 
+    /// Parse something between two Nl (new lines '\n'), they may not exist also
+    fn parse_and_discart_nl<T: std::fmt::Debug>(
+        &mut self,
+        mut method: impl FnMut(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<T, ParseError>  {
+        _ = self.assert_next(&[TokenType::Nl]);
+        let ret = method(self);
+        _ = self.assert_next(&[TokenType::Nl]);
+        ret
+    }
+
     pub fn parse(mut self) -> Result<Body, std::io::Error>  {
         use std::io::{Error, ErrorKind};
         match self.body() {
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, format!("({}) {e:?}", self.prev_tk))),
-            Ok(e) => Ok(e)
+            Ok(e) if self.peek_tk().is_none() =>  Ok(e),
+            _ =>  Err(Error::new(ErrorKind::InvalidInput, format!("({}) Failed to parse body.", self.prev_tk))),
         }
     }
 
     fn body(&mut self) -> Result<Body, ParseError>  {
         let mut ast = vec![];
-        while self.peek_tk().is_some() {
-            ast.push(self.sttm()?);
-            if self.peek_tk().is_some() {
-                _ = self.assert_next(&[TokenType::Nl])?;
-            }
-        }
+        while let Ok(node) = self.parse_and_discart_nl(|s| s.sttm()) { ast.push(node); }
         Ok(ast)
     }
 
     /// Parse a list of statements inside curly brackets.
     fn inner_body(&mut self) -> Result<Body, ParseError>  {
-        _ = self.assert_next(&[TokenType::OpCurly])?;
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::OpCurly])?))?;
         let body = self.body()?;
-        _ = self.assert_next(&[TokenType::ClCurly])?;
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::ClCurly])?))?;
         Ok(body)
     }
 
@@ -294,14 +301,17 @@ impl Parser {
         })
     }
     fn primary(&mut self) -> Result<Node, ParseError> {
-        match self.next_tk() {
-            Some(tk @ Token { t: TokenType::Integer, .. }) |
+        match self.peek_tk() {
+            Some(tk @ Token { t: TokenType::Id, .. }) |
             Some(tk @ Token { t: TokenType::Str, .. }) |
             Some(tk @ Token { t: TokenType::Real, .. }) |
+            Some(tk @ Token { t: TokenType::Integer, .. }) |
             Some(tk @ Token { t: TokenType::Character, .. }) => {
+                _ = self.next_tk(); // Discart prev Token
                 Ok(Box::new(ASTNode::Leaf(tk)))
             },
             Some(Token { t: TokenType::OpParen, .. }) => {
+                _ = self.assert_next(&[TokenType::OpParen])?; // Discart prev Token
                 let expr = self.expr()?;
                 match self.next_tk() {
                     Some(Token { t: TokenType::ClParen, .. }) => Ok(expr),

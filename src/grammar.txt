@@ -6,10 +6,10 @@ body ::== ( sttm )*
 inner-body ::== "{" body "}"
 
 sttm ::==
+	var ASSIGN expr nl
 	BACK expr nl
 	BREAK expr nl
 	SKIP
-	var ASSIGN expr nl
 
 expr ::==
 	func
@@ -17,7 +17,7 @@ expr ::==
 
 func ::==
 	"|" (var)? ( "," var )* "|" ( "->" type )? expr
-	"|" (var)? ( "," var )* "|" ( "->" type )? "{" body "}"
+	"|" (var)? ( "," var )* "|" ( "->" type )? inner-body
 
 var ::==
 	ID ("::" type)?
@@ -40,6 +40,7 @@ unary ::==
 
 primary ::==
 	"(" expr ")"
+	ID
 	INTEGER
 	REAL
 	STRING
