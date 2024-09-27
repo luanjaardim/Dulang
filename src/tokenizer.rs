@@ -98,7 +98,7 @@ impl Tokenizer {
 
     // NOTE: the order is important here, as every Real contains Integer it must goes first
     const PATTERNS: [(&'static str, TokenType); 5] = [
-        (r#"^(\$[^\$]*\n|\$\$[^\$]*\$\$)"#, Comment),
+        (r#"^(\$[^\$\n]*\n|\$\$[^\$]*\$\$)"#, Comment),
         (r#"^(\".*\"|\'\'(\w|\W)*\'\')"#, Str), (r"^\'(.|\\[rnt])\'", Character),
         (r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)", Real), (r"^\d+", Integer),
     ];
@@ -120,7 +120,6 @@ impl Tokenizer {
     pub fn set_state(&mut self, state: (usize, usize, usize)) { (self.pos, self.l, self.c) = state; }
 
     pub fn next(&mut self) -> Option<Token> {
-
         // Check if the previous separator can be already returned
         if self.prev_sep.is_some() { return self.prev_sep.take() }
 
