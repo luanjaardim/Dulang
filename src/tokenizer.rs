@@ -20,7 +20,7 @@ pub enum TokenType {
     // Types
     I32, U32, Char, F32, F64, Bool,
 
-    Assign, FnBar, FnReturn, TypeInf,       // =, |, ->, ::
+    Assign, FnBar, FnReturn, TypeInf,       // =, |, =>, ::
 
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,    // {, }, (, ),
@@ -50,7 +50,7 @@ impl Token {
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr, 
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
-                "=" => Assign, "->" => FnReturn, "|" => FnBar, "::" => TypeInf,
+                "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf,
                 "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,

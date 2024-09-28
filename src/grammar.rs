@@ -262,8 +262,13 @@ impl Parser {
         // End of the function args '|'
         _ = self.assert_next(&[TokenType::FnBar])?;
 
-        // TODO: parse return type and possible body inside '{}'
-        Ok(Box::new(ASTNode::Func { args, ret: None, body: self.inner_body()? }))
+        // TODO: Change types to be an ASTNode, as a complex type would need more
+        // than a Token to be represented
+        let ret = if self.assert_next(&[TokenType::FnReturn]).is_ok() {
+            Some(self._type_()?)
+        } else { None };
+
+        Ok(Box::new(ASTNode::Func { args, ret, body: self.inner_body()? }))
     }
 
     fn var(&mut self) -> Result<Var, ParseError> {
