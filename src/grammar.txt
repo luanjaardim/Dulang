@@ -6,14 +6,23 @@ body ::== ( sttm )*
 inner-body ::== "{" body "}"
 
 sttm ::==
+	cond
 	var ASSIGN expr nl
 	BACK expr nl
 	BREAK expr nl
 	SKIP
 
+cond ::==
+	"if" comparison inner-body (elif | else)?
+elif ::==
+	"elif" comparison inner-body (elif | else)?
+else ::==
+	"else" inner-body
+	
 expr ::==
-	func
 	bitwise
+	func
+	cond
 
 func ::==
 	"|" (var)? ( "," var )* "|" ( "->" type )? expr

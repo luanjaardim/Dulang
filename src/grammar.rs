@@ -176,9 +176,28 @@ impl Parser {
                 _ = self.assert_next(&[TokenType::Assign])?;
                 Ok(Box::new(ASTNode::Assign { var, expr: self.expr()? }))
             },
+            // Cond as statement
+            Some(Token { t: TokenType::If, ..}) => self.cond(),
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
             None => Err(ParseError::ExpectedToken)
         }
+    }
+
+    fn cond(&mut self) -> Result<Node, ParseError> {
+        _ = self.assert_next(&[TokenType::If])?;
+        Ok(Box::new(ASTNode::Conditional { 
+            cond: self.comparison().ok(),
+            body: self.inner_body()?,
+            next: self.elif().ok(),
+        }))
+    }
+
+    fn elif(&mut self) -> Result<Node, ParseError> {
+        Err(ParseError::NotImplemented)
+    }
+
+    fn _else_(&mut self) -> Result<Node, ParseError> {
+        Err(ParseError::NotImplemented)
     }
 
     fn expr(&mut self) -> Result<Node, ParseError> {
@@ -190,6 +209,7 @@ impl Parser {
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.func() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.cond() { return ret }
 
         match self.peek_tk() {
             Some(tk) =>
