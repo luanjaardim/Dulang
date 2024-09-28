@@ -37,7 +37,7 @@ bitwise ::==
 
 comparison ::==
 	NOT comparison
-	arith ((GRT | GRE | LET | LEE | EQ | NEQ) arith)*
+	arith ((AND | OR | GRT | GRE | LET | LEE | EQ | NEQ) arith)*
 
 arith ::== factor ((ADD | SUB) factor)*
 

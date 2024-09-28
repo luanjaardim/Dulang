@@ -302,6 +302,8 @@ impl Parser {
                         TokenType::LeT,
                         TokenType::LeE,
                         TokenType::Neq,
+                        TokenType::And,
+                        TokenType::Or,
                         TokenType::Eq,
                 ])?)
             }
