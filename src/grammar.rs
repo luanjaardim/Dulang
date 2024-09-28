@@ -193,11 +193,21 @@ impl Parser {
     }
 
     fn elif(&mut self) -> Result<Node, ParseError> {
-        Err(ParseError::NotImplemented)
+        _ = self.assert_next(&[TokenType::Elif])?;
+        Ok(Box::new(ASTNode::Conditional { 
+            cond: self.comparison().ok(),
+            body: self.inner_body()?,
+            next: match self.peek_tk() {
+                Some(Token { t: TokenType::Elif, .. }) => Some(self.elif()?),
+                Some(Token { t: TokenType::Else, .. }) => Some(self._else_()?),
+                _ => None,
+            },
+        }))
     }
 
     fn _else_(&mut self) -> Result<Node, ParseError> {
-        Err(ParseError::NotImplemented)
+        _ = self.assert_next(&[TokenType::Else])?;
+        Ok(Box::new(ASTNode::Conditional { cond: None, body: self.inner_body()?, next: None, }))
     }
 
     fn expr(&mut self) -> Result<Node, ParseError> {
