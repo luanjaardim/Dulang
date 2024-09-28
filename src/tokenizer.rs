@@ -93,8 +93,8 @@ pub struct Tokenizer {
 impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
-    const SEPARATORS: [&'static str; 20] = [
-      "=>", "==", ">=", "<=", "!=", "::", "|", "->", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
+    const SEPARATORS: [&'static str; 21] = [
+      "=>", "==", ">=", "<=", "!=", "::", "|", "->", "=", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
     ];
 
     // NOTE: the order is important here, as every Real contains Integer it must goes first

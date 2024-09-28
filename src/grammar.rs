@@ -188,7 +188,11 @@ impl Parser {
         Ok(Box::new(ASTNode::Conditional { 
             cond: self.comparison().ok(),
             body: self.inner_body()?,
-            next: self.elif().ok(),
+            next: match self.peek_tk() {
+                Some(Token { t: TokenType::Elif, .. }) => Some(self.elif()?),
+                Some(Token { t: TokenType::Else, .. }) => Some(self._else_()?),
+                _ => None,
+            },
         }))
     }
 
