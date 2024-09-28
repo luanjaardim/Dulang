@@ -53,6 +53,7 @@ impl Token {
                 "=" => Assign, "->" => FnReturn, "|" => FnBar, "::" => TypeInf,
                 "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool,
                 "if" => If, "elif" => Elif, "else" => Else,
+                "while" => While, "loop" => Loop,
                 _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
                 _ => panic!("Token type is unkown: {text}")
             }),

@@ -19,6 +19,10 @@ elif ::==
 else ::==
 	"else" inner-body
 	
+loop ::==
+	"while" comparison inner-body
+	"loop" inner-body
+
 expr ::==
 	bitwise
 	func

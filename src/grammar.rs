@@ -178,9 +178,23 @@ impl Parser {
             },
             // Cond as statement
             Some(Token { t: TokenType::If, ..}) => self.cond(),
+            // Loop statement
+            Some(Token { t: TokenType::Loop, ..}) |
+            Some(Token { t: TokenType::While, ..}) => self._loop_(),
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
             None => Err(ParseError::ExpectedToken)
         }
+    }
+
+    fn _loop_(&mut self) -> Result<Node, ParseError> {
+        _ = self.assert_peek(&[TokenType::While, TokenType::Loop])?;
+        Ok(Box::new(ASTNode::Loop {
+            cond: match self.next_tk() {
+                Some(Token { t: TokenType::While, .. }) => Some(self.expr()?),
+                Some(Token { t: TokenType::Loop, .. }) => None,
+                _ => return Err(ParseError::NotImplemented)  // TODO: Implement For loop
+            },
+            body: self.inner_body()? }))
     }
 
     fn cond(&mut self) -> Result<Node, ParseError> {
