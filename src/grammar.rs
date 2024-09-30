@@ -14,16 +14,16 @@ pub enum ASTNode {
     },
     Func {
         args: Vec<Var>,
-        ret: Option<Token>, // any Token of a type
+        ret: Option<Token>, // Any Token of a type
         body: Body,
     },
     Conditional {
         cond: Option<Node>, // Else will have a cond None
         body: Body,
-        next: Option<Node>, // if it is a chained condition
+        next: Option<Node>, // If it is a chained condition
     },
     Loop {
-        cond: Option<Node>, // loop will have a None cond
+        cond: Option<Node>, // Loop will have a None cond
         body: Body,
     },
     Binary {
@@ -34,6 +34,10 @@ pub enum ASTNode {
     Unary {
         op: Token,
         e: Node,
+    },
+    FnCall {
+        caller: Token,
+        params: Vec<Node>,  // List of expressions
     },
     Leaf(Token)
 }
@@ -203,7 +207,7 @@ impl Parser {
     fn cond(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::If])?;
         Ok(Box::new(ASTNode::Conditional { 
-            cond: self.comparison().ok(),
+            cond: self.expr().ok(),
             body: self.inner_body()?,
             next: match self.peek_tk() {
                 Some(Token { t: TokenType::Elif, .. }) => Some(self.elif()?),
@@ -216,7 +220,7 @@ impl Parser {
     fn elif(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::Elif])?;
         Ok(Box::new(ASTNode::Conditional { 
-            cond: self.comparison().ok(),
+            cond: self.expr().ok(),
             body: self.inner_body()?,
             next: match self.peek_tk() {
                 Some(Token { t: TokenType::Elif, .. }) => Some(self.elif()?),
@@ -231,16 +235,43 @@ impl Parser {
         Ok(Box::new(ASTNode::Conditional { cond: None, body: self.inner_body()?, next: None, }))
     }
 
+    fn fn_call(&mut self) -> Result<Node, ParseError> {
+        let tk = self.assert_next(&[TokenType::Id])?;
+        if self.assert_next(&[TokenType::Nothing]).is_ok() {
+            return Ok(Box::new(ASTNode::FnCall { caller: tk, params: vec![] }))
+        }
+        let mut backup = self.tokenizer.get_state();
+        let mut params = Vec::new();
+        loop {
+            match self.expr() {
+                Ok(e) => {
+                    params.push(e);
+                    backup = self.tokenizer.get_state();
+                },
+                _ => {
+                    self.tokenizer.set_state(backup);
+                    break
+                }
+            }
+        }
+        if params.is_empty() { 
+            return Err(ParseError::GeneralError("Expected expressions as Function Call Parameters".to_owned()))
+        }
+        Ok(Box::new(ASTNode::FnCall { caller: tk, params }))
+    }
+
     fn expr(&mut self) -> Result<Node, ParseError> {
         // Saving the current state of the Tokenizer
         // if the Parse fail for any branch it's easy to rollback
         let backup = self.tokenizer.get_state();
 
-        if let ret @ Ok(_) = self.bitwise() { return ret }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.func() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.cond() { return ret }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.fn_call() { return ret }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.bitwise() { return ret }
 
         match self.peek_tk() {
             Some(tk) =>

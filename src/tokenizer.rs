@@ -25,6 +25,7 @@ pub enum TokenType {
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,    // {, }, (, ),
     Comma, Dot, Semicolon,                 // ',' , '.' , ';'
+    Nothing,                               // '()',
 
     Nl,                                    // New line '\n'
 
@@ -50,7 +51,7 @@ impl Token {
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr, 
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
-                "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf,
+                "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf, "()" => Nothing,
                 "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
@@ -94,8 +95,8 @@ pub struct Tokenizer {
 impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
-    const SEPARATORS: [&'static str; 21] = [
-      "=>", "==", ">=", "<=", "!=", "::", "|", "->", "=", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
+    const SEPARATORS: [&'static str; 22] = [
+      "=>", "==", ">=", "<=", "!=", "::", "->", "()", "|", "=", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
     ];
 
     // NOTE: the order is important here, as every Real contains Integer it must goes first

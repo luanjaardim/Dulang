@@ -27,6 +27,7 @@ expr ::==
 	bitwise
 	func
 	cond
+	fn-call
 
 func ::==
 	"|" (var)? ( "," var )* "|" ( "->" type )? expr
@@ -35,9 +36,13 @@ func ::==
 var ::==
 	ID ("::" type)?
 
+fn-call ::==
+	ID "(" ")"   # Function with no parameters
+	ID expr*
+
 bitwise ::==
 	BNOT bitwise
-	comparison ( (BAND | BOR | BXOR | SHL | SHR) comparison )*
+	comparison ((BAND | BOR | BXOR | SHL | SHR) comparison )*
 
 comparison ::==
 	NOT comparison
