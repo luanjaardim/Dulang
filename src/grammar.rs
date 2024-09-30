@@ -140,9 +140,7 @@ impl Parser {
         mut method: impl FnMut(&mut Self) -> Result<T, ParseError>,
     ) -> Result<T, ParseError>  {
         _ = self.assert_next(&[TokenType::Nl]);
-        let ret = method(self);
-        _ = self.assert_next(&[TokenType::Nl]);
-        ret
+        method(self)
     }
 
     pub fn parse(mut self) -> Result<Body, std::io::Error>  {
@@ -174,7 +172,12 @@ impl Parser {
             Some(Token { t: TokenType::Id, ..}) => {
                 let var = self.var()?;
                 _ = self.assert_next(&[TokenType::Assign])?;
-                Ok(Box::new(ASTNode::Assign { var, expr: self.expr()? }))
+                let expr = self.expr()?;
+                // Checking if the Assignment ended with a '\n' or a '}'
+                if self.assert_peek(&[TokenType::Nl, TokenType::ClCurly]).is_err() && self.peek_tk().is_some() {
+                    return Err(ParseError::GeneralError(format!("Assignment did not ended, there are Tokens left {}", self.peek_tk().unwrap())))
+                }
+                Ok(Box::new(ASTNode::Assign { var, expr }))
             },
             // Cond as statement
             Some(Token { t: TokenType::If, ..}) => self.cond(),
