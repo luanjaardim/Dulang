@@ -89,7 +89,9 @@ pub struct Tokenizer {
     pos: usize,          //index in s
     l: usize,            //count the number of '\n'
     c: usize,            //reset with '\n'
-    prev_sep: Option<Token>,     //used to store the previous Token separator, if there were another token before it
+    tk_pos: usize,       //index in read_tks
+    //used to store previous tokens, so it's not need to always recalculate them
+    read_tks: Vec<Token>,
 }
 
 impl Tokenizer {
@@ -108,23 +110,27 @@ impl Tokenizer {
 
     pub fn new(content_to_tokenize: Rc<String>) -> Self {
         Tokenizer {
-            s: content_to_tokenize, pos: 0, l: 0, c: 0, prev_sep: None
+            s: content_to_tokenize, pos: 0, tk_pos: 0, l: 0, c: 0, read_tks: vec![]
         }
     }
 
-    /// Return the current state of the Tokenizer cursor: (pos, l, c)
-    ///     pos -> The position as an index of the file text
-    ///     l -> Line of the cursor
-    ///     c -> Column in the line of the cursor
-    pub fn get_state(&self) -> (usize, usize, usize) { (self.pos, self.l, self.c) }
+    /// Return the current state of the Tokenizer cursor:
+    ///     tk_pos -> The position of the current Token to be read
+    pub fn get_state(&self) -> usize { self.tk_pos }
 
     /// Set the state of the cursor, useful to store and go back to a previous position in the file
-    /// Receives a tuple that is expected to be as follow: (pos, l, c)
-    pub fn set_state(&mut self, state: (usize, usize, usize)) { (self.pos, self.l, self.c) = state; }
+    /// Receives a position to the already read tokens
+    pub fn set_state(&mut self, state: usize) { self.tk_pos = state; }
+
+    fn get_cur_tk_and_advance(&mut self) -> Token {
+        let tk = self.read_tks[self.tk_pos].clone();
+        self.tk_pos += 1;
+        tk
+    }
 
     pub fn next(&mut self) -> Option<Token> {
-        // Check if the previous separator can be already returned
-        if self.prev_sep.is_some() { return self.prev_sep.take() }
+        // Check if the Token in the cursor was already calculated
+        if self.tk_pos < self.read_tks.len() { return Some(self.get_cur_tk_and_advance()) }
 
         // Skip whitespaces
         self.skip_ascii_whitespaces();
@@ -137,7 +143,10 @@ impl Tokenizer {
             self.c += len;
             return match t {
                 Comment => self.next(), // Continue search if it's a comment
-                _ => Some(Token { c: self.c, l: self.l, t, text }),
+                _ => {
+                    self.read_tks.push(Token { c: self.c, l: self.l, t, text });
+                    Some(self.get_cur_tk_and_advance())
+                }
             }
         }
 
@@ -155,28 +164,37 @@ impl Tokenizer {
                                       if cur.1 < acc.1 { cur }  // if the cur separator appeared before
                                       else { acc }
                               );
-        let ret = match sep_and_pos {
+        let tk = match sep_and_pos {
             Some((sep, pos)) => {
                 if pos == 0 {
                     // there is no Token before the separator
-                    Some(Token::new(self.c, self.l, sep))
+                    Token::new(self.c, self.l, sep)
                 } else {
-                    // store the sep Token to be returned on the next call
-                    self.prev_sep = Some(Token::new(self.c+pos, self.l, sep));
-                    Some(Token::new(self.c, self.l, &word[0..pos]))
+                    // will store the sep Token and the token before it
+                    self.read_tks.push(Token::new(self.c, self.l, &word[0..pos]));
+                    Token::new(self.c+pos, self.l, sep)
                 }
             },
-            None => Some(Token::new(self.c, self.l, word))
+            None => Token::new(self.c, self.l, word)
         };
         // update counters positions
         let consumed_chars = if sep_and_pos.is_none() { word.len() } else { sep_and_pos?.1 + sep_and_pos?.0.len() };
         self.pos += consumed_chars;
         self.c += consumed_chars;
 
-        ret
+        self.read_tks.push(tk);
+        Some(self.get_cur_tk_and_advance())
     }
 
-    pub fn peek(&self) -> Option<Token> { self.clone().next() }
+    pub fn peek(&mut self) -> Option<Token> {
+        if let Some(tk) = self.read_tks.get(self.tk_pos) {
+            return Some(tk.clone())
+        }
+        let cur_state = self.get_state();
+        let tk = self.next();
+        self.set_state(cur_state);
+        tk
+    }
 
     fn match_patterns(&self) -> Option<(regex::Match, TokenType)> {
         let text = &self.s[self.pos..];

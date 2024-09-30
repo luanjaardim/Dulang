@@ -82,7 +82,7 @@ impl Parser {
         })
     }
 
-    fn peek_tk(&self) -> Option<Token> {
+    fn peek_tk(&mut self) -> Option<Token> {
         let tk = self.tokenizer.peek();
         let (l, _) = tk?.position();
         let (cur_l, _) = self.prev_tk.position();
