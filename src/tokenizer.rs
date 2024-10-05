@@ -20,6 +20,9 @@ pub enum TokenType {
     // Types
     I32, U32, Char, F32, F64, Bool,
 
+    // Compounded types
+    FnType, UnionType, TupleType,           // ->, ^, &
+
     Assign, FnBar, FnReturn, TypeInf,       // =, |, =>, ::
 
     // Symbols
@@ -53,6 +56,7 @@ impl Token {
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
                 "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf, "()" => Nothing,
                 "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool,
+                "->" => FnType, "^" => UnionType, "&" => TupleType,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
@@ -97,8 +101,8 @@ pub struct Tokenizer {
 impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
-    const SEPARATORS: [&'static str; 22] = [
-      "=>", "==", ">=", "<=", "!=", "::", "->", "()", "|", "=", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
+    const SEPARATORS: [&'static str; 24] = [
+      "=>", "==", ">=", "<=", "!=", "::", "->", "()", "|", "=", ",", ";", "+", "-", "*", "/", "^", "&", "(", ")", "{", "}", "[", "]"
     ];
 
     // NOTE: the order is important here, as every Real contains Integer it must goes first

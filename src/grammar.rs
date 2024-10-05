@@ -4,7 +4,7 @@ use std::io::Read;
 
 type Node = Box<ASTNode>;
 type Body = Vec<Node>;
-type Var = (Token, Option<Token>);
+type Var = (Token, Option<Node>);
 
 #[derive(Debug)]
 pub enum ASTNode {
@@ -14,7 +14,7 @@ pub enum ASTNode {
     },
     Func {
         args: Vec<Var>,
-        ret: Option<Token>, // Any Token of a type
+        ret: Option<Node>, // Any Node of type Type
         body: Body,
     },
     Conditional {
@@ -38,6 +38,10 @@ pub enum ASTNode {
     FnCall {
         caller: Token,
         params: Vec<Node>,  // List of expressions
+    },
+    Type {
+        t: TokenType,
+        inner_types: Vec<Node>,
     },
     Leaf(Token)
 }
@@ -415,15 +419,57 @@ impl Parser {
         }
     }
 
-    fn _type_(&mut self) -> Result<Token, ParseError> {
-        self.assert_next(&[
-            TokenType::I32,
-            TokenType::U32,
-            TokenType::Char,
-            TokenType::F32,
-            TokenType::F64,
-            TokenType::Bool,
-        ])
+    fn parse_compounded_type(
+        &mut self,
+        mut method: impl FnMut(&mut Self) -> Result<Node, ParseError>,
+        separator: TokenType
+    ) -> Result<Node, ParseError> {
+        let first = method(self)?;
+        if self.assert_peek(&[separator]).is_ok() {
+            let mut v = vec![first];
+            loop {
+                match self.assert_peek(&[separator]) {
+                    Ok(_) => {
+                        _ = self.next_tk();
+                        v.push(method(self)?)
+                    }
+                    Err(_) => break,
+                }
+            }
+            Ok(Box::new(ASTNode::Type { t: separator, inner_types: v }))
+        } else { Ok(first) }
+    }
+
+    fn _type_(&mut self) -> Result<Node, ParseError> {
+        self.parse_compounded_type(|s| s.union_type(), TokenType::FnType)
+    }
+    fn union_type(&mut self) -> Result<Node, ParseError> {
+        self.parse_compounded_type(|s| s.tuple_type(), TokenType::UnionType)
+    }
+    fn tuple_type(&mut self) -> Result<Node, ParseError> {
+        self.parse_compounded_type(|s| s.basic_types(), TokenType::TupleType)
+    }
+
+    fn basic_types(&mut self) -> Result<Node, ParseError> {
+        match self.peek_tk() {
+            // Type inside parenthesis
+            Some(Token { t: TokenType::OpParen, .. }) => {
+                println!("here");
+                _ = self.assert_next(&[TokenType::OpParen])?;
+                let t = self._type_();
+                _ = self.assert_next(&[TokenType::ClParen])?;
+                t
+            },
+            Some(_) => self.assert_next(&[
+                            TokenType::I32,
+                            TokenType::U32,
+                            TokenType::Char,
+                            TokenType::F32,
+                            TokenType::F64,
+                            TokenType::Bool,
+                        ]).map(|e| Box::new(ASTNode::Type { t: e.t, inner_types: vec![] })),
+            _ => Err(ParseError::GeneralError(format!("{:?} is not a basic type.", self.peek_tk())))
+        }
     }
 
 }
