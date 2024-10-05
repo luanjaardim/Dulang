@@ -7,9 +7,9 @@ inner-body ::== "{" body "}"
 sttm ::==
 	cond
 	var ASSIGN expr nl
-	BACK expr nl
-	BREAK expr nl
-	SKIP
+	BACK expr? nl
+	STOP expr? nl
+	SKIP nl
 
 cond ::==
 	"if" comparison inner-body (elif | else)?

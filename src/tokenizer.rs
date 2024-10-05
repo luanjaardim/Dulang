@@ -59,6 +59,7 @@ impl Token {
                 "->" => FnType, "^" => UnionType, "&" => TupleType,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
+                "skip" => Skip, "stop" => Stop, "back" => Back,
                 _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
                 _ => panic!("Token type is unkown: {text}")
             }),

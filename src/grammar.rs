@@ -43,6 +43,8 @@ pub enum ASTNode {
         t: TokenType,
         inner_types: Vec<Node>,
     },
+    // skip, stop or back, only back and stop can have the second element (the expr they return)
+    FlowChange(TokenType, Option<Node>),
     Leaf(Token)
 }
 
@@ -192,6 +194,24 @@ impl Parser {
             // Loop statement
             Some(Token { t: TokenType::Loop, ..}) |
             Some(Token { t: TokenType::While, ..}) => self._loop_(),
+            Some(Token { t: TokenType::Back, ..}) |
+            Some(Token { t: TokenType::Stop, ..}) => {
+                let tk = self.assert_next(&[ TokenType::Back, TokenType::Stop ])?;
+                let e = self.expr().ok();
+                if self.assert_peek(&[TokenType::Nl]).is_err() && self.peek_tk().is_some() {
+                    return Err(
+                      ParseError::GeneralError(format!("FlowChange did not ended, there are Tokens left in the line {}", self.peek_tk().unwrap())))
+                }
+                Ok(Box::new(ASTNode::FlowChange(tk.t, e)))
+            },
+            Some(Token { t: TokenType::Skip, ..}) => {
+                let tk = self.assert_next(&[TokenType::Skip])?;
+                if self.assert_peek(&[TokenType::Nl]).is_err() && self.peek_tk().is_some() {
+                    return Err(
+                        ParseError::GeneralError(format!("FlowChange did not ended, there are Tokens left in the line {}", self.peek_tk().unwrap())))
+                }
+                Ok(Box::new(ASTNode::FlowChange(tk.t, None)))
+            },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
             None => Err(ParseError::ExpectedToken)
         }
