@@ -19,7 +19,7 @@ pub enum TokenType {
     Skip, Stop, Back,                       // skip, stop, back
 
     // Types
-    I32, U32, Char, F32, F64, Bool,
+    I32, U32, Char, F32, F64, Bool, Void,
 
     // Compounded types
     FnType, UnionType, TupleType,           // ->, ^, &
@@ -52,10 +52,10 @@ impl Token {
                 "+" => Add, "-" => Sub, "*" => Mul, "/" => Div,
                 "==" => Eq, "!=" => Neq, ">" => GrT, ">=" => GrE, "<" => LeT, "<=" => LeE,
                 "and" => And, "or" => Or, "not" => Not,
-                "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr, 
+                "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr,
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
                 "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf, "()" => Nothing,
-                "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool,
+                "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool, "void" => Void,
                 "->" => FnType, "^" => UnionType, "&" => TupleType,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,

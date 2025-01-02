@@ -486,6 +486,7 @@ impl Parser {
                             TokenType::F32,
                             TokenType::F64,
                             TokenType::Bool,
+                            TokenType::Void,
                         ]).map(|e| Box::new(ASTNode::Type { t: e.t, inner_types: vec![] })),
             _ => Err(ParseError::GeneralError(format!("{:?} is not a basic type.", self.peek_tk())))
         }
