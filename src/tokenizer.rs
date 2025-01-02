@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use TokenType::*;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
     Str, Integer, Real, Character, Comment, Id,
@@ -34,7 +35,6 @@ pub enum TokenType {
 
     //RealAdd, RealSub, RealMul, RealDiv,   // +., -., *., /. (Maybe?)
 }
-use TokenType::*;
 
 #[derive(Clone)]
 pub struct Token {

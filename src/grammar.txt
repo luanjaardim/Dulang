@@ -29,8 +29,8 @@ expr ::==
 	fn-call
 
 func ::==
-	"|" (var)? ( "," var )* "|" ( "->" type )? expr
-	"|" (var)? ( "," var )* "|" ( "->" type )? inner-body
+	"|" (var ( "," var )*)? "|" ( "->" type )? expr
+	"|" (var ( "," var )*)? "|" ( "->" type )? inner-body
 
 var ::==
 	ID ("::" type)?

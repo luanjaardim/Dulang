@@ -2,11 +2,11 @@ use crate::tokenizer::*;
 use std::rc::Rc;
 use std::io::Read;
 
-type Node = Box<ASTNode>;
+pub type Node = Box<ASTNode>;
 type Body = Vec<Node>;
 type Var = (Token, Option<Node>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ASTNode {
     Assign {
         var: Var,
@@ -474,7 +474,6 @@ impl Parser {
         match self.peek_tk() {
             // Type inside parenthesis
             Some(Token { t: TokenType::OpParen, .. }) => {
-                println!("here");
                 _ = self.assert_next(&[TokenType::OpParen])?;
                 let t = self._type_();
                 _ = self.assert_next(&[TokenType::ClParen])?;
