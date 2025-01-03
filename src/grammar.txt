@@ -6,10 +6,12 @@ inner-body ::== "{" body "}"
 
 sttm ::==
 	cond
-	var ASSIGN expr nl
+	assign
+	loop
 	BACK expr? nl
 	STOP expr? nl
 	SKIP nl
+	fn-call
 
 cond ::==
 	"if" comparison inner-body (elif | else)?
@@ -17,16 +19,20 @@ elif ::==
 	"elif" comparison inner-body (elif | else)?
 else ::==
 	"else" inner-body
+
+assign ::==
+	var ASSIGN expr nl
 	
 loop ::==
 	"while" comparison inner-body
 	"loop" inner-body
 
 expr ::==
-	bitwise
 	func
 	cond
 	fn-call
+	bitwise
+	unary
 
 func ::==
 	"|" (var ( "," var )*)? "|" ( "->" type )? expr
@@ -49,11 +55,11 @@ comparison ::==
 
 arith ::== factor ((ADD | SUB) factor)*
 
-factor ::== unary ((MUL | DIV) unary)*
+factor ::== primary ((MUL | DIV) primary)*
 
 unary ::==
 	primary
-	(ADD | SUB) unary
+	(ADD | SUB) primary
 
 primary ::==
 	"(" expr ")"

@@ -180,14 +180,14 @@ impl Parser {
         match self.peek_tk() {
             // Var definition
             Some(Token { t: TokenType::Id, ..}) => {
-                let var = self.var()?;
-                _ = self.assert_next(&[TokenType::Assign])?;
-                let expr = self.expr()?;
-                // Checking if the Assignment ended with a '\n' or a '}'
-                if self.assert_peek(&[TokenType::Nl, TokenType::ClCurly]).is_err() && self.peek_tk().is_some() {
-                    return Err(ParseError::GeneralError(format!("Assignment did not ended, there are Tokens left {}", self.peek_tk().unwrap())))
-                }
-                Ok(Box::new(ASTNode::Assign { var, expr }))
+                let backup = self.tokenizer.get_state(); // Return to before the var if it's not an assignment
+                                                         //
+                if let ret @ Ok(_) = self.assign() { return ret }
+                self.tokenizer.set_state(backup);
+                if let ret @ Ok(_) = self.fn_call() { return ret }
+                self.tokenizer.set_state(backup);
+
+                return Err(ParseError::GeneralError(format!("Could not parse sttmt at {}", self.peek_tk().unwrap())))
             },
             // Cond as statement
             Some(Token { t: TokenType::If, ..}) => self.cond(),
@@ -198,18 +198,10 @@ impl Parser {
             Some(Token { t: TokenType::Stop, ..}) => {
                 let tk = self.assert_next(&[ TokenType::Back, TokenType::Stop ])?;
                 let e = self.expr().ok();
-                if self.assert_peek(&[TokenType::Nl]).is_err() && self.peek_tk().is_some() {
-                    return Err(
-                      ParseError::GeneralError(format!("FlowChange did not ended, there are Tokens left in the line {}", self.peek_tk().unwrap())))
-                }
                 Ok(Box::new(ASTNode::FlowChange(tk.t, e)))
             },
             Some(Token { t: TokenType::Skip, ..}) => {
                 let tk = self.assert_next(&[TokenType::Skip])?;
-                if self.assert_peek(&[TokenType::Nl]).is_err() && self.peek_tk().is_some() {
-                    return Err(
-                        ParseError::GeneralError(format!("FlowChange did not ended, there are Tokens left in the line {}", self.peek_tk().unwrap())))
-                }
                 Ok(Box::new(ASTNode::FlowChange(tk.t, None)))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
@@ -259,26 +251,45 @@ impl Parser {
         Ok(Box::new(ASTNode::Conditional { cond: None, body: self.inner_body()?, next: None, }))
     }
 
+    fn assign(&mut self) ->  Result<Node, ParseError> {
+        let var = self.var()?;
+        _ = self.assert_next(&[TokenType::Assign])?;
+        let expr = self.expr()?;
+        Ok(Box::new(ASTNode::Assign { var, expr }))
+    }
+
     fn fn_call(&mut self) -> Result<Node, ParseError> {
         let tk = self.assert_next(&[TokenType::Id])?;
         if self.assert_next(&[TokenType::Nothing]).is_ok() {
             return Ok(Box::new(ASTNode::FnCall { caller: tk, params: vec![] }))
         }
-        let mut backup = self.tokenizer.get_state();
+        let backup = self.tokenizer.get_state();
+        let mut b = backup;
         let mut params = Vec::new();
+        let mut first_tk;
         loop {
+            first_tk = self.peek_tk();
             match self.expr() {
                 Ok(e) => {
+                    // Only accepts its parameters if none of them is a Unary that did not started with '('
+                    // This caused (a + 1) or (a - 1) to be parsed as a function call, when it should be a binary operation
+                    if let ASTNode::Unary { .. } = *e {
+                        if first_tk.unwrap().t != TokenType::OpParen {
+                            params.clear();
+                            self.tokenizer.set_state(backup);
+                            break
+                        }
+                    }
                     params.push(e);
-                    backup = self.tokenizer.get_state();
+                    b = self.tokenizer.get_state();
                 },
                 _ => {
-                    self.tokenizer.set_state(backup);
+                    self.tokenizer.set_state(b);
                     break
                 }
             }
         }
-        if params.is_empty() { 
+        if params.is_empty() {
             return Err(ParseError::GeneralError("Expected expressions as Function Call Parameters".to_owned()))
         }
         Ok(Box::new(ASTNode::FnCall { caller: tk, params }))
@@ -296,6 +307,8 @@ impl Parser {
         if let ret @ Ok(_) = self.fn_call() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.bitwise() { return ret }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.unary() { return ret }
 
         match self.peek_tk() {
             Some(tk) =>
@@ -396,22 +409,25 @@ impl Parser {
 
     fn factor(&mut self) -> Result<Node, ParseError> {
         Ok(self.parse_generic_chained_binary(
-            |s| s.unary(),
+            |s| s.primary(),
             vec![ TokenType::Mul, TokenType::Div ]
         )?)
     }
 
     fn unary(&mut self) -> Result<Node, ParseError> {
-        Ok(match self.peek_tk() {
+        match self.peek_tk() {
             Some(Token { t: TokenType::Add, .. }) |
             Some(Token { t: TokenType::Sub, .. }) => {
-                Box::new(ASTNode::Unary {
+                Ok(Box::new(ASTNode::Unary {
                     op: self.next_tk().unwrap(),
-                    e: self.unary()? 
-                })
+                    e: self.primary()? 
+                }))
             },
-            _ => self.primary()?,
-        })
+            Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
+                TokenType::Add, TokenType::Sub
+            ])),
+            None => Err(ParseError::ExpectedToken)
+        }
     }
     fn primary(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
