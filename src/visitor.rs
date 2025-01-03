@@ -60,6 +60,7 @@ impl ExprType {
         }
     }
 
+    // FIX: is unknown should verify its inner types too, if any is unknown the type is unknown
     fn is_unknown(&self) -> bool { if let Unknown = self { true } else { false }}
 }
 
@@ -149,12 +150,40 @@ impl Scope {
             Scope::update_var_type(scp_ref.scp_father as *mut Scope, t, var_name);
         }
     }
+
+    fn is_inside_loop(&self) -> bool {
+        if let ScopeAttr::LoopScope { .. } = self.attrs { true }
+        else {
+            unsafe { self.scp_father.as_ref().map_or(false, |f| f.is_inside_loop()) }
+        }
+    }
+
+    fn get_cur_func_scp(&self) -> Option<&Self> {
+        if let ScopeAttr::FuncScope { .. } = self.attrs { Some(self) }
+        else {
+            unsafe { self.scp_father.as_ref().map_or(None, |f| f.get_cur_func_scp()) }
+        }
+    }
+
+    fn set_cur_func_ret_type(scp: *mut Scope, t: ExprType) {
+        unsafe {
+            if scp.is_null() { return }
+
+            let scp_ref = &mut *scp;
+            if let ScopeAttr::FuncScope { args_len, .. } = scp_ref.attrs {
+                scp_ref.attrs = ScopeAttr::FuncScope { ret_type: t, args_len }
+            } else {
+                Scope::set_cur_func_ret_type(scp_ref.scp_father as *mut Scope, t) 
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum VisitorError {
     VariableNotDeclared(String),
     MismatchedTypes(ExprType, ExprType),
+    GeneralError(String),
     NotImplemented(ASTNode)
 }
 
@@ -225,6 +254,61 @@ impl Visitor {
                 } else {
                     Err(VisitorError::MismatchedTypes(fn_type, expected_type))
                 }
+            },
+            ASTNode::Loop { cond, body } => {
+                if let Some(cond_expr) = cond {
+                    self.visit(scope, Bool, cond_expr)?;
+                }
+                scope.scopes.push(Scope {
+                    // TODO: implement label declaration for loops
+                    attrs: ScopeAttr::LoopScope { label: String::new() },
+                    scopes: vec![],
+                    vars: vec![],
+                    scp_father: scope,
+                });
+                for node in body {
+                    self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
+                }
+                Ok(Void)
+            },
+            ASTNode::Conditional { cond, body, next } => {
+                if let Some(cond_expr) = cond {
+                    self.visit(scope, Bool, cond_expr)?;
+                }
+                scope.scopes.push(Scope {
+                    attrs: ScopeAttr::CondScope,
+                    scopes: vec![],
+                    vars: vec![],
+                    scp_father: scope,
+                });
+                for node in body {
+                    self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
+                }
+                if let Some(n) = next {
+                    self.visit(scope, Bool, n)?;
+                }
+                Ok(Void)
+            }
+            ASTNode::FlowChange(tk_type, ret) => {
+                match tk_type {
+                    TokenType::Back => {
+                        let ret_type = if let Some(fn_scope) = scope.get_cur_func_scp() {
+                            if let ScopeAttr::FuncScope { ret_type, .. } = &fn_scope.attrs {
+                                ret_type.clone()
+                            } else { unreachable!("get_current_function_scope only returns a scope that is from a function") }
+                        } else {
+                            return Err(VisitorError::GeneralError(String::from("Use Back outside a function")))
+                        };
+                        let back_type = ret.as_ref().map_or(Ok(Void), |e| self.visit(scope, ret_type, e))?;
+                        Scope::set_cur_func_ret_type(scope, back_type);
+                    },
+                    TokenType::Stop if scope.is_inside_loop() => (),
+                    TokenType::Skip if scope.is_inside_loop() => (),
+                    TokenType::Skip | TokenType::Stop =>
+                         return Err(VisitorError::GeneralError(String::from("Use of Loop Control Flow outside a Loop"))),
+                    _ => return Err(VisitorError::NotImplemented(*node.clone())),
+                }
+                Ok(Void)
             },
             ASTNode::Binary { op: Token { t: tk_type, .. }, l, r } => {
                 use TokenType::*;
