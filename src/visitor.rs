@@ -4,7 +4,7 @@ use ExprType::*;
 #[derive(Debug, Clone)]
 pub enum ExprType {
     // Types
-    I32, U32, Char, F32, F64, Bool,
+    Int{ bits: usize, signed: bool }, Real(usize), Char, Bool,
 
     // Compounded types
     FnType(Vec<ExprType>), UnionType(Vec<ExprType>), TupleType(Vec<ExprType>),
@@ -14,15 +14,15 @@ pub enum ExprType {
 impl ExprType {
     fn expr_type_eq(f: &ExprType, s: &ExprType, strict_cmp: bool) -> bool {
         match (f, s) {
-            (I32, I32)
-            | (U32, U32)
-            | (F32, F32)
-            | (F64, F64)
-            | (Char, Char)
+            (Char, Char)
             | (Bool, Bool)
             | (Void, Void) => true,
               (_, Unknown) if !strict_cmp => true,
               (Unknown, _) if !strict_cmp => true,
+
+            (Real(b1), Real(b2)) if b1 == b2 => true,
+            (Int { bits: b1, signed: s1 }, Int { bits: b2, signed: s2 }) if b1 == b2 && s1 == s2 => true,
+
             (FnType(l1), FnType(l2))
             | (UnionType(l1), UnionType(l2))
             | (TupleType(l1), TupleType(l2)) => {
@@ -76,10 +76,10 @@ impl PartialEq for ExprType {
 impl From<&Node> for ExprType {
     fn from(value: &Node) -> Self {
         match &**value {
-            ASTNode::Type { t: TokenType::I32, inner_types } if inner_types.is_empty() => I32,
-            ASTNode::Type { t: TokenType::U32, inner_types } if inner_types.is_empty() => U32,
-            ASTNode::Type { t: TokenType::F32, inner_types } if inner_types.is_empty() => F32,
-            ASTNode::Type { t: TokenType::F64, inner_types } if inner_types.is_empty() => F64,
+            ASTNode::Type { t: TokenType::I32, inner_types } if inner_types.is_empty() => Int { bits: 32, signed: true },
+            ASTNode::Type { t: TokenType::U32, inner_types } if inner_types.is_empty() => Int { bits: 32, signed: false },
+            ASTNode::Type { t: TokenType::F32, inner_types } if inner_types.is_empty() => Real(32),
+            ASTNode::Type { t: TokenType::F64, inner_types } if inner_types.is_empty() => Real(64),
             ASTNode::Type { t: TokenType::Bool, inner_types } if inner_types.is_empty() => Bool,
             ASTNode::Type { t: TokenType::Char, inner_types } if inner_types.is_empty() => Char,
             ASTNode::Type { t: TokenType::Void, inner_types } if inner_types.is_empty() => Void,
@@ -195,12 +195,27 @@ impl Visitor {
                     GrE | GrT | LeE | LeT | Neq | Eq | And | Or => { Ok(ExprType::Bool) },
                     _ => panic!("Unknown Binary operator."),
                 }
-            }
+            },
+            ASTNode::Unary { op: Token { t: tk_type, .. }, e } => {
+                use TokenType::*;
+                match tk_type {
+                    Bnot | Add => Ok(self.visit(scope, expected_type, e)?),
+                    Sub => {
+                        let t = self.visit(scope, expected_type, e)?;
+                        match t {
+                            ExprType::Int { signed: true, .. } | ExprType::Real(_) => Ok(t),
+                            _ => panic!("Trying to sign an unsigned integer")
+                        }
+                    },
+                    Not => Ok(self.visit(scope, ExprType::Bool, e)?),
+                    _ => panic!("Unknown Binary operator. {:?}", e),
+                }
+            },
             ASTNode::Leaf(tk) => {
                 Ok(match tk.t {
-                    TokenType::Integer => U32,
                     TokenType::Character => Char,
-                    TokenType::Real => F32,
+                    TokenType::Real => Real(64),
+                    TokenType::Integer => Int { bits: 64, signed: true },
                     _ => return Err(VisitorError::NotImplemented(*node.clone())),
                 })
             }
