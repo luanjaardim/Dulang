@@ -59,6 +59,8 @@ impl ExprType {
             _ => panic!("Cannot get the function return type of a non function type"),
         }
     }
+
+    fn is_unknown(&self) -> bool { if let Unknown = self { true } else { false }}
 }
 
 /// Comparing between ExprType with '==' or '!=' is not a strict
@@ -98,23 +100,60 @@ struct Var {
 }
 
 #[derive(Debug)]
-enum ScopeType {
+enum ScopeAttr {
     GlobScope,
-    FuncScope,
+    FuncScope {
+        ret_type: ExprType,
+        args_len: usize,
+    },
     CondScope,
-    LoopScope,
+    LoopScope {
+        label: String,
+    }
 }
 
 #[derive(Debug)]
 pub struct Scope {
-    scp_type: ScopeType,
+    attrs: ScopeAttr,
     scopes: Vec<Scope>,
     vars: Vec<Var>,
-    ret_type: ExprType,
+    scp_father: *const Scope,
+}
+
+impl Scope {
+    fn find_var(scp: *const Scope, var_name: &str) -> Option<ExprType> {
+        unsafe {
+            if scp.is_null() { return None }
+
+            let scp_ref = &*scp;
+            for var in scp_ref.vars.iter().rev() {
+                if var.v.text.as_str() == var_name {
+                    return Some(var.t.clone())
+                }
+            }
+            Scope::find_var(scp_ref.scp_father, var_name)
+        }
+    }
+
+    fn update_var_type(scp: *mut Scope, t: ExprType, var_name: &str) {
+        unsafe {
+            if scp.is_null() { return }
+
+            let scp_ref = &mut *scp;
+            for i in (0..scp_ref.vars.len()).rev() {
+                if scp_ref.vars[i].v.text.as_str() == var_name {
+                    scp_ref.vars[i].t = t;
+                    return
+                }
+            }
+            Scope::update_var_type(scp_ref.scp_father as *mut Scope, t, var_name);
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum VisitorError {
+    VariableNotDeclared(String),
     MismatchedTypes(ExprType, ExprType),
     NotImplemented(ASTNode)
 }
@@ -131,7 +170,7 @@ impl Visitor {
     pub fn traverse(&mut self) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
         let ast = std::mem::take(&mut self.ast);
-        let mut global_scope = Scope { scp_type: ScopeType::GlobScope, scopes: vec![], vars: vec![], ret_type: Void };
+        let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, scopes: vec![], vars: vec![], scp_father: std::ptr::null() };
         for n in &ast {
             self.visit(&mut global_scope, Void, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
@@ -166,18 +205,22 @@ impl Visitor {
                     let known_func_type = fn_type.final_type(&expected_type);
 
                     scope.scopes.push(Scope {
-                        scp_type: ScopeType::FuncScope,
+                        attrs: ScopeAttr::FuncScope {
+                            ret_type: known_func_type.get_fn_return_type(),
+                            args_len: args.len(),
+                        },
                         scopes: vec![],
                         vars: (0..args.len()).map(|i| Var {
                                   v: args[i].0.clone(),
                                   t: known_func_type.get_nth_inner_type(i),
                               }).collect(),
-                        ret_type: known_func_type.get_fn_return_type(),
+                        scp_father: scope,
                     });
                     for node in body {
                         // TODO: Void may not be the best type to be expected, but for statements it's fine
                         self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
                     }
+                    // TODO: recalculate the type of the function after the body is visited
                     Ok(known_func_type)
                 } else {
                     Err(VisitorError::MismatchedTypes(fn_type, expected_type))
@@ -216,6 +259,21 @@ impl Visitor {
                     TokenType::Character => Char,
                     TokenType::Real => Real(64),
                     TokenType::Integer => Int { bits: 64, signed: true },
+                    TokenType::Id => {
+                        if let Some(t) = Scope::find_var(scope, &tk.text) { 
+                            if t != expected_type {
+                                return Err(VisitorError::MismatchedTypes(t, expected_type))
+                            } else {
+                                let var_type = expected_type.final_type(&t);
+                                // Update var type if it is Unknown
+                                if t.is_unknown() { Scope::update_var_type(scope, var_type.clone(), &tk.text) }
+                                var_type
+                            }
+                        }
+                        else {
+                            return Err(VisitorError::VariableNotDeclared(tk.text.clone()))
+                        }
+                    }
                     _ => return Err(VisitorError::NotImplemented(*node.clone())),
                 })
             }
