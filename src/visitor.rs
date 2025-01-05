@@ -187,23 +187,22 @@ pub enum VisitorError {
     NotImplemented(ASTNode)
 }
 
-pub struct Visitor {
-    ast: Vec<Node>,
+pub struct Visitor<'ast> {
+    ast: &'ast Vec<Node>,
     pub glob_scope: Option<Scope>,
 }
 
-impl Visitor {
-    pub fn new(parsed_ast:  Vec<Node>) -> Self {
+impl<'ast> Visitor<'ast> {
+    pub fn new(parsed_ast: &'ast Vec<Node>) -> Self {
         Visitor { ast: parsed_ast, glob_scope: None }
     }
+
     pub fn traverse(&mut self) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
-        let ast = std::mem::take(&mut self.ast);
         let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, scopes: vec![], vars: vec![], scp_father: std::ptr::null() };
-        for n in &ast {
+        for n in self.ast {
             self.visit(&mut global_scope, Void, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
-        self.ast = ast;
         self.glob_scope = Some(global_scope);
         Ok(())
     }
@@ -249,8 +248,15 @@ impl Visitor {
                         // TODO: Void may not be the best type to be expected, but for statements it's fine
                         self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
                     }
-                    // TODO: recalculate the type of the function after the body is visited
-                    Ok(known_func_type)
+
+                    let fn_scope = scope.scopes.last().unwrap();
+                    let (args_len, ret_type) = if let ScopeAttr::FuncScope { args_len, ret_type } = &fn_scope.attrs
+                                        { (args_len, ret_type) }
+                                   else { unreachable!() };
+                    let mut t: Vec<ExprType> = if *args_len == 0 { vec![Void] } else { vec![] };
+                    t.extend((0..*args_len).map(|i| fn_scope.vars[i].t.clone()).chain([ret_type.clone()]));
+                    // Return the type of the function after its body is completely analyzed
+                    Ok(FnType(t))
                 } else {
                     Err(VisitorError::MismatchedTypes(fn_type, expected_type))
                 }
