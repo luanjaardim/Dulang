@@ -101,11 +101,12 @@ struct Var {
 }
 
 #[derive(Debug)]
-enum ScopeAttr {
+pub enum ScopeAttr {
     GlobScope,
     FuncScope {
-        ret_type: ExprType,
+        name: String,
         args_len: usize,
+        ret_type: ExprType,
     },
     CondScope,
     LoopScope {
@@ -113,11 +114,25 @@ enum ScopeAttr {
     }
 }
 
+pub enum Elem { Var(Var), Scope(Scope) }
+impl std::fmt::Debug for Elem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Elem::Var(v) => {
+                write!(f, "{v:#?}")
+            },
+            Elem::Scope(s) => {
+                write!(f, "{s:#?}")
+            }
+        }
+    }
+}
+
+
 #[derive(Debug)]
 pub struct Scope {
-    attrs: ScopeAttr,
-    scopes: Vec<Scope>,
-    vars: Vec<Var>,
+    pub attrs: ScopeAttr,
+    pub elems: Vec<Elem>,
     scp_father: *const Scope,
 }
 
@@ -127,9 +142,11 @@ impl Scope {
             if scp.is_null() { return None }
 
             let scp_ref = &*scp;
-            for var in scp_ref.vars.iter().rev() {
-                if var.v.text.as_str() == var_name {
-                    return Some(var.t.clone())
+            for e in scp_ref.elems.iter().rev() {
+                if let Elem::Var(var) = e {
+                    if var.v.text.as_str() == var_name {
+                        return Some(var.t.clone())
+                    }
                 }
             }
             Scope::find_var(scp_ref.scp_father, var_name)
@@ -141,10 +158,12 @@ impl Scope {
             if scp.is_null() { return }
 
             let scp_ref = &mut *scp;
-            for i in (0..scp_ref.vars.len()).rev() {
-                if scp_ref.vars[i].v.text.as_str() == var_name {
-                    scp_ref.vars[i].t = t;
-                    return
+            for e in scp_ref.elems.iter_mut().rev() {
+                if let Elem::Var(var) = e {
+                    if var.v.text.as_str() == var_name {
+                        var.t = t;
+                        return
+                    }
                 }
             }
             Scope::update_var_type(scp_ref.scp_father as *mut Scope, t, var_name);
@@ -170,8 +189,8 @@ impl Scope {
             if scp.is_null() { return }
 
             let scp_ref = &mut *scp;
-            if let ScopeAttr::FuncScope { args_len, .. } = scp_ref.attrs {
-                scp_ref.attrs = ScopeAttr::FuncScope { ret_type: t, args_len }
+            if let ScopeAttr::FuncScope { ret_type, .. } = &mut scp_ref.attrs {
+                *ret_type = t;
             } else {
                 Scope::set_cur_func_ret_type(scp_ref.scp_father as *mut Scope, t) 
             }
@@ -199,7 +218,7 @@ impl<'ast> Visitor<'ast> {
 
     pub fn traverse(&mut self) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
-        let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, scopes: vec![], vars: vec![], scp_father: std::ptr::null() };
+        let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, elems: vec![], scp_father: std::ptr::null() };
         for n in self.ast {
             self.visit(&mut global_scope, Void, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
@@ -210,12 +229,19 @@ impl<'ast> Visitor<'ast> {
     fn visit(&mut self, scope: &mut Scope, expected_type: ExprType, node: &Node) -> Result<ExprType, VisitorError> {
         match &**node {
             ASTNode::Assign { var: (v, var_type), expr: expression } => {
+                // if the current assignment creates an Function Scope we need to update its name
+                // with the current variable name, otherwise we are creating a non-function variable
+                let assign_index = scope.elems.len();
                 let expected_type = var_type.as_ref().map_or(Unknown, |t| ExprType::from(t));
                 let expression_type = self.visit(scope, expected_type, expression)?;
-                scope.vars.push(Var {
-                    v: v.clone(),
-                    t: expression_type,
-                });
+                if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..})) = scope.elems.get_mut(assign_index) {
+                    *name = String::from(&v.text);
+                } else {
+                    scope.elems.push(Elem::Var(Var {
+                        v: v.clone(),
+                        t: expression_type,
+                    }));
+                }
                 Ok(Void)
             },
             ASTNode::Func { args, ret, body } => {
@@ -232,29 +258,35 @@ impl<'ast> Visitor<'ast> {
                 if fn_type == expected_type {
                     let known_func_type = fn_type.final_type(&expected_type);
 
-                    scope.scopes.push(Scope {
+                    let mut scp = Scope {
                         attrs: ScopeAttr::FuncScope {
+                            name: String::new(), // will be filled when return the function call
                             ret_type: known_func_type.get_fn_return_type(),
                             args_len: args.len(),
                         },
-                        scopes: vec![],
-                        vars: (0..args.len()).map(|i| Var {
+                        elems: (0..args.len()).map(|i| Elem::Var(Var {
                                   v: args[i].0.clone(),
                                   t: known_func_type.get_nth_inner_type(i),
-                              }).collect(),
+                              })).collect(),
                         scp_father: scope,
-                    });
+                    };
                     for node in body {
                         // TODO: Void may not be the best type to be expected, but for statements it's fine
-                        self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
+                        self.visit(&mut scp, Void, node)?;
                     }
 
-                    let fn_scope = scope.scopes.last().unwrap();
-                    let (args_len, ret_type) = if let ScopeAttr::FuncScope { args_len, ret_type } = &fn_scope.attrs
+                    let (args_len, ret_type) = if let ScopeAttr::FuncScope { args_len, ret_type, .. } = &scp.attrs
                                         { (args_len, ret_type) }
                                    else { unreachable!() };
                     let mut t: Vec<ExprType> = if *args_len == 0 { vec![Void] } else { vec![] };
-                    t.extend((0..*args_len).map(|i| fn_scope.vars[i].t.clone()).chain([ret_type.clone()]));
+                    t.extend((0..*args_len).map(|i| 
+                                    if let Elem::Var(Var { t, .. }) = &scp.elems[i] {
+                                        t.clone()
+                                    } else { unreachable!() }
+                    ).chain([ret_type.clone()]));
+
+                    scope.elems.push(Elem::Scope(scp));
+
                     // Return the type of the function after its body is completely analyzed
                     Ok(FnType(t))
                 } else {
@@ -265,31 +297,31 @@ impl<'ast> Visitor<'ast> {
                 if let Some(cond_expr) = cond {
                     self.visit(scope, Bool, cond_expr)?;
                 }
-                scope.scopes.push(Scope {
+                let mut scp = Scope {
                     // TODO: implement label declaration for loops
                     attrs: ScopeAttr::LoopScope { label: String::new() },
-                    scopes: vec![],
-                    vars: vec![],
+                    elems: vec![],
                     scp_father: scope,
-                });
+                };
                 for node in body {
-                    self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
+                    self.visit(&mut scp, Void, node)?;
                 }
+                scope.elems.push(Elem::Scope(scp));
                 Ok(Void)
             },
             ASTNode::Conditional { cond, body, next } => {
                 if let Some(cond_expr) = cond {
                     self.visit(scope, Bool, cond_expr)?;
                 }
-                scope.scopes.push(Scope {
+                let mut scp = Scope {
                     attrs: ScopeAttr::CondScope,
-                    scopes: vec![],
-                    vars: vec![],
+                    elems: vec![],
                     scp_father: scope,
-                });
+                };
                 for node in body {
-                    self.visit(scope.scopes.last_mut().unwrap(), Void, node)?;
+                    self.visit(&mut scp, Void, node)?;
                 }
+                scope.elems.push(Elem::Scope(scp));
                 if let Some(n) = next {
                     self.visit(scope, Bool, n)?;
                 }
