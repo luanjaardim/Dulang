@@ -1,8 +1,23 @@
-use crate::tokenizer::*;
-use std::rc::Rc;
+use crate::{tokenizer::*, visitor::ExprType::{self, Unknown, Void}};
 use std::io::Read;
+use std::rc::Rc;
 
-pub type Node = Box<ASTNode>;
+#[derive(Clone)]
+pub struct Node {
+    pub t: ExprType,
+    pub v: InnerNode
+}
+impl Node {
+    pub fn new(t: ExprType, v: InnerNode) -> Self { Node { t, v } }
+}
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(t: {:#?}, ", self.t)?;
+        write!(f, "v: {:#?})", self.v)
+    }
+}
+
+pub type InnerNode = Box<ASTNode>;
 type Body = Vec<Node>;
 type Var = (Token, Option<Node>);
 
@@ -41,11 +56,12 @@ pub enum ASTNode {
     },
     Type {
         t: TokenType,
-        inner_types: Vec<Node>,
+        inner_types: Vec<InnerNode>,
     },
     // skip, stop or back, only back and stop can have the second element (the expr they return)
     FlowChange(TokenType, Option<Node>),
-    Leaf(Token)
+    Leaf(Token),
+    Empty
 }
 
 pub enum ParseError {
@@ -72,6 +88,7 @@ pub struct Parser {
     path: String,
     tokenizer: Tokenizer,
     prev_tk: Token,
+    pub unknown_id: usize,
 }
 
 impl Parser {
@@ -85,7 +102,13 @@ impl Parser {
             path: String::from(path),
             tokenizer: Tokenizer::new(Rc::new(s)),
             prev_tk: Token::nl(0), // Initial value for the previous token
+            unknown_id: 0,
         })
+    }
+
+    fn get_unknown_id(&mut self) -> usize {
+        self.unknown_id += 1;
+        self.unknown_id
     }
 
     fn peek_tk(&mut self) -> Option<Token> {
@@ -136,7 +159,7 @@ impl Parser {
             l = match op {
                 Ok(tk) => {
                     _ = self.next_tk(); // Consume the Token peeked in assert_peek
-                    Box::new(ASTNode::Binary { op: tk, l, r: method(self)? })
+                    Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Binary { op: tk, l, r: method(self)? }))
                 }
                 Err(_) => break,
             };
@@ -153,13 +176,15 @@ impl Parser {
         method(self)
     }
 
-    pub fn parse(mut self) -> Result<Body, std::io::Error>  {
+    pub fn parse(mut self, last_unknown: &mut usize) -> Result<Body, std::io::Error>  {
         use std::io::{Error, ErrorKind};
-        match self.body() {
+        let ret = match self.body() {
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, format!("({}) {e:?}", self.prev_tk))),
             Ok(e) if self.peek_tk().is_none() =>  Ok(e),
             _ =>  Err(Error::new(ErrorKind::InvalidInput, format!("({}) Failed to parse body.", self.prev_tk))),
-        }
+        };
+        *last_unknown = self.unknown_id;
+        ret
     }
 
     fn body(&mut self) -> Result<Body, ParseError>  {
@@ -198,11 +223,11 @@ impl Parser {
             Some(Token { t: TokenType::Stop, ..}) => {
                 let tk = self.assert_next(&[ TokenType::Back, TokenType::Stop ])?;
                 let e = self.expr().ok();
-                Ok(Box::new(ASTNode::FlowChange(tk.t, e)))
+                Ok(Node::new(Void, Box::new(ASTNode::FlowChange(tk.t, e))))
             },
             Some(Token { t: TokenType::Skip, ..}) => {
                 let tk = self.assert_next(&[TokenType::Skip])?;
-                Ok(Box::new(ASTNode::FlowChange(tk.t, None)))
+                Ok(Node::new(Void, Box::new(ASTNode::FlowChange(tk.t, None))))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
             None => Err(ParseError::ExpectedToken)
@@ -211,18 +236,18 @@ impl Parser {
 
     fn _loop_(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_peek(&[TokenType::While, TokenType::Loop])?;
-        Ok(Box::new(ASTNode::Loop {
+        Ok(Node::new(Void, Box::new(ASTNode::Loop {
             cond: match self.next_tk() {
                 Some(Token { t: TokenType::While, .. }) => Some(self.expr()?),
                 Some(Token { t: TokenType::Loop, .. }) => None,
                 _ => return Err(ParseError::NotImplemented)  // TODO: Implement For loop
             },
-            body: self.inner_body()? }))
+            body: self.inner_body()? })))
     }
 
     fn cond(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::If])?;
-        Ok(Box::new(ASTNode::Conditional { 
+        Ok(Node::new(Void, Box::new(ASTNode::Conditional { 
             cond: self.expr().ok(),
             body: self.inner_body()?,
             next: match self.peek_tk() {
@@ -230,12 +255,12 @@ impl Parser {
                 Some(Token { t: TokenType::Else, .. }) => Some(self._else_()?),
                 _ => None,
             },
-        }))
+        })))
     }
 
     fn elif(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::Elif])?;
-        Ok(Box::new(ASTNode::Conditional { 
+        Ok(Node::new(Void, Box::new(ASTNode::Conditional { 
             cond: self.expr().ok(),
             body: self.inner_body()?,
             next: match self.peek_tk() {
@@ -243,25 +268,25 @@ impl Parser {
                 Some(Token { t: TokenType::Else, .. }) => Some(self._else_()?),
                 _ => None,
             },
-        }))
+        })))
     }
 
     fn _else_(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::Else])?;
-        Ok(Box::new(ASTNode::Conditional { cond: None, body: self.inner_body()?, next: None, }))
+        Ok(Node::new(Void, Box::new(ASTNode::Conditional { cond: None, body: self.inner_body()?, next: None, })))
     }
 
     fn assign(&mut self) ->  Result<Node, ParseError> {
         let var = self.var()?;
         _ = self.assert_next(&[TokenType::Assign])?;
         let expr = self.expr()?;
-        Ok(Box::new(ASTNode::Assign { var, expr }))
+        Ok(Node::new(Void, Box::new(ASTNode::Assign { var, expr })))
     }
 
     fn fn_call(&mut self) -> Result<Node, ParseError> {
         let tk = self.assert_next(&[TokenType::Id])?;
         if self.assert_next(&[TokenType::Nothing]).is_ok() {
-            return Ok(Box::new(ASTNode::FnCall { caller: tk, params: vec![] }))
+            return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![] })))
         }
         let backup = self.tokenizer.get_state();
         let mut b = backup;
@@ -273,7 +298,7 @@ impl Parser {
                 Ok(e) => {
                     // Only accepts its parameters if none of them is a Unary that did not started with '('
                     // This caused (a + 1) or (a - 1) to be parsed as a function call, when it should be a binary operation
-                    if let ASTNode::Unary { .. } = *e {
+                    if let ASTNode::Unary { .. } = *e.v {
                         if first_tk.unwrap().t != TokenType::OpParen {
                             params.clear();
                             self.tokenizer.set_state(backup);
@@ -292,7 +317,7 @@ impl Parser {
         if params.is_empty() {
             return Err(ParseError::GeneralError("Expected expressions as Function Call Parameters".to_owned()))
         }
-        Ok(Box::new(ASTNode::FnCall { caller: tk, params }))
+        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params })))
     }
 
     fn expr(&mut self) -> Result<Node, ParseError> {
@@ -339,7 +364,7 @@ impl Parser {
             Some(self._type_()?)
         } else { None };
 
-        Ok(Box::new(ASTNode::Func { args, ret, body: self.inner_body()? }))
+        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Func { args, ret, body: self.inner_body()? })))
     }
 
     fn var(&mut self) -> Result<Var, ParseError> {
@@ -358,11 +383,11 @@ impl Parser {
     fn bitwise(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
             Some(Token { t: TokenType::Bnot, ..})  => {
-                Ok(Box::new(
+                Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(
                     ASTNode::Unary {
                         op: self.next_tk().unwrap(),
                         e: self.bitwise()?
-                }))
+                })))
             }
             _ => {
                 Ok(self.parse_generic_chained_binary(|s| s.comparison(), vec![
@@ -379,11 +404,11 @@ impl Parser {
     fn comparison(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
             Some(Token { t: TokenType::Not, ..})  => {
-                Ok(Box::new(
+                Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(
                     ASTNode::Unary {
                         op: self.next_tk().unwrap(),
                         e: self.comparison()?
-                }))
+                })))
             }
             _ => {
                 Ok(self.parse_generic_chained_binary(|s| s.arith(), vec![
@@ -418,10 +443,10 @@ impl Parser {
         match self.peek_tk() {
             Some(Token { t: TokenType::Add, .. }) |
             Some(Token { t: TokenType::Sub, .. }) => {
-                Ok(Box::new(ASTNode::Unary {
+                Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Unary {
                     op: self.next_tk().unwrap(),
                     e: self.primary()? 
-                }))
+                })))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
                 TokenType::Add, TokenType::Sub
@@ -437,7 +462,7 @@ impl Parser {
             Some(tk @ Token { t: TokenType::Integer, .. }) |
             Some(tk @ Token { t: TokenType::Character, .. }) => {
                 _ = self.next_tk(); // Discart prev Token
-                Ok(Box::new(ASTNode::Leaf(tk)))
+                Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Leaf(tk))))
             },
             Some(Token { t: TokenType::OpParen, .. }) => {
                 _ = self.assert_next(&[TokenType::OpParen])?; // Discart prev Token
@@ -457,9 +482,9 @@ impl Parser {
 
     fn parse_compounded_type(
         &mut self,
-        mut method: impl FnMut(&mut Self) -> Result<Node, ParseError>,
+        mut method: impl FnMut(&mut Self) -> Result<InnerNode, ParseError>,
         separator: TokenType
-    ) -> Result<Node, ParseError> {
+    ) -> Result<InnerNode, ParseError> {
         let first = method(self)?;
         if self.assert_peek(&[separator]).is_ok() {
             let mut v = vec![first];
@@ -477,21 +502,25 @@ impl Parser {
     }
 
     fn _type_(&mut self) -> Result<Node, ParseError> {
+        let t = self.parse_type()?;
+        Ok(Node::new(ExprType::from(&t), t))
+    }
+    fn parse_type(&mut self) -> Result<InnerNode, ParseError> {
         self.parse_compounded_type(|s| s.union_type(), TokenType::FnType)
     }
-    fn union_type(&mut self) -> Result<Node, ParseError> {
+    fn union_type(&mut self) -> Result<InnerNode, ParseError> {
         self.parse_compounded_type(|s| s.tuple_type(), TokenType::UnionType)
     }
-    fn tuple_type(&mut self) -> Result<Node, ParseError> {
+    fn tuple_type(&mut self) -> Result<InnerNode, ParseError> {
         self.parse_compounded_type(|s| s.basic_types(), TokenType::TupleType)
     }
 
-    fn basic_types(&mut self) -> Result<Node, ParseError> {
+    fn basic_types(&mut self) -> Result<InnerNode, ParseError> {
         match self.peek_tk() {
             // Type inside parenthesis
             Some(Token { t: TokenType::OpParen, .. }) => {
                 _ = self.assert_next(&[TokenType::OpParen])?;
-                let t = self._type_();
+                let t = self.parse_type();
                 _ = self.assert_next(&[TokenType::ClParen])?;
                 t
             },

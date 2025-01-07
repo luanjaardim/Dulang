@@ -1,7 +1,7 @@
-use crate::{grammar::{Node, ASTNode}, tokenizer::{Token, TokenType}};
+use crate::{grammar::{Node, InnerNode, ASTNode}, tokenizer::{Token, TokenType}};
 
 use ExprType::*;
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ExprType {
     // Types
     Int{ bits: usize, signed: bool }, Real(usize), Char, Bool,
@@ -9,7 +9,35 @@ pub enum ExprType {
     // Compounded types
     FnType(Vec<ExprType>), UnionType(Vec<ExprType>), TupleType(Vec<ExprType>),
 
-    Void, Unknown
+    Type(Box<ExprType>), Void, Unknown(usize)
+}
+impl std::fmt::Debug for ExprType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Int { bits, signed } => write!(f, "Int({bits}, is_signed: {signed})"),
+            Real(bits) => write!(f, "Real({bits})"),
+            Char => write!(f, "Char"),
+            Bool => write!(f, "Bool"),
+            FnType(e) => {
+                write!(f, "(Fn: ")?;
+                for i in 0..e.len() { e[i].fmt(f)?; if i < e.len()-1 { write!(f, ", ")? } }
+                write!(f, ")")
+            },
+            UnionType(e) => {
+                write!(f, "(Union: ")?;
+                for i in 0..e.len() { e[i].fmt(f)?; if i < e.len()-1 { write!(f, ", ")? } }
+                write!(f, ")")
+            },
+            TupleType(e) => {
+                write!(f, "(Tuple: ")?;
+                for i in 0..e.len() { e[i].fmt(f)?; if i < e.len()-1 { write!(f, ", ")? } }
+                write!(f, ")")
+            },
+            Type(t) => write!(f, "Type({:?})", **t),
+            Void => write!(f, "Void"),
+            Unknown(i) => write!(f, "Unknown({i})"),
+        }
+    }
 }
 impl ExprType {
     fn expr_type_eq(f: &ExprType, s: &ExprType, strict_cmp: bool) -> bool {
@@ -17,8 +45,8 @@ impl ExprType {
             (Char, Char)
             | (Bool, Bool)
             | (Void, Void) => true,
-              (_, Unknown) if !strict_cmp => true,
-              (Unknown, _) if !strict_cmp => true,
+              (_, Unknown(_)) if !strict_cmp => true,
+              (Unknown(_), _) if !strict_cmp => true,
 
             (Real(b1), Real(b2)) if b1 == b2 => true,
             (Int { bits: b1, signed: s1 }, Int { bits: b2, signed: s2 }) if b1 == b2 && s1 == s2 => true,
@@ -37,9 +65,9 @@ impl ExprType {
     /// final type, filling every Unknown possible
     fn final_type(self, s: &Self) -> Self {
         let fill_unknown = |l1: Vec<ExprType>, l2: &Vec<ExprType>| {
-            l1.into_iter().zip(l2.iter()).map(|(e1, e2)| if e1 != Unknown { e1 } else { e2.clone() }).collect()
+            l1.into_iter().zip(l2.iter()).map(|(e1, e2)| if !e1.is_unknown() { e1 } else { e2.clone() }).collect()
         };
-        if let Unknown = self { return s.clone() }
+        if let Unknown(_) = self { return s.clone() }
         match (self, s) {
             (FnType(l1), FnType(l2)) => FnType(fill_unknown(l1, l2)),
             (UnionType(l1), UnionType(l2)) => UnionType(fill_unknown(l1, l2)),
@@ -61,7 +89,7 @@ impl ExprType {
     }
 
     // FIX: is unknown should verify its inner types too, if any is unknown the type is unknown
-    fn is_unknown(&self) -> bool { if let Unknown = self { true } else { false }}
+    fn is_unknown(&self) -> bool { if let Unknown(_) = self { true } else { false }}
 }
 
 /// Comparing between ExprType with '==' or '!=' is not a strict
@@ -76,8 +104,8 @@ impl PartialEq for ExprType {
     }
 }
 
-impl From<&Node> for ExprType {
-    fn from(value: &Node) -> Self {
+impl From<&InnerNode> for ExprType {
+    fn from(value: &InnerNode) -> Self {
         match &**value {
             ASTNode::Type { t: TokenType::I32, inner_types } if inner_types.is_empty() => Int { bits: 32, signed: true },
             ASTNode::Type { t: TokenType::U32, inner_types } if inner_types.is_empty() => Int { bits: 32, signed: false },
@@ -89,15 +117,15 @@ impl From<&Node> for ExprType {
             ASTNode::Type { t: TokenType::FnType, inner_types } => FnType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
             ASTNode::Type { t: TokenType::UnionType, inner_types } => UnionType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
             ASTNode::Type { t: TokenType::TupleType, inner_types } => TupleType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
-            _ => Unknown,
+            _ => panic!("Unknown conversion between ASTNode and ExprType"),
         }
     }
 }
 
 #[derive(Debug)]
-struct Var {
-    v: Token,
-    t: ExprType,
+pub struct Var {
+    pub v: Token,
+    pub t: ExprType,
 }
 
 #[derive(Debug)]
@@ -115,6 +143,17 @@ pub enum ScopeAttr {
 }
 
 pub enum Elem { Var(Var), Scope(Scope) }
+impl Elem {
+    pub fn get_var(&self) -> &Var {
+        if let Elem::Var(v) =  self { v }
+        else { panic!("Trying to get a variable from a Scope Elem") }
+    }
+
+    pub fn get_scp(&self) -> &Scope {
+        if let Elem::Scope(s) =  self { s }
+        else { panic!("Trying to get a Scope from a Var Elem") }
+    }
+}
 impl std::fmt::Debug for Elem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -190,7 +229,12 @@ impl Scope {
 
             let scp_ref = &mut *scp;
             if let ScopeAttr::FuncScope { ret_type, .. } = &mut scp_ref.attrs {
-                *ret_type = t;
+                if ret_type.is_unknown() || *ret_type == t {
+                    *ret_type = t;
+                } else {
+                    // TODO: make this error better readable, what function occurred?
+                    panic!("Returning function with different return types")
+                }
             } else {
                 Scope::set_cur_func_ret_type(scp_ref.scp_father as *mut Scope, t) 
             }
@@ -206,67 +250,153 @@ pub enum VisitorError {
     NotImplemented(ASTNode)
 }
 
-pub struct Visitor<'ast> {
-    ast: &'ast Vec<Node>,
+pub struct Visitor {
     pub glob_scope: Option<Scope>,
+    pub unknown_map: Vec<ExprType>,
+    unknown_id: usize,
 }
 
-impl<'ast> Visitor<'ast> {
-    pub fn new(parsed_ast: &'ast Vec<Node>) -> Self {
-        Visitor { ast: parsed_ast, glob_scope: None }
+impl Visitor {
+    pub fn new(unknown_id: usize) -> Self {
+        Visitor { glob_scope: None, unknown_id, unknown_map: vec![Unknown(0); unknown_id+1] }
     }
 
-    pub fn traverse(&mut self) -> Result<(), std::io::Error> {
+    fn get_unknown_id(&mut self) -> usize {
+        self.unknown_id += 1;
+        self.unknown_map.push(Unknown(0));
+        self.unknown_id
+    }
+
+    fn equivalent_types(&mut self, f: &ExprType, s: &ExprType) -> Result<(), VisitorError> {
+        match (f, s) {
+            (Unknown(f_ind), Unknown(s_ind)) => {
+                let (first, second) = (self.unknown_map[*f_ind].clone(), self.unknown_map[*s_ind].clone());
+                if let (Unknown(ind1), Unknown(ind2)) = (&first, &second) {
+                    if *ind1 == 0 {
+                        self.unknown_map[*f_ind] = Unknown(*ind2);
+                    } else if *ind2 == 0 {
+                        self.unknown_map[*f_ind] = Unknown(*ind1);
+                    } else {
+                        self.equivalent_types(&first, &second)?;
+                    }
+                }
+            },
+            (Unknown(i), t) |
+            (t, Unknown(i)) => {
+                self.unknown_map[*i] = t.clone();
+            },
+            (FnType(inner1), FnType(inner2)) |
+            (UnionType(inner1), UnionType(inner2)) |
+            (TupleType(inner1), TupleType(inner2)) => {
+                if inner1.len() != inner2.len() {
+                    return Err(VisitorError::MismatchedTypes(f.clone(), s.clone()))
+                } else {
+                    for (e1, e2) in inner1.iter().zip(inner2.iter()) {
+                        self.equivalent_types(e1, e2)?;
+                    }
+                }
+            }
+            (t, t2) => if t != t2 { return Err(VisitorError::MismatchedTypes(f.clone(), s.clone())) }
+        };
+        Ok(())
+    }
+
+    fn get_type(&self, t: ExprType) -> ExprType {
+        match t {
+            Unknown(ind) => {
+                if let Unknown(i) = self.unknown_map[ind] {
+                    if i == 0 { t }
+                    else { self.get_type(Unknown(i)) }
+                }
+                else {
+                    self.unknown_map[ind].clone()
+                }
+            },
+            FnType(elems) => FnType(elems.into_iter().map(|e| self.get_type(e)).collect()),
+            UnionType(elems) => UnionType(elems.into_iter().map(|e| self.get_type(e)).collect()),
+            TupleType(elems) => TupleType(elems.into_iter().map(|e| self.get_type(e)).collect()),
+            _ => t
+        }
+    }
+
+    pub fn traverse(&mut self, ast: &mut Vec<Node>) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
         let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, elems: vec![], scp_father: std::ptr::null() };
-        for n in self.ast {
+        for n in ast {
             self.visit(&mut global_scope, Void, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
         self.glob_scope = Some(global_scope);
         Ok(())
     }
 
-    fn visit(&mut self, scope: &mut Scope, expected_type: ExprType, node: &Node) -> Result<ExprType, VisitorError> {
-        match &**node {
-            ASTNode::Assign { var: (v, var_type), expr: expression } => {
+    fn visit(&mut self, scope: &mut Scope, expected_type: ExprType, node: &mut Node) -> Result<ExprType, VisitorError> {
+        match &mut *node.v {
+            ASTNode::Assign { var: (tk, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
                 let assign_index = scope.elems.len();
-                let expected_type = var_type.as_ref().map_or(Unknown, |t| ExprType::from(t));
-                let expression_type = self.visit(scope, expected_type, expression)?;
+                if t.is_none() {
+                    *t = Some(t.clone()
+                               .map_or(
+                                   Node::new(Unknown(self.get_unknown_id()),
+                                             Box::new(ASTNode::Empty)),
+                                   |itself| itself)
+                        );
+                }
+                // Guaranteed it's Some since the if above
+                let expected_type = t.as_ref().unwrap().t.clone();
+                let expression_type = self.visit(scope, expected_type.clone(), expr)?;
+                println!("{expected_type:?} {expression_type:?}");
+                self.equivalent_types(&expected_type, &expression_type)?;
+                println!("{:?} {:?}", self.get_type(expected_type.clone()), self.get_type(expression_type));
                 if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..})) = scope.elems.get_mut(assign_index) {
-                    *name = String::from(&v.text);
+                    *name = String::from(&tk.text);
                 } else {
                     scope.elems.push(Elem::Var(Var {
-                        v: v.clone(),
-                        t: expression_type,
+                        v: tk.clone(),
+                        t: self.get_type(expected_type),
                     }));
                 }
                 Ok(Void)
             },
             ASTNode::Func { args, ret, body } => {
-                let ret_type = ret.as_ref().map_or(Unknown, |t| ExprType::from(t)).clone();
+                *ret = Some(ret.clone().map_or(
+                                       Node::new(Unknown(self.get_unknown_id()),
+                                                 Box::new(ASTNode::Empty)),
+                                       |itself| itself));
+                let ret_type = ret.as_ref().unwrap().t.clone();
+                for (_, t) in &mut *args {
+                    if t.is_none() {
+                        *t = Some(t.clone()
+                                   .map_or(
+                                       Node::new(Unknown(self.get_unknown_id()),
+                                                 Box::new(ASTNode::Empty)),
+                                       |itself| itself)
+                            );
+                    }
+                }
                 let fn_type = FnType(
                     if !args.is_empty() {
                         (0..args.len())
-                            .map(|i| args[i].1.as_ref().map_or(Unknown, |t| ExprType::from(t)).clone())
+                            .map(|i| args[i].1.as_ref().unwrap().t.clone())
                             .chain([ret_type])
                             .collect()
                     } else {
                         vec![Void, ret_type]
                     });
                 if fn_type == expected_type {
-                    let known_func_type = fn_type.final_type(&expected_type);
+                    self.equivalent_types(&fn_type, &expected_type)?;
+                    let fn_type = self.get_type(expected_type);
 
                     let mut scp = Scope {
                         attrs: ScopeAttr::FuncScope {
                             name: String::new(), // will be filled when return the function call
-                            ret_type: known_func_type.get_fn_return_type(),
+                            ret_type: fn_type.get_fn_return_type(),
                             args_len: args.len(),
                         },
                         elems: (0..args.len()).map(|i| Elem::Var(Var {
                                   v: args[i].0.clone(),
-                                  t: known_func_type.get_nth_inner_type(i),
+                                  t: fn_type.get_nth_inner_type(i),
                               })).collect(),
                         scp_father: scope,
                     };
@@ -274,21 +404,8 @@ impl<'ast> Visitor<'ast> {
                         // TODO: Void may not be the best type to be expected, but for statements it's fine
                         self.visit(&mut scp, Void, node)?;
                     }
-
-                    let (args_len, ret_type) = if let ScopeAttr::FuncScope { args_len, ret_type, .. } = &scp.attrs
-                                        { (args_len, ret_type) }
-                                   else { unreachable!() };
-                    let mut t: Vec<ExprType> = if *args_len == 0 { vec![Void] } else { vec![] };
-                    t.extend((0..*args_len).map(|i| 
-                                    if let Elem::Var(Var { t, .. }) = &scp.elems[i] {
-                                        t.clone()
-                                    } else { unreachable!() }
-                    ).chain([ret_type.clone()]));
-
                     scope.elems.push(Elem::Scope(scp));
-
-                    // Return the type of the function after its body is completely analyzed
-                    Ok(FnType(t))
+                    Ok(fn_type)
                 } else {
                     Err(VisitorError::MismatchedTypes(fn_type, expected_type))
                 }
@@ -326,40 +443,19 @@ impl<'ast> Visitor<'ast> {
                     self.visit(scope, Bool, n)?;
                 }
                 Ok(Void)
-            }
-            ASTNode::FlowChange(tk_type, ret) => {
-                match tk_type {
-                    TokenType::Back => {
-                        let ret_type = if let Some(fn_scope) = scope.get_cur_func_scp() {
-                            if let ScopeAttr::FuncScope { ret_type, .. } = &fn_scope.attrs {
-                                ret_type.clone()
-                            } else { unreachable!("get_current_function_scope only returns a scope that is from a function") }
-                        } else {
-                            return Err(VisitorError::GeneralError(String::from("Use Back outside a function")))
-                        };
-                        let back_type = ret.as_ref().map_or(Ok(Void), |e| self.visit(scope, ret_type, e))?;
-                        Scope::set_cur_func_ret_type(scope, back_type);
-                    },
-                    TokenType::Stop if scope.is_inside_loop() => (),
-                    TokenType::Skip if scope.is_inside_loop() => (),
-                    TokenType::Skip | TokenType::Stop =>
-                         return Err(VisitorError::GeneralError(String::from("Use of Loop Control Flow outside a Loop"))),
-                    _ => return Err(VisitorError::NotImplemented(*node.clone())),
-                }
-                Ok(Void)
             },
             ASTNode::Binary { op: Token { t: tk_type, .. }, l, r } => {
                 use TokenType::*;
-                let (l_type, r_type) = (self.visit(scope, Unknown, l)?, self.visit(scope, Unknown, r)?);
-                // TODO: We can use the known type from of the arms to infer the type of the another it's Unknown
-                if !ExprType::expr_type_eq(&l_type, &r_type, true) {
-                    return Err(VisitorError::MismatchedTypes(l_type, r_type));
-                }
-                match *tk_type {
-                    Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { Ok(l_type) },
-                    GrE | GrT | LeE | LeT | Neq | Eq | And | Or => { Ok(ExprType::Bool) },
+                let branch_type = Unknown(self.get_unknown_id());
+                let (l_type, r_type) = (self.visit(scope, branch_type.clone(), l)?, self.visit(scope, branch_type, r)?);
+                self.equivalent_types(&l_type, &r_type)?;
+                let expr_type = match *tk_type {
+                    Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { l_type },
+                    GrE | GrT | LeE | LeT | Neq | Eq | And | Or => { ExprType::Bool },
                     _ => panic!("Unknown Binary operator."),
-                }
+                };
+                self.equivalent_types(&expected_type, &expr_type)?;
+                Ok(self.get_type(expected_type))
             },
             ASTNode::Unary { op: Token { t: tk_type, .. }, e } => {
                 use TokenType::*;
@@ -382,24 +478,22 @@ impl<'ast> Visitor<'ast> {
                     TokenType::Real => Real(64),
                     TokenType::Integer => Int { bits: 64, signed: true },
                     TokenType::Id => {
-                        if let Some(t) = Scope::find_var(scope, &tk.text) { 
+                        if let Some(t) = Scope::find_var(scope, &tk.text) {
                             if t != expected_type {
                                 return Err(VisitorError::MismatchedTypes(t, expected_type))
                             } else {
-                                let var_type = expected_type.final_type(&t);
-                                // Update var type if it is Unknown
-                                if t.is_unknown() { Scope::update_var_type(scope, var_type.clone(), &tk.text) }
-                                var_type
+                                self.equivalent_types(&expected_type, &t)?;
+                                self.get_type(expected_type)
                             }
                         }
                         else {
                             return Err(VisitorError::VariableNotDeclared(tk.text.clone()))
                         }
                     }
-                    _ => return Err(VisitorError::NotImplemented(*node.clone())),
+                    _ => return Err(VisitorError::NotImplemented(*node.v.clone())),
                 })
-            }
-            _ => Err(VisitorError::NotImplemented(*node.clone())),
+            },
+            _ => Err(VisitorError::NotImplemented(*node.v.clone()))
         }
     }
 }
