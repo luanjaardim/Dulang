@@ -272,13 +272,17 @@ impl Visitor {
             (Unknown(f_ind), Unknown(s_ind)) => {
                 let (first, second) = (self.unknown_map[*f_ind].clone(), self.unknown_map[*s_ind].clone());
                 if let (Unknown(ind1), Unknown(ind2)) = (&first, &second) {
-                    if *ind1 == 0 {
+                    if *ind1 != 0 {
+                        self.unknown_map[*s_ind] = Unknown(*ind1);
+                    } else if *ind2 != 0 {
                         self.unknown_map[*f_ind] = Unknown(*ind2);
-                    } else if *ind2 == 0 {
-                        self.unknown_map[*f_ind] = Unknown(*ind1);
+                    } else if *ind1 == 0 && *ind2 == 0 {
+                        self.unknown_map[*s_ind] = Unknown(*f_ind);
                     } else {
                         self.equivalent_types(&first, &second)?;
                     }
+                } else {
+                    panic!("shit bro....");
                 }
             },
             (Unknown(i), t) |
@@ -322,10 +326,11 @@ impl Visitor {
     pub fn traverse(&mut self, ast: &mut Vec<Node>) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
         let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, elems: vec![], scp_father: std::ptr::null() };
-        for n in ast {
+        for n in &mut *ast {
             self.visit(&mut global_scope, Void, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
         self.glob_scope = Some(global_scope);
+        self.update_types(ast)?;
         Ok(())
     }
 
@@ -346,9 +351,7 @@ impl Visitor {
                 // Guaranteed it's Some since the if above
                 let expected_type = t.as_ref().unwrap().t.clone();
                 let expression_type = self.visit(scope, expected_type.clone(), expr)?;
-                println!("{expected_type:?} {expression_type:?}");
                 self.equivalent_types(&expected_type, &expression_type)?;
-                println!("{:?} {:?}", self.get_type(expected_type.clone()), self.get_type(expression_type));
                 if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..})) = scope.elems.get_mut(assign_index) {
                     *name = String::from(&tk.text);
                 } else {
@@ -444,13 +447,35 @@ impl Visitor {
                 }
                 Ok(Void)
             },
+            ASTNode::FlowChange(tk_type, ret) => {
+                match tk_type {
+                    TokenType::Back => {
+                        let ret_type = if let Some(fn_scope) = scope.get_cur_func_scp() {
+                            if let ScopeAttr::FuncScope { ret_type, .. } = &fn_scope.attrs {
+                                ret_type.clone()
+                            } else { unreachable!("get_current_function_scope only returns a scope that is from a function") }
+                        } else {
+                            return Err(VisitorError::GeneralError(String::from("Use Back outside a function")))
+                        };
+                        let back_type = ret.as_mut().map_or(Ok(Void), |e| self.visit(scope, ret_type.clone(), e))?;
+                        self.equivalent_types(&back_type, &ret_type)?;
+                    },
+                    TokenType::Stop if scope.is_inside_loop() => (),
+                    TokenType::Skip if scope.is_inside_loop() => (),
+                    TokenType::Skip | TokenType::Stop =>
+                         return Err(VisitorError::GeneralError(String::from("Use of Loop Control Flow outside a Loop"))),
+                    _ => return Err(VisitorError::NotImplemented(*node.v.clone())),
+                }
+                Ok(Void)
+            },
             ASTNode::Binary { op: Token { t: tk_type, .. }, l, r } => {
                 use TokenType::*;
                 let branch_type = Unknown(self.get_unknown_id());
                 let (l_type, r_type) = (self.visit(scope, branch_type.clone(), l)?, self.visit(scope, branch_type, r)?);
                 self.equivalent_types(&l_type, &r_type)?;
+                self.equivalent_types(&r_type, &node.t)?;
                 let expr_type = match *tk_type {
-                    Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { l_type },
+                    Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { self.get_type(l_type) },
                     GrE | GrT | LeE | LeT | Neq | Eq | And | Or => { ExprType::Bool },
                     _ => panic!("Unknown Binary operator."),
                 };
@@ -459,21 +484,23 @@ impl Visitor {
             },
             ASTNode::Unary { op: Token { t: tk_type, .. }, e } => {
                 use TokenType::*;
-                match tk_type {
-                    Bnot | Add => Ok(self.visit(scope, expected_type, e)?),
+                let t = match tk_type {
+                    Bnot | Add => self.visit(scope, expected_type, e)?,
                     Sub => {
                         let t = self.visit(scope, expected_type, e)?;
                         match t {
-                            ExprType::Int { signed: true, .. } | ExprType::Real(_) => Ok(t),
+                            ExprType::Int { signed: true, .. } | ExprType::Real(_) => t,
                             _ => panic!("Trying to sign an unsigned integer")
                         }
                     },
-                    Not => Ok(self.visit(scope, ExprType::Bool, e)?),
+                    Not => self.visit(scope, ExprType::Bool, e)?,
                     _ => panic!("Unknown Binary operator. {:?}", e),
-                }
+                };
+                self.equivalent_types(&t, &node.t)?;
+                Ok(t)
             },
             ASTNode::Leaf(tk) => {
-                Ok(match tk.t {
+                let t = match tk.t {
                     TokenType::Character => Char,
                     TokenType::Real => Real(64),
                     TokenType::Integer => Int { bits: 64, signed: true },
@@ -491,9 +518,68 @@ impl Visitor {
                         }
                     }
                     _ => return Err(VisitorError::NotImplemented(*node.v.clone())),
-                })
+                };
+                self.equivalent_types(&t, &node.t)?;
+                Ok(t)
             },
             _ => Err(VisitorError::NotImplemented(*node.v.clone()))
         }
+    }
+
+    pub fn update_types(&mut self, ast: &mut Vec<Node>) -> Result<(), std::io::Error> {
+        use std::io::{Error, ErrorKind};
+        for n in ast {
+            self.update_types_aux(n)?;
+        }
+        Ok(())
+    }
+
+    pub fn update_types_aux(&mut self, ast: &mut Node) -> Result<(), std::io::Error> {
+        match &mut *ast.v {
+            ASTNode::Assign { var: (_, Some(node)), expr } => {
+                self.update_types_aux(node)?;
+                self.update_types_aux(expr)?;
+                let final_type = self.get_type(node.t.clone());
+                node.t = final_type.clone();
+                expr.t = final_type;
+            },
+            ASTNode::Func { args, ret: Some(Node { t, .. }), body } => {
+                *t = self.get_type(t.clone());
+                for arg in &mut *args {
+                    if let (_, Some(node)) = arg {
+                        self.update_types_aux(node)?;
+                    }
+                }
+                self.update_types(body)?;
+            },
+            ASTNode::Loop { cond, body } => {
+                if let Some(condition) = cond {
+                    self.update_types_aux(condition)?;
+                }
+                self.update_types(body)?;
+            }
+            ASTNode::Conditional { cond, body, next } => {
+                if let Some(condition) = cond {
+                    self.update_types_aux(condition)?;
+                }
+                self.update_types(body)?;
+                if let Some(node) = next {
+                    self.update_types_aux(node)?;
+                }
+            },
+            ASTNode::Binary { l, r, .. } => {
+                self.update_types_aux(l)?;
+                self.update_types_aux(r)?;
+            },
+            ASTNode::Unary { e, .. } => self.update_types_aux(e)?,
+            ASTNode::FlowChange(_, e) => if let Some(expr) = e {
+                self.update_types_aux(expr)?
+            },
+            _ => (),
+        }
+        if let t @ Unknown(_) = &mut ast.t {
+            *t = self.get_type(t.clone());
+        }
+        Ok(())
     }
 }
