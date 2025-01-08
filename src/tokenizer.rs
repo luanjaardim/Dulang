@@ -19,7 +19,7 @@ pub enum TokenType {
     Skip, Stop, Back,                       // skip, stop, back
 
     // Types
-    I32, U32, Char, F32, F64, Bool, Void,
+    I(usize), U(usize), F(usize), Char, Bool, Void,
 
     // Compounded types
     FnType, UnionType, TupleType,           // ->, ^, &
@@ -55,11 +55,13 @@ impl Token {
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr,
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
                 "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf, "()" => Nothing,
-                "i32" => I32, "u32" => U32, "char" => Char, "f32" => F32, "f64" => F64, "bool" => Bool, "void" => Void,
-                "->" => FnType, "^" => UnionType, "&" => TupleType,
+                "bool" => Bool, "void" => Void, "->" => FnType, "^" => UnionType, "&" => TupleType,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
+                _ if regex::Regex::new(r"i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"u\d+").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"f\d+").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
                 _ => panic!("Token type is unkown: {text}")
             }),

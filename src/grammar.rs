@@ -358,8 +358,6 @@ impl Parser {
         // End of the function args '|'
         _ = self.assert_next(&[TokenType::FnBar])?;
 
-        // TODO: Change types to be an ASTNode, as a complex type would need more
-        // than a Token to be represented
         let ret = if self.assert_next(&[TokenType::FnReturn]).is_ok() {
             Some(self._type_()?)
         } else { None };
@@ -524,12 +522,14 @@ impl Parser {
                 _ = self.assert_next(&[TokenType::ClParen])?;
                 t
             },
+            Some(Token { t: t @ TokenType::U(_), .. }) |
+            Some(Token { t: t @ TokenType::I(_), .. }) |
+            Some(Token { t: t @ TokenType::F(_), .. }) => {
+                _ = self.next_tk();
+                Ok(Box::new(ASTNode::Type { t, inner_types: vec![] }))
+            },
             Some(_) => self.assert_next(&[
-                            TokenType::I32,
-                            TokenType::U32,
                             TokenType::Char,
-                            TokenType::F32,
-                            TokenType::F64,
                             TokenType::Bool,
                             TokenType::Void,
                         ]).map(|e| Box::new(ASTNode::Type { t: e.t, inner_types: vec![] })),

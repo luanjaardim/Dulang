@@ -107,10 +107,9 @@ impl PartialEq for ExprType {
 impl From<&InnerNode> for ExprType {
     fn from(value: &InnerNode) -> Self {
         match &**value {
-            ASTNode::Type { t: TokenType::I32, inner_types } if inner_types.is_empty() => Int { bits: 32, signed: true },
-            ASTNode::Type { t: TokenType::U32, inner_types } if inner_types.is_empty() => Int { bits: 32, signed: false },
-            ASTNode::Type { t: TokenType::F32, inner_types } if inner_types.is_empty() => Real(32),
-            ASTNode::Type { t: TokenType::F64, inner_types } if inner_types.is_empty() => Real(64),
+            ASTNode::Type { t: TokenType::I(bits), inner_types } if inner_types.is_empty() => Int { bits: *bits, signed: true },
+            ASTNode::Type { t: TokenType::U(bits), inner_types } if inner_types.is_empty() => Int { bits: *bits, signed: false },
+            ASTNode::Type { t: TokenType::F(bits), inner_types } if inner_types.is_empty() => Real(*bits),
             ASTNode::Type { t: TokenType::Bool, inner_types } if inner_types.is_empty() => Bool,
             ASTNode::Type { t: TokenType::Char, inner_types } if inner_types.is_empty() => Char,
             ASTNode::Type { t: TokenType::Void, inner_types } if inner_types.is_empty() => Void,
