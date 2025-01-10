@@ -20,19 +20,19 @@ pub enum TokenType {
     Skip, Stop, Back,                       // skip, stop, back
 
     // Types
-    I(usize), U(usize), F(usize), Char, Bool, Void,
+    I(usize), U(usize), F(usize), Char, Bool,
 
     // Compounded types
-    FnType, UnionType, TupleType, Type,    // ->, ^, &, type
+    FnType, UnionType, TupleType,           // ->, |, ^
 
-    Assign, FnBar, FnReturn, TypeInf,      // =, |, =>, ::
+    Assign, Type, TypeInf,                  // =, type, ::
 
     // Symbols
-    OpCurly, ClCurly, OpParen, ClParen,    // {, }, (, ),
-    Comma, Dot, Semicolon,                 // ',' , '.' , ';'
-    Nothing,                               // '()',
+    OpCurly, ClCurly, OpParen, ClParen,     // {, }, (, ),
+    Comma, Dot, Semicolon, Colon,           // ',' , '.' , ';', ':'
+    None,                                   // none,
 
-    Nl,                                    // New line '\n'
+    Nl,                                     // New line '\n'
 
     //RealAdd, RealSub, RealMul, RealDiv,   // +., -., *., /. (Maybe?)
 }
@@ -53,9 +53,9 @@ impl Token {
                 "==" => Eq, "!=" => Neq, ">" => GrT, ">=" => GrE, "<" => LeT, "<=" => LeE,
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr,
-                "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
-                "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf, "()" => Nothing,
-                "char" => Char, "bool" => Bool, "void" => Void, "->" => FnType, "^" => UnionType, "&" => TupleType, "type" => Type,
+                "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon, ":" => Colon,
+                "=" => Assign, "::" => TypeInf, "none" => TokenType::None, "char" => Char, "bool" => Bool,
+                "->" => FnType, "|" => UnionType, "^" => TupleType, "type" => Type,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
@@ -104,7 +104,7 @@ impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
     const SEPARATORS: [&'static str; 24] = [
-      "=>", "==", ">=", "<=", "!=", "::", "->", "()", "|", "=", ",", ";", "+", "-", "*", "/", "^", "&", "(", ")", "{", "}", "[", "]"
+      "=>", "==", ">=", "<=", "!=", "::", "->", "|", ":", "=", ",", ";", "+", "-", "*", "/", "^", "&", "(", ")", "{", "}", "[", "]"
     ];
 
     // NOTE: the order is important here, as every Real contains Integer it must goes first
@@ -160,11 +160,11 @@ impl Tokenizer {
         // Now we are looking only to the next word(the first chars that are not whitespaces)
         let word = match rest.chars().enumerate().find(|e| e.1.is_ascii_whitespace()) {
             Some((pos, _)) => &rest[0..pos],
-            None => if rest.is_empty() { return None } else { rest }
+            Option::None => if rest.is_empty() { return Option::None } else { rest }
         };
 
         let sep_and_pos = Tokenizer::SEPARATORS.iter()
-                              .filter_map(|sep| word.find(*sep).map_or(None, |pos| Some((sep, pos))))
+                              .filter_map(|sep| word.find(*sep).map_or(Option::None, |pos| Some((sep, pos))))
                               // at the first position we have the separator, and the second is its position
                               .reduce(|acc, cur|
                                       if cur.1 < acc.1 { cur }  // if the cur separator appeared before
@@ -181,7 +181,7 @@ impl Tokenizer {
                     Token::new(self.c+pos, self.l, sep)
                 }
             },
-            None => Token::new(self.c, self.l, word)
+            Option::None => Token::new(self.c, self.l, word)
         };
         // update counters positions
         let consumed_chars = if sep_and_pos.is_none() { word.len() } else { sep_and_pos?.1 + sep_and_pos?.0.len() };

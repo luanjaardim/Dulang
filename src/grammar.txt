@@ -28,15 +28,19 @@ loop ::==
 	"loop" inner-body
 
 expr ::==
+	parsed-expr ("::" type)?
+
+parsed-expr :: ==
 	func
 	cond
 	fn-call
+	type
 	bitwise
 	unary
 
 func ::==
-	"|" (var ( "," var )*)? "|" ( "->" type )? expr
-	"|" (var ( "," var )*)? "|" ( "->" type )? inner-body
+	TODO: "(" (var ( "," var )*)? ")" type? ":" expr
+	"(" (var ( "," var )*)? ")" type? ":" (inner-body | func)
 
 var ::==
 	ID ("::" type)?
@@ -80,10 +84,12 @@ tuple_type ::==
 
 basic_types ::==
 	"(" type ")"
-	"i32"
-	"u32"
+	"i%d"
+	"u%d"
+	"f%d"
 	"char"
-	"f32"
-	"f64"
 	"bool"
+	"type"
+	"none"
+	ID
 
