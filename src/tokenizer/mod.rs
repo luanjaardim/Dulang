@@ -1,9 +1,10 @@
 use std::rc::Rc;
+pub mod tokentype_partialeq;
 
 use TokenType::*;
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum TokenType {
-    Str, Integer, Real, Character, Comment, Id,
+    Str, Integer, Real, Character, Comment, Id(String),
 
     // Numerical Operations
     Add, Sub, Mul, Div,                     // +, -. *, /
@@ -22,9 +23,9 @@ pub enum TokenType {
     I(usize), U(usize), F(usize), Char, Bool, Void,
 
     // Compounded types
-    FnType, UnionType, TupleType,           // ->, ^, &
+    FnType, UnionType, TupleType, Type,    // ->, ^, &, type
 
-    Assign, FnBar, FnReturn, TypeInf,       // =, |, =>, ::
+    Assign, FnBar, FnReturn, TypeInf,      // =, |, =>, ::
 
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,    // {, }, (, ),
@@ -41,7 +42,6 @@ pub struct Token {
     c : usize,
     l : usize,
     pub t : TokenType,
-    pub text : String,
 }
 
 impl Token {
@@ -55,22 +55,21 @@ impl Token {
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr,
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon,
                 "=" => Assign, "=>" => FnReturn, "|" => FnBar, "::" => TypeInf, "()" => Nothing,
-                "bool" => Bool, "void" => Void, "->" => FnType, "^" => UnionType, "&" => TupleType,
+                "char" => Char, "bool" => Bool, "void" => Void, "->" => FnType, "^" => UnionType, "&" => TupleType, "type" => Type,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
                 _ if regex::Regex::new(r"i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"u\d+").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"f\d+").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id,
+                _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id(text.to_string()),
                 _ => panic!("Token type is unkown: {text}")
             }),
-            text: String::from(text)
         }
 
     }
 
-    pub fn nl(next_line: usize) -> Token { Token { c: 0, l: next_line, t: Nl, text: "\\n".to_string() } }
+    pub fn nl(next_line: usize) -> Token { Token { c: 0, l: next_line, t: Nl } }
 
     pub fn position(&self) -> (usize, usize) { (self.l, self.c) }
 }
@@ -78,7 +77,7 @@ impl Token {
 // this will omit the position
 impl std::fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Token({:?}, {})", self.t, self.text)
+        write!(f, "Token({:?})", self.t)
     }
 }
 
@@ -86,7 +85,7 @@ impl std::fmt::Debug for Token {
 // NOTE: The Debug do not show the position for a better ASTNode printing, so the Display will show
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Token({:?}, {}) at (lin: {}, col: {})", self.t, self.text, self.l, self.c)
+        write!(f, "Token({:?}) at (lin: {}, col: {})", self.t, self.l, self.c)
     }
 }
 
@@ -151,7 +150,7 @@ impl Tokenizer {
             return match t {
                 Comment => self.next(), // Continue search if it's a comment
                 _ => {
-                    self.read_tks.push(Token { c: self.c, l: self.l, t, text });
+                    self.read_tks.push(Token { c: self.c, l: self.l, t });
                     Some(self.get_cur_tk_and_advance())
                 }
             }
@@ -208,7 +207,7 @@ impl Tokenizer {
         let p = Tokenizer::PATTERNS.iter().find(|p|
             regex::Regex::new(p.0).unwrap().is_match(text)
         )?;
-        Some((regex::Regex::new(p.0).unwrap().find(text)?, p.1))
+        Some((regex::Regex::new(p.0).unwrap().find(text)?, p.1.clone()))
     }
 
     fn skip_ascii_whitespaces(&mut self) {

@@ -1,6 +1,14 @@
 use crate::{tokenizer::*, visitor::ExprType::{self, Unknown, Void}};
+// use crate::tokenizer::*;
 use std::io::Read;
 use std::rc::Rc;
+
+// use ExprType::{Void, Unknown};
+// #[derive(Debug, Clone)]
+// pub enum ExprType {
+//     Unknown(usize),
+//     Void
+// }
 
 #[derive(Clone)]
 pub struct Node {
@@ -131,10 +139,10 @@ impl Parser {
     /// Verifies if the next token type is one of the `possible_next_tokens`
     fn assert_peek(&mut self, possible_next_tokens_types: &[TokenType]) -> Result<Token, ParseError> {
         let (tk, next_tk_type) = match self.peek_tk() {
-            Some(tk @ Token { t, .. }) => (tk, t),
+            Some(ref tk @ Token { ref t, .. }) => (tk.clone(), t.clone()),
             None => return Err(ParseError::ExpectedToken)
         };
-        if possible_next_tokens_types.iter().any(|poss_tk_type| *poss_tk_type == next_tk_type ) { return Ok(tk) }
+        if possible_next_tokens_types.iter().any(|poss_tk_type| *poss_tk_type == next_tk_type) { return Ok(tk) }
         Err(ParseError::TokenNotExpected(tk, possible_next_tokens_types.to_vec()))
     }
 
@@ -204,9 +212,9 @@ impl Parser {
     fn sttm(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
             // Var definition
-            Some(Token { t: TokenType::Id, ..}) => {
+            Some(Token { t: TokenType::Id(_), ..}) => {
                 let backup = self.tokenizer.get_state(); // Return to before the var if it's not an assignment
-                                                         //
+
                 if let ret @ Ok(_) = self.assign() { return ret }
                 self.tokenizer.set_state(backup);
                 if let ret @ Ok(_) = self.fn_call() { return ret }
@@ -229,7 +237,7 @@ impl Parser {
                 let tk = self.assert_next(&[TokenType::Skip])?;
                 Ok(Node::new(Void, Box::new(ASTNode::FlowChange(tk.t, None))))
             },
-            Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id])),
+            Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id(String::new())])),
             None => Err(ParseError::ExpectedToken)
         }
     }
@@ -284,7 +292,7 @@ impl Parser {
     }
 
     fn fn_call(&mut self) -> Result<Node, ParseError> {
-        let tk = self.assert_next(&[TokenType::Id])?;
+        let tk = self.assert_next(&[TokenType::Id(String::new())])?;
         if self.assert_next(&[TokenType::Nothing]).is_ok() {
             return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![] })))
         }
@@ -331,6 +339,14 @@ impl Parser {
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.fn_call() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self._type_() {
+            if let Ok(Node { t: ExprType::Alias(_), .. }) = &ret {
+                println!("Ignore type if it's only a single alias")
+            } else {
+                return ret
+            }
+        }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.bitwise() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.unary() { return ret }
@@ -367,7 +383,7 @@ impl Parser {
 
     fn var(&mut self) -> Result<Var, ParseError> {
         Ok((
-            self.assert_next(&[TokenType::Id])?,
+            self.assert_next(&[TokenType::Id(String::new())])?,
             match self.peek_tk() {
                 Some(Token { t: TokenType::TypeInf, .. }) => {
                     _ = self.next_tk();
@@ -454,7 +470,7 @@ impl Parser {
     }
     fn primary(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
-            Some(tk @ Token { t: TokenType::Id, .. }) |
+            Some(tk @ Token { t: TokenType::Id(_), .. }) |
             Some(tk @ Token { t: TokenType::Str, .. }) |
             Some(tk @ Token { t: TokenType::Real, .. }) |
             Some(tk @ Token { t: TokenType::Integer, .. }) |
@@ -484,10 +500,10 @@ impl Parser {
         separator: TokenType
     ) -> Result<InnerNode, ParseError> {
         let first = method(self)?;
-        if self.assert_peek(&[separator]).is_ok() {
+        if self.assert_peek(&[separator.clone()]).is_ok() {
             let mut v = vec![first];
             loop {
-                match self.assert_peek(&[separator]) {
+                match self.assert_peek(&[separator.clone()]) {
                     Ok(_) => {
                         _ = self.next_tk();
                         v.push(method(self)?)
@@ -532,6 +548,8 @@ impl Parser {
                             TokenType::Char,
                             TokenType::Bool,
                             TokenType::Void,
+                            TokenType::Type,
+                            TokenType::Id(String::new()),
                         ]).map(|e| Box::new(ASTNode::Type { t: e.t, inner_types: vec![] })),
             _ => Err(ParseError::GeneralError(format!("{:?} is not a basic type.", self.peek_tk())))
         }
