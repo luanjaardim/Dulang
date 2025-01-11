@@ -77,10 +77,15 @@ type ::==
 	union_type ("->" union_type)*  # Function type
 
 union_type ::==
-	tuple_type ("^" tuple_type)*  # Union type
+	tuple_type ("|" tuple_type)*  # Union type
 
 tuple_type ::==
-	basic_types ("&" basic_types)*  # Tuple type
+	ptr_type ("^" ptr_type)*  # Tuple type
+
+ptr_type ::==
+	"&" basic_types           # Pointer to types
+	"&var" basic_types        # Variable pointer to types
+	basic_types
 
 basic_types ::==
 	"(" type ")"

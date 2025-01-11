@@ -546,7 +546,19 @@ impl Parser {
         self.parse_compounded_type(|s| s.tuple_type(), TokenType::UnionType)
     }
     fn tuple_type(&mut self) -> Result<InnerNode, ParseError> {
-        self.parse_compounded_type(|s| s.basic_types(), TokenType::TupleType)
+        self.parse_compounded_type(|s| s.ptr_type(), TokenType::TupleType)
+    }
+    fn ptr_type(&mut self) -> Result<InnerNode, ParseError> {
+        match self.peek_tk() {
+            Some(Token { t: t @ TokenType::Ref, .. }) |
+            Some(Token { t: t @ TokenType::VarRef, .. }) => {
+                _ =  self.assert_next(&[TokenType::Ref, TokenType::VarRef])?;
+                Ok(Box::new(ASTNode::Type { t, inner_types: vec![self.basic_types()?] }))
+            }
+            _ => {
+                self.basic_types()
+            }
+        }
     }
 
     fn basic_types(&mut self) -> Result<InnerNode, ParseError> {

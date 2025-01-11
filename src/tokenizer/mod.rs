@@ -27,6 +27,8 @@ pub enum TokenType {
 
     Assign, Type, TypeInf,                  // =, type, ::
 
+    VarDef, Ref, VarRef, Deref,             // var, &, &var, @
+
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,     // {, }, (, ),
     Comma, Dot, Semicolon, Colon,           // ',' , '.' , ';', ':'
@@ -56,13 +58,15 @@ impl Token {
                 "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon, ":" => Colon,
                 "=" => Assign, "::" => TypeInf, "none" => TokenType::None, "char" => Char, "bool" => Bool,
                 "->" => FnType, "|" => UnionType, "^" => TupleType, "type" => Type,
+                "&var" => VarRef, "var" => VarDef, "&" => Ref, "@" => Deref,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
-                _ if regex::Regex::new(r"i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r"u\d+").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r"f\d+").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"^i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"^u\d+").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"^f\d+").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id(text.to_string()),
+
                 _ => panic!("Token type is unkown: {text}")
             }),
         }
@@ -103,8 +107,8 @@ pub struct Tokenizer {
 impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
-    const SEPARATORS: [&'static str; 24] = [
-      "=>", "==", ">=", "<=", "!=", "::", "->", "|", ":", "=", ",", ";", "+", "-", "*", "/", "^", "&", "(", ")", "{", "}", "[", "]"
+    const SEPARATORS: [&'static str; 26] = [
+      "=>", "==", ">=", "<=", "!=", "::", "->", "^", "|", "@", "&var", "&", ":", "=", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
     ];
 
     // NOTE: the order is important here, as every Real contains Integer it must goes first
@@ -144,6 +148,7 @@ impl Tokenizer {
         // Here we can search for some general pattern (Strings, Real Numbers, Comments, and return the Token early)
         if let Some((m, t)) = self.match_patterns() {
             let len = m.range().len();
+            // FIX: text after the change in Token must be included into the types that need it
             let text = self.s[self.pos..self.pos+len].to_string();
             self.pos += len;
             self.c += len;

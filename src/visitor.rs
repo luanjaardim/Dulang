@@ -9,6 +9,9 @@ pub enum ExprType {
     // Compounded types
     FnType(Vec<ExprType>), UnionType(Vec<ExprType>), TupleType(Vec<ExprType>),
 
+    // Pointer types
+    Pnt(Box<ExprType>), PntVar(Box<ExprType>),
+
     Type, CustomType(Box<ExprType>), Alias(String), None, Unknown(usize)
 }
 impl std::fmt::Debug for ExprType {
@@ -35,6 +38,8 @@ impl std::fmt::Debug for ExprType {
             },
             CustomType(t) => { write!(f, "CustomType( ")?; t.fmt(f)?; write!(f, " )") }
             Alias(s) => write!(f, "Alias({s})"),
+            Pnt(t) => { write!(f, "Pnt to ( ")?; t.fmt(f)?; write!(f, " )") },
+            PntVar(t) => { write!(f, "PntVar to ( ")?; t.fmt(f)?; write!(f, " )") },
             Type => write!(f, "Type"),
             None => write!(f, "None"),
             Unknown(i) => write!(f, "Unknown({i})"),
@@ -60,24 +65,13 @@ impl ExprType {
                if l1.len() != l2.len() { return false }
                l1.iter().enumerate().all(|(i, e)| Self::expr_type_eq(e, &l2[i], strict_cmp))
             },
+
+            (Pnt(t1), Pnt(t2)) |
+            (PntVar(t1), PntVar(t2)) => Self::expr_type_eq(&**t1, &**t2, strict_cmp),
             _ => false,
         }
     }
-    /// NOTE: only use this function when you are sure both types are equal,
-    /// this function will use every type known from both ExprType to build the
-    /// final type, filling every Unknown possible
-    fn final_type(self, s: &Self) -> Self {
-        let fill_unknown = |l1: Vec<ExprType>, l2: &Vec<ExprType>| {
-            l1.into_iter().zip(l2.iter()).map(|(e1, e2)| if !e1.is_unknown() { e1 } else { e2.clone() }).collect()
-        };
-        if let Unknown(_) = self { return s.clone() }
-        match (self, s) {
-            (FnType(l1), FnType(l2)) => FnType(fill_unknown(l1, l2)),
-            (UnionType(l1), UnionType(l2)) => UnionType(fill_unknown(l1, l2)),
-            (TupleType(l1), TupleType(l2)) => TupleType(fill_unknown(l1, l2)),
-            (t, _) => t,
-        }
-    }
+
     fn get_nth_inner_type(&self, nth: usize) -> Self {
         match self {
             FnType(l) | UnionType(l) | TupleType(l) => l[nth].clone(),
@@ -90,9 +84,6 @@ impl ExprType {
             _ => panic!("Cannot get the function return type of a non function type"),
         }
     }
-
-    // FIX: is unknown should verify its inner types too, if any is unknown the type is unknown
-    fn is_unknown(&self) -> bool { if let Unknown(_) = self { true } else { false }}
 }
 
 /// Comparing between ExprType with '==' or '!=' is not a strict
@@ -117,6 +108,8 @@ impl From<&InnerNode> for ExprType {
             ASTNode::Type { t: TokenType::Char, inner_types } if inner_types.is_empty() => Char,
             ASTNode::Type { t: TokenType::None, inner_types } if inner_types.is_empty() => None,
             ASTNode::Type { t: TokenType::Type, inner_types } if inner_types.is_empty() => Type,
+            ASTNode::Type { t: TokenType::Ref, inner_types } if inner_types.len() == 1 => Pnt(Box::new(ExprType::from(&inner_types[0]))),
+            ASTNode::Type { t: TokenType::VarRef, inner_types } if inner_types.len() == 1 => PntVar(Box::new(ExprType::from(&inner_types[0]))),
             ASTNode::Type { t: TokenType::FnType, inner_types } => FnType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
             ASTNode::Type { t: TokenType::UnionType, inner_types } => UnionType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
             ASTNode::Type { t: TokenType::TupleType, inner_types } => TupleType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
@@ -220,23 +213,6 @@ impl Scope {
         }
     }
 
-    fn set_cur_func_ret_type(scp: *mut Scope, t: ExprType) {
-        unsafe {
-            if scp.is_null() { return }
-
-            let scp_ref = &mut *scp;
-            if let ScopeAttr::FuncScope { ret_type, .. } = &mut scp_ref.attrs {
-                if ret_type.is_unknown() || *ret_type == t {
-                    *ret_type = t;
-                } else {
-                    // TODO: make this error better readable, what function occurred?
-                    panic!("Returning function with different return types")
-                }
-            } else {
-                Scope::set_cur_func_ret_type(scp_ref.scp_father as *mut Scope, t) 
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
