@@ -121,6 +121,7 @@ impl From<&InnerNode> for ExprType {
 
 #[derive(Debug)]
 pub struct Var {
+    pub is_const: bool,
     pub v: Token,
     pub t: ExprType,
 }
@@ -253,7 +254,7 @@ impl Visitor {
                         // TODO: A better find for Scopes, maybe search for the ScopeAttr type
                         return Some(e)
                     },
-                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, t }), "var") => {
+                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") => {
                         if var_name == elem_name {
                             return Some(e)
                         }
@@ -356,7 +357,7 @@ impl Visitor {
     fn visit(&mut self, scope: &mut Scope, expected_type: ExprType, node: &mut Node) -> Result<ExprType, VisitorError> {
         self.cur_scope = &*scope as *const Scope;
         match &mut *node.v {
-            ASTNode::Assign { var: (ref tk @ Token { t: TokenType::Id(ref var_name), .. }, t), expr } => {
+            ASTNode::Assign { var: (is_const, ref tk @ Token { t: TokenType::Id(ref var_name), .. }, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
                 let assign_index = scope.elems.len();
@@ -377,6 +378,7 @@ impl Visitor {
                         Elem::Type(var_name.clone(), *alias.clone())
                     } else {
                         Elem::Var(Var {
+                            is_const: *is_const,
                             v: tk.clone(),
                             t: self.infer_type(expected_type),
                         })
@@ -390,7 +392,7 @@ impl Visitor {
                                                  Box::new(ASTNode::Empty)),
                                        |itself| itself));
                 let ret_type = ret.as_ref().unwrap().t.clone();
-                for (_, t) in &mut *args {
+                for (_, _, t) in &mut *args {
                     if t.is_none() {
                         *t = Some(t.clone()
                                    .map_or(
@@ -403,7 +405,7 @@ impl Visitor {
                 let fn_type = FnType(
                     if !args.is_empty() {
                         (0..args.len())
-                            .map(|i| args[i].1.as_ref().unwrap().t.clone())
+                            .map(|i| args[i].2.as_ref().unwrap().t.clone())
                             .chain([ret_type])
                             .collect()
                     } else {
@@ -420,7 +422,8 @@ impl Visitor {
                         args_len: args.len(),
                     },
                     elems: (0..args.len()).map(|i| Elem::Var(Var {
-                              v: args[i].0.clone(),
+                              is_const: args[i].0,
+                              v: args[i].1.clone(),
                               t: fn_type.get_nth_inner_type(i),
                           })).collect(),
                     scp_father: scope,
@@ -569,7 +572,7 @@ impl Visitor {
 
     pub fn update_types_aux(&mut self, ast: &mut Node) -> Result<(), std::io::Error> {
         match &mut *ast.v {
-            ASTNode::Assign { var: (_, Some(node)), expr } => {
+            ASTNode::Assign { var: (_, _, Some(node)), expr } => {
                 self.update_types_aux(node)?;
                 self.update_types_aux(expr)?;
                 let final_type = self.infer_type(node.t.clone());
@@ -579,7 +582,7 @@ impl Visitor {
             ASTNode::Func { args, ret: Some(Node { t, .. }), body } => {
                 *t = self.infer_type(t.clone());
                 for arg in &mut *args {
-                    if let (_, Some(node)) = arg {
+                    if let (_, _, Some(node)) = arg {
                         self.update_types_aux(node)?;
                     }
                 }

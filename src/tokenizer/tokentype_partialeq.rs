@@ -11,7 +11,7 @@ impl TokenType {
             (Loop, Loop) | (Switch, Switch) | (Skip, Skip) | (Stop, Stop) | (Back, Back) |
             (I(_), I(_)) | (U(_), U(_)) | (F(_), F(_)) | (Char, Char) | (Bool, Bool) | (FnType, FnType) |
             (UnionType, UnionType) | (TupleType, TupleType) | (Type, Type) | (Assign, Assign) | (TypeInf, TypeInf) |
-            (Ref, Ref) | (VarRef, VarRef) |
+            (Ref, Ref) | (VarRef, VarRef) | (VarDef, VarDef) | (Deref, Deref) |
             (OpCurly, OpCurly) | (ClCurly, ClCurly) | (OpParen, OpParen) | (ClParen, ClParen) | (Comma, Comma) | (Dot, Dot) |
             (Colon, Colon) | (Semicolon, Semicolon) | (TokenType::None, TokenType::None) | (Nl, Nl) | (Id(_), Id(_)) => true,
             _ => false,

@@ -21,7 +21,7 @@ else ::==
 	"else" inner-body
 
 assign ::==
-	var ASSIGN expr nl
+	("var")? var ASSIGN expr nl               # Defining constants
 	
 loop ::==
 	"while" comparison inner-body

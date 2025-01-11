@@ -27,7 +27,7 @@ impl std::fmt::Debug for Node {
 
 pub type InnerNode = Box<ASTNode>;
 type Body = Vec<Node>;
-type Var = (Token, Option<Node>);
+type Var = (bool, Token, Option<Node>);
 
 #[derive(Debug, Clone)]
 pub enum ASTNode {
@@ -216,7 +216,8 @@ impl Parser {
     fn sttm(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
             // Var definition
-            Some(Token { t: TokenType::Id(_), ..}) => {
+            Some(Token { t: TokenType::Id(_), ..})  |
+            Some(Token { t: TokenType::VarDef, ..}) => {
                 let backup = self.tokenizer.get_state(); // Return to before the var if it's not an assignment
 
                 if let ret @ Ok(_) = self.assign() { return ret }
@@ -403,6 +404,7 @@ impl Parser {
 
     fn var(&mut self) -> Result<Var, ParseError> {
         Ok((
+            self.assert_next(&[TokenType::VarDef]).is_ok(),
             self.assert_next(&[TokenType::Id(String::new())])?,
             match self.peek_tk() {
                 Some(Token { t: TokenType::TypeInf, .. }) => {
