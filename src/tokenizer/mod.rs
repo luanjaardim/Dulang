@@ -4,7 +4,7 @@ pub mod tokentype_partialeq;
 use TokenType::*;
 #[derive(Debug, Clone)]
 pub enum TokenType {
-    Str, Integer, Real, Character, Comment, Id(String),
+    Str(String), Integer(String), Real(String), Character(String), Comment, Id(String),
 
     // Numerical Operations
     Add, Sub, Mul, Div,                     // +, -. *, /
@@ -111,13 +111,6 @@ impl Tokenizer {
       "=>", "==", ">=", "<=", "!=", "::", "->", "^", "|", "@", "&var", "&", ":", "=", ",", ";", "+", "-", "*", "/", "(", ")", "{", "}", "[", "]"
     ];
 
-    // NOTE: the order is important here, as every Real contains Integer it must goes first
-    const PATTERNS: [(&'static str, TokenType); 5] = [
-        (r#"^(\$[^\$\n]*\n|\$\$[^\$]*\$\$)"#, Comment),
-        (r#"^(\".*\"|\'\'(\w|\W)*\'\')"#, Str), (r"^\'(.|\\[rnt])\'", Character),
-        (r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)", Real), (r"^\d+", Integer),
-    ];
-
     pub fn new(content_to_tokenize: Rc<String>) -> Self {
         Tokenizer {
             s: content_to_tokenize, pos: 0, tk_pos: 0, l: 0, c: 0, read_tks: vec![]
@@ -146,18 +139,14 @@ impl Tokenizer {
         self.skip_ascii_whitespaces();
 
         // Here we can search for some general pattern (Strings, Real Numbers, Comments, and return the Token early)
-        if let Some((m, t)) = self.match_patterns() {
-            let len = m.range().len();
-            // FIX: text after the change in Token must be included into the types that need it
-            let text = self.s[self.pos..self.pos+len].to_string();
+        if let Some((t, len)) = self.match_patterns() {
             self.pos += len;
             self.c += len;
-            return match t {
-                Comment => self.next(), // Continue search if it's a comment
-                _ => {
-                    self.read_tks.push(Token { c: self.c, l: self.l, t });
-                    Some(self.get_cur_tk_and_advance())
-                }
+            return if let Comment = &t {
+                self.next() // Continue search if it's a comment
+            } else {
+                self.read_tks.push(Token { c: self.c, l: self.l, t });
+                Some(self.get_cur_tk_and_advance())
             }
         }
 
@@ -207,12 +196,33 @@ impl Tokenizer {
         tk
     }
 
-    fn match_patterns(&self) -> Option<(regex::Match, TokenType)> {
+    /// Returns the matched pattern and the length of the match
+    fn match_patterns(&self) -> Option<(TokenType, usize)> {
         let text = &self.s[self.pos..];
-        let p = Tokenizer::PATTERNS.iter().find(|p|
-            regex::Regex::new(p.0).unwrap().is_match(text)
-        )?;
-        Some((regex::Regex::new(p.0).unwrap().find(text)?, p.1.clone()))
+        use regex::Regex;
+        // NOTE: the order is important here, as every Real contains Integer it must goes first
+        let patterns: [(Regex, &str) ; 5] = [
+            (Regex::new(r#"^(\$[^\$\n]*\n|\$\$[^\$]*\$\$)"#).unwrap(), "comment"), // Comments
+            (Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')"#).unwrap(), "string"),
+            (Regex::new(r"^\'(.|\\[rnt])\'").unwrap(), "char"),
+            (Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)").unwrap(), "real"),
+            (Regex::new(r"^\d+").unwrap(), "int"),
+        ];
+
+        for (r, s) in patterns {
+            if let Some(found) = r.find(text) {
+                let len = found.range().len();
+                return Some((match s {
+                    "comment" => Comment,
+                    "string" => Str(self.s[self.pos..self.pos+len].to_string()),
+                    "char" => Character(self.s[self.pos..self.pos+len].to_string()),
+                    "real" => Real(self.s[self.pos..self.pos+len].to_string()),
+                    "int" => Integer(self.s[self.pos..self.pos+len].to_string()),
+                    _ => return Option::None,
+                }, len))
+            }
+        }
+        Option::None
     }
 
     fn skip_ascii_whitespaces(&mut self) {

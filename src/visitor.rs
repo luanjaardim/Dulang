@@ -519,9 +519,9 @@ impl Visitor {
             },
             ASTNode::Leaf(tk) => {
                 let t = match &tk.t {
-                    TokenType::Character => Char,
-                    TokenType::Real => Real(64),
-                    TokenType::Integer => Int { bits: 64, signed: true },
+                    TokenType::Character(_) => Char,
+                    TokenType::Real(_) => Real(64),
+                    TokenType::Integer(_) => Int { bits: 64, signed: true },
                     TokenType::Id(name) => {
                         if let Some(t) = Scope::find_var(scope, name) {
                             self.equivalent_types(&expected_type, &t)?;

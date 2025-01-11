@@ -491,10 +491,10 @@ impl Parser {
     fn primary(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
             Some(tk @ Token { t: TokenType::Id(_), .. }) |
-            Some(tk @ Token { t: TokenType::Str, .. }) |
-            Some(tk @ Token { t: TokenType::Real, .. }) |
-            Some(tk @ Token { t: TokenType::Integer, .. }) |
-            Some(tk @ Token { t: TokenType::Character, .. }) => {
+            Some(tk @ Token { t: TokenType::Str(_), .. }) |
+            Some(tk @ Token { t: TokenType::Real(_), .. }) |
+            Some(tk @ Token { t: TokenType::Integer(_), .. }) |
+            Some(tk @ Token { t: TokenType::Character(_), .. }) => {
                 _ = self.next_tk(); // Discart prev Token
                 Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Leaf(tk))))
             },
@@ -508,7 +508,8 @@ impl Parser {
                 }
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
-                TokenType::Real, TokenType::Integer, TokenType::Character, TokenType::Str, TokenType::OpParen
+                TokenType::Real(String::new()), TokenType::Integer(String::new()), 
+                TokenType::Character(String::new()), TokenType::Str(String::new()), TokenType::OpParen
             ])),
             None => Err(ParseError::ExpectedToken)
         }
