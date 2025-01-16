@@ -295,6 +295,7 @@ impl Visitor {
     fn equivalent_types(&mut self, f: &ExprType, s: &ExprType) -> Result<(), VisitorError> {
         match (f, s) {
             (Unknown(f_ind), Unknown(s_ind)) => {
+                if *f_ind == *s_ind { return Ok(()) } // Already equal
                 let (first, second) = (self.unknown_map[*f_ind].clone(), self.unknown_map[*s_ind].clone());
                 match (&first, &second) {
                     (Unknown(ind1), Unknown(ind2)) =>  {
@@ -349,7 +350,7 @@ impl Visitor {
             Unknown(ind) => {
                 if let Unknown(i) = self.unknown_map[ind] {
                     if i == 0 { t }
-                    else if i == ind { panic!("Unknown equals to itself") }
+                    else if i == ind { panic!("Unknown equals to itself: {t:?}") }
                     else { self.infer_type(Unknown(i)) }
                 }
                 else {
