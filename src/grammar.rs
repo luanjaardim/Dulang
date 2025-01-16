@@ -70,6 +70,14 @@ pub enum ASTNode {
         e: Node,
         t: ExprType
     },
+    Ref {
+        var: bool,
+        e: Node,
+    },
+    Deref {
+        n: usize,  // number of derefs
+        e: Node,
+    },
     // skip, stop or back, only back and stop can have the second element (the expr they return)
     FlowChange(TokenType, Option<Node>),
     Leaf(Token),
@@ -358,16 +366,18 @@ impl Parser {
         if let ret @ Ok(_) = self.fn_call() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self._type_() {
-            if let Ok(Node { t: ExprType::Alias(_), .. }) = &ret {
-                println!("Ignore type if it's only a single alias")
-            } else {
-                return ret
+            match &ret.as_ref().unwrap().t {
+                t if t.is_alias() => println!("Ignore type if it's only a single alias"),
+                ExprType::Pnt(inner) | ExprType::PntVar(inner) if inner.is_alias() => {
+                    println!("Ignore type if it's just a ref to a alias")
+                },
+                _ => return ret,
             }
         }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.bitwise() { return ret }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.unary() { return ret }
+        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.bitwise() { return ret }
 
         match self.peek_tk() {
             Some(tk) =>
@@ -424,7 +434,7 @@ impl Parser {
                         op: self.next_tk().unwrap(),
                         e: self.bitwise()?
                 })))
-            }
+            },
             _ => {
                 Ok(self.parse_generic_chained_binary(|s| s.comparison(), vec![
                         TokenType::Bxor,
@@ -484,8 +494,32 @@ impl Parser {
                     e: self.primary()? 
                 })))
             },
+            Some(Token { t: t @ TokenType::Ref, .. }) |
+            Some(Token { t: t @ TokenType::VarRef, .. }) => {
+                let inner_t = Unknown(self.get_unknown_id());
+                let is_var = t == TokenType::VarRef;
+                _ = self.next_tk();
+                Ok(Node::new(
+                    if is_var {
+                        ExprType::PntVar(Box::new(inner_t))
+                    } else {
+                        ExprType::Pnt(Box::new(inner_t))
+                    }, Box::new(
+                        ASTNode::Ref { var: is_var, e: self.primary()? }
+                    )))
+            },
+            Some(Token { t: TokenType::Deref, .. }) => {
+                let mut n = 0;
+                while let Some(Token { t: TokenType::Deref, .. }) = self.peek_tk() {
+                    n += 1;
+                    _ = self.next_tk();
+                }
+                Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(
+                        ASTNode::Deref { n, e: self.primary()? }
+                    )))
+            },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
-                TokenType::Add, TokenType::Sub
+                TokenType::Add, TokenType::Sub, TokenType::VarRef, TokenType::Ref, TokenType::Deref
             ])),
             None => Err(ParseError::ExpectedToken)
         }

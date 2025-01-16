@@ -62,8 +62,11 @@ arith ::== factor ((ADD | SUB) factor)*
 factor ::== primary ((MUL | DIV) primary)*
 
 unary ::==
-	primary
+	"@" unary               # Dereference pointers
+	"&" primary             # Reference as pointers
+	"&var" primary          # Reference as variable pointers
 	(ADD | SUB) primary
+	primary
 
 primary ::==
 	"(" expr ")"

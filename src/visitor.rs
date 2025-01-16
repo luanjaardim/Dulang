@@ -55,6 +55,7 @@ impl ExprType {
             | (Type, Type) => true,
               (_, Unknown(_)) if !strict_cmp => true,
               (Unknown(_), _) if !strict_cmp => true,
+              (Unknown(i), Unknown(j)) if strict_cmp => true,
 
             (Real(b1), Real(b2)) if b1 == b2 => true,
             (Int { bits: b1, signed: s1 }, Int { bits: b2, signed: s2 }) if b1 == b2 && s1 == s2 => true,
@@ -72,6 +73,11 @@ impl ExprType {
         }
     }
 
+    pub fn is_alias(&self) -> bool {
+        if let ExprType::Alias(_) = self {
+            true
+        } else { false }
+    }
     fn get_nth_inner_type(&self, nth: usize) -> Self {
         match self {
             FnType(l) | UnionType(l) | TupleType(l) => l[nth].clone(),
@@ -82,6 +88,14 @@ impl ExprType {
         match self {
             FnType(inner_types) => inner_types.last().unwrap().clone(),
             _ => panic!("Cannot get the function return type of a non function type"),
+        }
+    }
+    fn is_unknown(&self) -> bool {
+        match self {
+            Unknown(_) => true,
+            FnType(elems) | UnionType(elems) | TupleType(elems) => elems.iter().any(|e| e.is_unknown()),
+            PntVar(inner) | Pnt(inner) => inner.is_unknown(),
+            _ => false,
         }
     }
 }
@@ -282,18 +296,21 @@ impl Visitor {
         match (f, s) {
             (Unknown(f_ind), Unknown(s_ind)) => {
                 let (first, second) = (self.unknown_map[*f_ind].clone(), self.unknown_map[*s_ind].clone());
-                if let (Unknown(ind1), Unknown(ind2)) = (&first, &second) {
-                    if *ind1 != 0 {
-                        self.unknown_map[*s_ind] = Unknown(*ind1);
-                    } else if *ind2 != 0 {
-                        self.unknown_map[*f_ind] = Unknown(*ind2);
-                    } else if *ind1 == 0 && *ind2 == 0 {
-                        self.unknown_map[*s_ind] = Unknown(*f_ind);
-                    } else {
-                        self.equivalent_types(&first, &second)?;
-                    }
-                } else {
-                    panic!("shit bro....");
+                match (&first, &second) {
+                    (Unknown(ind1), Unknown(ind2)) =>  {
+                        if *ind1 != 0 {
+                            self.unknown_map[*s_ind] = Unknown(*ind1);
+                        } else if *ind2 != 0 {
+                            self.unknown_map[*f_ind] = Unknown(*ind2);
+                        } else if *ind1 == 0 && *ind2 == 0 {
+                            self.unknown_map[*s_ind] = Unknown(*f_ind);
+                        } else {
+                            self.equivalent_types(&first, &second)?;
+                        }
+                    },
+                    (Unknown(_), t) => self.unknown_map[*f_ind] = t.clone(),
+                    (t, Unknown(_)) => self.unknown_map[*s_ind] = t.clone(),
+                    _ => panic!("shit bro....")
                 }
             },
             (Unknown(i), t) |
@@ -306,6 +323,9 @@ impl Visitor {
                 let elem_type = self.find_elem_type("type", name).expect("Alias type not defined");
                 let alias_type = elem_type.get_type().clone();
                 self.equivalent_types(t, &alias_type)?;
+            },
+            (Pnt(inner1), Pnt(inner2)) | (PntVar(inner1), PntVar(inner2)) => {
+                self.equivalent_types(&**inner1, &**inner2)?;
             },
             (FnType(inner1), FnType(inner2)) |
             (UnionType(inner1), UnionType(inner2)) |
@@ -329,16 +349,19 @@ impl Visitor {
             Unknown(ind) => {
                 if let Unknown(i) = self.unknown_map[ind] {
                     if i == 0 { t }
+                    else if i == ind { panic!("Unknown equals to itself") }
                     else { self.infer_type(Unknown(i)) }
                 }
                 else {
-                    self.unknown_map[ind].clone()
+                    self.infer_type(self.unknown_map[ind].clone())
                 }
             },
             FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type(e)).collect()),
             UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type(e)).collect()),
             TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type(e)).collect()),
             Alias(name) => self.find_elem_type("type", &name).expect("Alias not defined").get_type().clone(),
+            Pnt(inner) => Pnt(Box::new(self.infer_type(*inner.clone()))),
+            PntVar(inner) => PntVar(Box::new(self.infer_type(*inner.clone()))),
             _ => t
         }
     }
@@ -554,6 +577,32 @@ impl Visitor {
                     }
                 })
             },
+            ASTNode::Ref { var, e } => {
+                let t = Box::new(match &node.t {
+                    Pnt(inner) | PntVar(inner) => self.visit(scope, *inner.clone(), e)?,
+                    _ => unreachable!("No other type is expected here"),
+                });
+                self.equivalent_types(&node.t, &(if *var { PntVar(t) } else { Pnt(t) }))?;
+                Ok(node.t.clone())
+            },
+            ASTNode::Deref { mut n, e } => {
+                let deref_t = Unknown(self.get_unknown_id());
+                let mut t = self.visit(scope, deref_t, e)?;
+                loop {
+                    if n == 0 { break }
+                    n -= 1;
+                    match t {
+                        PntVar(inner) | Pnt(inner) => t = *inner,
+                        inner @ Unknown(_) => {
+                            self.equivalent_types(&expected_type, &inner)?;
+                            return Ok(self.infer_type(expected_type))
+                        },
+                        _ if n == 1 => (),
+                        _ => unreachable!("Tried to deref more than possible at {:?}", e.v),
+                    };
+                }
+                Ok(t)
+            },
             ASTNode::Empty => {
                 // NOTE: This should only happen when we are creating an alias of some type, a CustomType
                 Ok(CustomType(Box::new(node.t.clone())))
@@ -611,11 +660,14 @@ impl Visitor {
             ASTNode::FlowChange(_, e) => if let Some(expr) = e {
                 self.update_types_aux(expr)?
             },
+            ASTNode::Deref { e, .. } => self.update_types_aux(e)?,
+            ASTNode::Ref { e, .. } => self.update_types_aux(e)?,
             ASTNode::Cast { e, .. } => self.update_types_aux(e)?,
-            _ => (),
+            ASTNode::Empty | ASTNode::Leaf(_) => (),
+            _ => panic!("Not implemented yet: {ast:?}"),
         }
-        if let t @ Unknown(_) = &mut ast.t {
-            *t = self.infer_type(t.clone());
+        if ast.t.is_unknown() {
+            ast.t = self.infer_type(ast.t.clone());
         }
         Ok(())
     }
