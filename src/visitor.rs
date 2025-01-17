@@ -133,7 +133,7 @@ impl From<&InnerNode> for ExprType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Var {
     pub is_const: bool,
     pub v: Token,
@@ -147,6 +147,9 @@ pub enum ScopeAttr {
         name: String,
         args_len: usize,
         ret_type: ExprType,
+        // parent will only be used when we are creating a function from a partial application of
+        // other function, so its parent will be the function which its arguments are missing
+        parent: Option<String>,
     },
     CondScope,
     LoopScope {
@@ -264,15 +267,12 @@ impl Visitor {
         loop {
             for e in scp_ref.elems.iter().rev() {
                 match (e, t) {
+                    (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == elem_name => return Some(e),
                     (Elem::Scope(_), "scope") => {
                         // TODO: A better find for Scopes, maybe search for the ScopeAttr type
                         return Some(e)
                     },
-                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") => {
-                        if var_name == elem_name {
-                            return Some(e)
-                        }
-                    },
+                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == elem_name => return Some(e),
                     (Elem::Type(type_name, ..), "type") => {
                         if type_name == elem_name {
                             return Some(e)
@@ -411,11 +411,7 @@ impl Visitor {
                 Ok(None)
             },
             ASTNode::Func { args, ret, body } => {
-                *ret = Some(ret.clone().map_or(
-                                       Node::new(Unknown(self.get_unknown_id()),
-                                                 Box::new(ASTNode::Empty)),
-                                       |itself| itself));
-                let ret_type = ret.as_ref().unwrap().t.clone();
+                let ret_type = ret.clone();
                 for (_, _, t) in &mut *args {
                     if t.is_none() {
                         *t = Some(t.clone()
@@ -444,6 +440,7 @@ impl Visitor {
                         name: String::new(), // will be filled when return the function call
                         ret_type: fn_type.get_fn_return_type(),
                         args_len: args.len(),
+                        parent: Option::None,
                     },
                     elems: (0..args.len()).map(|i| Elem::Var(Var {
                               is_const: args[i].0,
@@ -491,6 +488,50 @@ impl Visitor {
                     self.visit(scope, Bool, n)?;
                 }
                 Ok(None)
+            },
+            ASTNode::FnCall { caller, params, is_sttm } => {
+                if *is_sttm { // A function that returns none is a statement
+                    node.t = None;
+                }
+                if let Token { t: TokenType::Id(name), .. } = &caller {
+                    let (args, ret) = if let Some(Elem::Scope(
+                        scp @ Scope { attrs: ScopeAttr::FuncScope { args_len, ret_type, .. }, .. })) = self.find_elem_type("func", name)
+                    {
+                println!("{is_sttm} {ret_type:?}");
+                        (if params.len() > *args_len {
+                            panic!("Function receiving more than suported parameters: {node:?}");
+                        } else if *is_sttm && *ret_type != None {
+                            panic!("Function call of {caller} is a statement but its return is ignored");
+                        } else if !*is_sttm && *ret_type == None {
+                            panic!("Function call of {caller} is an assignment but returns none");
+                        } else if *args_len == 0 {
+                            if !params.is_empty() {
+                                panic!("Function receive no parameters, but received {}", params.len());
+                            }
+                            vec![]
+                        } else {
+                            (0..*args_len).map(|i| scp.elems[i].get_var().clone()).collect()
+                        }, ret_type.clone())
+                    } else {
+                        panic!("Function {name} is not defined")
+                    };
+                    let mut i = 0;
+                    while i < params.len() {
+                        self.visit(scope, args[i].t.clone(), &mut params[i])?;
+                        i += 1;
+                    }
+                    if i == args.len() { Ok(ret) }
+                    else {
+                        scope.elems.push(Elem::Scope(Scope { 
+                            attrs: ScopeAttr::FuncScope { name: String::new(), args_len: args.len()-i, ret_type: ret.clone(), parent: Some(name.clone()) },
+                            elems: args[i..].iter().map(|v| Elem::Var(v.clone())).collect(),
+                            scp_father: scope.scp_father,
+                        }));
+                        Ok(FnType(args[i..].iter().map(|v| v.t.clone()).chain([ret]).collect()))
+                    }
+                } else {
+                    panic!("At the moment, the caller can only be the function name")
+                }
             },
             ASTNode::FlowChange(tk_type, ret) => {
                 match tk_type {
@@ -629,8 +670,8 @@ impl Visitor {
                 node.t = final_type.clone();
                 expr.t = final_type;
             },
-            ASTNode::Func { args, ret: Some(Node { t, .. }), body } => {
-                *t = self.infer_type(t.clone());
+            ASTNode::Func { args, ret, body } => {
+                *ret = self.infer_type(ret.clone());
                 for arg in &mut *args {
                     if let (_, _, Some(node)) = arg {
                         self.update_types_aux(node)?;
@@ -653,6 +694,7 @@ impl Visitor {
                     self.update_types_aux(node)?;
                 }
             },
+            ASTNode::FnCall { params, .. } => self.update_types(params)?,
             ASTNode::Binary { l, r, .. } => {
                 self.update_types_aux(l)?;
                 self.update_types_aux(r)?;

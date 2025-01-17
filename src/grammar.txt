@@ -46,7 +46,7 @@ var ::==
 	ID ("::" type)?
 
 fn-call ::==
-	ID "(" ")"   # Function with no parameters
+	ID "none"   # Function with no parameters
 	ID expr*
 
 bitwise ::==

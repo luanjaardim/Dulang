@@ -37,7 +37,7 @@ pub enum ASTNode {
     },
     Func {
         args: Vec<Var>,
-        ret: Option<Node>, // Any Node of type Type
+        ret: ExprType,
         body: Body,
     },
     Conditional {
@@ -61,6 +61,7 @@ pub enum ASTNode {
     FnCall {
         caller: Token,
         params: Vec<Node>,  // List of expressions
+        is_sttm: bool,
     },
     Type {
         t: TokenType,
@@ -230,7 +231,7 @@ impl Parser {
 
                 if let ret @ Ok(_) = self.assign() { return ret }
                 self.tokenizer.set_state(backup);
-                if let ret @ Ok(_) = self.fn_call() { return ret }
+                if let ret @ Ok(_) = self.fn_call(true) { return ret }
                 self.tokenizer.set_state(backup);
 
                 return Err(ParseError::GeneralError(format!("Could not parse sttmt at {}", self.peek_tk().unwrap())))
@@ -304,10 +305,10 @@ impl Parser {
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Assign { var, expr })))
     }
 
-    fn fn_call(&mut self) -> Result<Node, ParseError> {
+    fn fn_call(&mut self, is_sttm: bool) -> Result<Node, ParseError> {
         let tk = self.assert_next(&[TokenType::Id(String::new())])?;
         if self.assert_next(&[TokenType::None]).is_ok() {
-            return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![] })))
+            return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })))
         }
         let backup = self.tokenizer.get_state();
         let mut b = backup;
@@ -338,7 +339,7 @@ impl Parser {
         if params.is_empty() {
             return Err(ParseError::GeneralError("Expected expressions as Function Call Parameters".to_owned()))
         }
-        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params })))
+        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params, is_sttm })))
     }
 
     fn expr(&mut self) -> Result<Node, ParseError> {
@@ -363,7 +364,7 @@ impl Parser {
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.cond() { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.fn_call() { return ret }
+        if let ret @ Ok(_) = self.fn_call(false) { return ret }
         self.tokenizer.set_state(backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self._type_() {
             match &ret.as_ref().unwrap().t {
@@ -403,8 +404,8 @@ impl Parser {
         _ = self.assert_next(&[TokenType::ClParen])?;
 
         let t = self.assert_peek(&[TokenType::Colon]);
-        let ret = if self.assert_peek(&[TokenType::Colon]).is_ok() { None }
-        else { Some(self._type_()?) };
+        let ret = if self.assert_peek(&[TokenType::Colon]).is_ok() { Unknown(self.get_unknown_id()) }
+        else { self._type_()?.t };
 
         // Starting the function body after the Colon: ':'
         _ = self.assert_next(&[TokenType::Colon])?;
