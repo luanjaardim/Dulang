@@ -224,10 +224,10 @@ impl Scope {
         }
     }
 
-    fn get_cur_func_scp(&self) -> Option<&Self> {
+    fn get_cur_func_scp(&mut self) -> Option<&mut Self> {
         if let ScopeAttr::FuncScope { .. } = self.attrs { Some(self) }
         else {
-            unsafe { self.scp_father.as_ref().map_or(Option::None, |f| f.get_cur_func_scp()) }
+            unsafe { (self.scp_father as *mut Scope).as_mut().map_or(Option::None, |f| f.get_cur_func_scp()) }
         }
     }
 
@@ -293,40 +293,30 @@ impl Visitor {
     }
 
     fn equivalent_types(&mut self, f: &ExprType, s: &ExprType) -> Result<(), VisitorError> {
-        match (f, s) {
-            (Unknown(f_ind), Unknown(s_ind)) => {
-                if *f_ind == *s_ind { return Ok(()) } // Already equal
-                let (first, second) = (self.unknown_map[*f_ind].clone(), self.unknown_map[*s_ind].clone());
-                match (&first, &second) {
-                    (Unknown(ind1), Unknown(ind2)) =>  {
-                        if *ind1 != 0 {
-                            self.unknown_map[*s_ind] = Unknown(*ind1);
-                        } else if *ind2 != 0 {
-                            self.unknown_map[*f_ind] = Unknown(*ind2);
-                        } else if *ind1 == 0 && *ind2 == 0 {
-                            self.unknown_map[*s_ind] = Unknown(*f_ind);
-                        } else {
-                            self.equivalent_types(&first, &second)?;
-                        }
-                    },
-                    (Unknown(_), t) => self.unknown_map[*f_ind] = t.clone(),
-                    (t, Unknown(_)) => self.unknown_map[*s_ind] = t.clone(),
-                    _ => panic!("shit bro....")
+
+        let (mut f_level, mut s_level) = (0, 0);
+        // With infer_type_level we can get the root of each type and the distance to it
+        // println!("f: {f:?}, s: {s:?}");
+        let (f_infer, s_infer) = (self.infer_type_level(f, &mut f_level), self.infer_type_level(s, &mut s_level));
+        // println!("f_infer: {f_infer:?}, s_infer: {s_infer:?}");
+        match if f_level > s_level { (f_infer, s_infer) } else { (s_infer, f_infer) }
+        {
+            (Unknown(big_lvl), Unknown(lit_lvl)) => {
+                if big_lvl != lit_lvl {
+                    self.unknown_map[lit_lvl] = Unknown(big_lvl)
                 }
             },
             (Unknown(i), t) |
-            (t, Unknown(i)) => {
-                self.unknown_map[*i] = t.clone();
-            },
+            (t, Unknown(i)) => self.unknown_map[i] = t,
             (Alias(n1), Alias(n2)) if n1 == n2 => (),
             (Alias(name), t) |
             (t, Alias(name)) => {
-                let elem_type = self.find_elem_type("type", name).expect("Alias type not defined");
+                let elem_type = self.find_elem_type("type", &name).expect("Alias type not defined");
                 let alias_type = elem_type.get_type().clone();
-                self.equivalent_types(t, &alias_type)?;
+                self.equivalent_types(&t, &alias_type)?;
             },
             (Pnt(inner1), Pnt(inner2)) | (PntVar(inner1), PntVar(inner2)) => {
-                self.equivalent_types(&**inner1, &**inner2)?;
+                self.equivalent_types(&*inner1, &*inner2)?;
             },
             (FnType(inner1), FnType(inner2)) |
             (UnionType(inner1), UnionType(inner2)) |
@@ -341,29 +331,36 @@ impl Visitor {
             },
             (t, t2) => if t != t2 { return Err(VisitorError::MismatchedTypes(f.clone(), s.clone())) }
         };
+        // println!("f_end: {:?}, s_end: {:?}", self.infer_type(f), self.infer_type(s));
         Ok(())
     }
 
+    fn infer_type(&self, t: &ExprType) -> ExprType {
+        let mut level = 0;
+        self.infer_type_level(t, &mut level)
+    }
+
     /// Tries to infer the type by using every known type and equivalences between types
-    fn infer_type(&self, t: ExprType) -> ExprType {
+    fn infer_type_level(&self, t: &ExprType, level: &mut usize) -> ExprType {
+        *level += 1;
         match t {
             Unknown(ind) => {
-                if let Unknown(i) = self.unknown_map[ind] {
-                    if i == 0 { t }
-                    else if i == ind { panic!("Unknown equals to itself: {t:?}") }
-                    else { self.infer_type(Unknown(i)) }
+                if let Unknown(i) = self.unknown_map[*ind] {
+                    if i == 0 { t.clone() }
+                    else if i == *ind { panic!("Unknown equals to itself: {t:?}") }
+                    else { self.infer_type_level(&Unknown(i), level) }
                 }
                 else {
-                    self.infer_type(self.unknown_map[ind].clone())
+                    self.infer_type_level(&self.unknown_map[*ind], level)
                 }
             },
-            FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type(e)).collect()),
-            UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type(e)).collect()),
-            TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type(e)).collect()),
+            FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
+            UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
+            TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             Alias(name) => self.find_elem_type("type", &name).expect("Alias not defined").get_type().clone(),
-            Pnt(inner) => Pnt(Box::new(self.infer_type(*inner.clone()))),
-            PntVar(inner) => PntVar(Box::new(self.infer_type(*inner.clone()))),
-            _ => t
+            Pnt(inner) => Pnt(Box::new(self.infer_type_level(&*inner, level))),
+            PntVar(inner) => PntVar(Box::new(self.infer_type_level(&*inner, level))),
+            _ => t.clone()
         }
     }
 
@@ -396,6 +393,11 @@ impl Visitor {
                 let expression_type = self.visit(scope, expected_type.clone(), expr)?;
                 self.equivalent_types(&expected_type, &expression_type)?;
                 if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..})) = scope.elems.get_mut(assign_index) {
+                    // When we have a recursive function the name is filled before
+                    // we need to check if the name correspond to this one.
+                    if !name.is_empty() && *name != *var_name {
+                        panic!("Function {name} is not defined")
+                    }
                     *name = String::from(var_name.clone());
                 } else {
                     scope.elems.push(if let CustomType(alias) = expression_type {
@@ -404,7 +406,7 @@ impl Visitor {
                         Elem::Var(Var {
                             is_const: *is_const,
                             v: tk.clone(),
-                            t: self.infer_type(expected_type),
+                            t: self.infer_type(&expected_type),
                         })
                     });
                 }
@@ -433,7 +435,7 @@ impl Visitor {
                     });
 
                 self.equivalent_types(&fn_type, &expected_type)?;
-                let fn_type = self.infer_type(expected_type);
+                let fn_type = self.infer_type(&expected_type);
 
                 let mut scp = Scope {
                     attrs: ScopeAttr::FuncScope {
@@ -494,33 +496,50 @@ impl Visitor {
                     node.t = None;
                 }
                 if let Token { t: TokenType::Id(name), .. } = &caller {
+
                     let (args, ret) = if let Some(Elem::Scope(
                         scp @ Scope { attrs: ScopeAttr::FuncScope { args_len, ret_type, .. }, .. })) = self.find_elem_type("func", name)
                     {
-                println!("{is_sttm} {ret_type:?}");
-                        (if params.len() > *args_len {
-                            panic!("Function receiving more than suported parameters: {node:?}");
-                        } else if *is_sttm && *ret_type != None {
-                            panic!("Function call of {caller} is a statement but its return is ignored");
-                        } else if !*is_sttm && *ret_type == None {
-                            panic!("Function call of {caller} is an assignment but returns none");
-                        } else if *args_len == 0 {
-                            if !params.is_empty() {
-                                panic!("Function receive no parameters, but received {}", params.len());
-                            }
+                        (if *args_len == 0 {
                             vec![]
                         } else {
                             (0..*args_len).map(|i| scp.elems[i].get_var().clone()).collect()
                         }, ret_type.clone())
+                    } else if let Some(Scope { attrs: ScopeAttr::FuncScope { name: cur_name, args_len, ret_type, .. }, elems, .. })
+                               = scope.get_cur_func_scp()
+                    {
+                            if cur_name.is_empty() { // possibly calling a recursive function
+                                *cur_name = name.clone();
+                            } else if *cur_name != *name {
+                                panic!("Function {name} is not defined")
+                            }
+                            ((0..*args_len).map(|i| elems[i].get_var().clone()).collect(), ret_type.clone())
+
                     } else {
                         panic!("Function {name} is not defined")
                     };
+
+                    if params.len() > args.len() {
+                        panic!("Function receiving more than suported parameters: {node:?}");
+                    } else if *is_sttm && !ExprType::expr_type_eq(&ret, &None, true) {
+                        panic!("Function call of {caller} is a statement but its return is ignored");
+                    } else if !*is_sttm && ExprType::expr_type_eq(&ret, &None, true) {
+                        panic!("Function call of {caller} is an assignment but returns none");
+                    } else if args.len() == 0 {
+                        if !params.is_empty() {
+                            panic!("Function receive no parameters, but received {}", params.len());
+                        }
+                    }
+
                     let mut i = 0;
                     while i < params.len() {
                         self.visit(scope, args[i].t.clone(), &mut params[i])?;
                         i += 1;
                     }
-                    if i == args.len() { Ok(ret) }
+                    if i == args.len() {
+                        node.t = ret.clone();
+                        Ok(ret)
+                    }
                     else {
                         scope.elems.push(Elem::Scope(Scope { 
                             attrs: ScopeAttr::FuncScope { name: String::new(), args_len: args.len()-i, ret_type: ret.clone(), parent: Some(name.clone()) },
@@ -559,14 +578,14 @@ impl Visitor {
                 let branch_type = Unknown(self.get_unknown_id());
                 let (l_type, r_type) = (self.visit(scope, branch_type.clone(), l)?, self.visit(scope, branch_type, r)?);
                 self.equivalent_types(&l_type, &r_type)?;
-                self.equivalent_types(&r_type, &node.t)?;
+                self.equivalent_types(&expected_type, &node.t)?;
                 let expr_type = match *tk_type {
-                    Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { self.infer_type(l_type) },
+                    Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { self.infer_type(&l_type) },
                     GrE | GrT | LeE | LeT | Neq | Eq | And | Or => { ExprType::Bool },
                     _ => panic!("Unknown Binary operator."),
                 };
                 self.equivalent_types(&expected_type, &expr_type)?;
-                Ok(self.infer_type(expected_type))
+                Ok(self.infer_type(&expected_type))
             },
             ASTNode::Unary { op: Token { t: tk_type, .. }, e } => {
                 use TokenType::*;
@@ -593,7 +612,7 @@ impl Visitor {
                     TokenType::Id(name) => {
                         if let Some(t) = Scope::find_var(scope, name) {
                             self.equivalent_types(&expected_type, &t)?;
-                            self.infer_type(expected_type)
+                            self.infer_type(&expected_type)
                         }
                         else {
                             return Err(VisitorError::VariableNotDeclared(name.to_string()))
@@ -637,7 +656,7 @@ impl Visitor {
                         PntVar(inner) | Pnt(inner) => t = *inner,
                         inner @ Unknown(_) => {
                             self.equivalent_types(&expected_type, &inner)?;
-                            return Ok(self.infer_type(expected_type))
+                            return Ok(self.infer_type(&expected_type))
                         },
                         _ if n == 1 => (),
                         _ => unreachable!("Tried to deref more than possible at {:?}", e.v),
@@ -666,12 +685,12 @@ impl Visitor {
             ASTNode::Assign { var: (_, _, Some(node)), expr } => {
                 self.update_types_aux(node)?;
                 self.update_types_aux(expr)?;
-                let final_type = self.infer_type(node.t.clone());
+                let final_type = self.infer_type(&node.t);
                 node.t = final_type.clone();
                 expr.t = final_type;
             },
             ASTNode::Func { args, ret, body } => {
-                *ret = self.infer_type(ret.clone());
+                *ret = self.infer_type(ret);
                 for arg in &mut *args {
                     if let (_, _, Some(node)) = arg {
                         self.update_types_aux(node)?;
@@ -710,7 +729,7 @@ impl Visitor {
             _ => panic!("Not implemented yet: {ast:?}"),
         }
         if ast.t.is_unknown() {
-            ast.t = self.infer_type(ast.t.clone());
+            ast.t = self.infer_type(&ast.t);
         }
         Ok(())
     }
