@@ -135,7 +135,7 @@ impl From<&InnerNode> for ExprType {
 
 #[derive(Debug, Clone)]
 pub struct Var {
-    pub is_const: bool,
+    pub is_var: bool,
     pub v: Token,
     pub t: ExprType,
 }
@@ -378,7 +378,7 @@ impl Visitor {
     fn visit(&mut self, scope: &mut Scope, expected_type: ExprType, node: &mut Node) -> Result<ExprType, VisitorError> {
         self.cur_scope = &*scope as *const Scope;
         match &mut *node.v {
-            ASTNode::Assign { var: (is_const, ref tk @ Token { t: TokenType::Id(ref var_name), .. }, t), expr } => {
+            ASTNode::Assign { var: (is_var, ref tk @ Token { t: TokenType::Id(ref var_name), .. }, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
                 let assign_index = scope.elems.len();
@@ -400,11 +400,18 @@ impl Visitor {
                     }
                     *name = String::from(var_name.clone());
                 } else {
+                    if let Some(v) = self.find_elem_type("var", var_name) {
+                        let def = v.get_var().clone();
+                        if def.is_var {
+                            self.equivalent_types(&def.t, &expression_type)?;
+                            return Ok(None)
+                        }
+                    }
                     scope.elems.push(if let CustomType(alias) = expression_type {
                         Elem::Type(var_name.clone(), *alias.clone())
                     } else {
                         Elem::Var(Var {
-                            is_const: *is_const,
+                            is_var: *is_var,
                             v: tk.clone(),
                             t: self.infer_type(&expected_type),
                         })
@@ -445,7 +452,7 @@ impl Visitor {
                         parent: Option::None,
                     },
                     elems: (0..args.len()).map(|i| Elem::Var(Var {
-                              is_const: args[i].0,
+                              is_var: args[i].0,
                               v: args[i].1.clone(),
                               t: fn_type.get_nth_inner_type(i),
                           })).collect(),
