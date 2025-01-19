@@ -132,6 +132,14 @@ impl Parser {
         self.unknown_id
     }
 
+    fn get_state(&self) -> (Token, usize) {
+        (self.prev_tk.clone(), self.tokenizer.get_state())
+    }
+    fn set_state(&mut self, state: &(Token, usize)) {
+        self.prev_tk = state.0.clone();
+        self.tokenizer.set_state(state.1);
+    }
+
     fn peek_tk(&mut self) -> Option<Token> {
         let tk = self.tokenizer.peek();
         let (l, _) = tk?.position();
@@ -227,12 +235,12 @@ impl Parser {
             // Var definition
             Some(Token { t: TokenType::Id(_), ..})  |
             Some(Token { t: TokenType::VarDef, ..}) => {
-                let backup = self.tokenizer.get_state(); // Return to before the var if it's not an assignment
+                let backup = self.get_state(); // Return to before the var if it's not an assignment
 
                 if let ret @ Ok(_) = self.assign() { return ret }
-                self.tokenizer.set_state(backup);
+                self.set_state(&backup);
                 if let ret @ Ok(_) = self.fn_call(true) { return ret }
-                self.tokenizer.set_state(backup);
+                self.set_state(&backup);
 
                 return Err(ParseError::GeneralError(format!("Could not parse sttmt at {}", self.peek_tk().unwrap())))
             },
@@ -306,12 +314,12 @@ impl Parser {
     }
 
     fn fn_call(&mut self, is_sttm: bool) -> Result<Node, ParseError> {
+        let backup = self.get_state();
         let tk = self.assert_next(&[TokenType::Id(String::new())])?;
         if self.assert_next(&[TokenType::None]).is_ok() {
             return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })))
         }
-        let backup = self.tokenizer.get_state();
-        let mut b = backup;
+        let mut b = backup.clone();
         let mut params = Vec::new();
         let mut first_tk;
         loop {
@@ -323,15 +331,15 @@ impl Parser {
                     if let ASTNode::Unary { .. } = *e.v {
                         if first_tk.unwrap().t != TokenType::OpParen {
                             params.clear();
-                            self.tokenizer.set_state(backup);
+                            self.set_state(&backup);
                             break
                         }
                     }
                     params.push(e);
-                    b = self.tokenizer.get_state();
+                    b = self.get_state();
                 },
                 _ => {
-                    self.tokenizer.set_state(b);
+                    self.set_state(&b);
                     break
                 }
             }
@@ -358,26 +366,35 @@ impl Parser {
     fn parsed_expr(&mut self) -> Result<Node, ParseError> {
         // Saving the current state of the Tokenizer
         // if the Parse fail for any branch it's easy to rollback
-        let backup = self.tokenizer.get_state();
+        let backup = self.get_state();
 
+        if let ret @ Ok(_) = self._struct_() { return ret }
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.func() { return ret }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.cond() { return ret }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.fn_call(false) { return ret }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self._type_() {
             match &ret.as_ref().unwrap().t {
                 t if t.is_alias() => println!("Ignore type if it's only a single alias"),
                 ExprType::Pnt(inner) | ExprType::PntVar(inner) if inner.is_alias() => {
-                    println!("Ignore type if it's just a ref to a alias")
+                    let after_type = self.get_state();
+                    self.set_state(&backup);
+                    if let var_ref @ Ok(_) = self.unary() {
+                        return var_ref
+                    } else {
+                        self.set_state(&after_type);
+                        return ret
+                    }
                 },
                 _ => return ret,
             }
         }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.unary() { return ret }
-        self.tokenizer.set_state(backup); // restore state of the Tokenizer
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.bitwise() { return ret }
 
         match self.peek_tk() {
@@ -591,7 +608,7 @@ impl Parser {
             Some(Token { t: t @ TokenType::Ref, .. }) |
             Some(Token { t: t @ TokenType::VarRef, .. }) => {
                 _ =  self.assert_next(&[TokenType::Ref, TokenType::VarRef])?;
-                Ok(Box::new(ASTNode::Type { t, inner_types: vec![self.basic_types()?] }))
+                Ok(Box::new(ASTNode::Type { t, inner_types: vec![self.ptr_type()?] }))
             }
             _ => {
                 self.basic_types()
