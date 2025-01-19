@@ -617,6 +617,8 @@ impl Visitor {
                     TokenType::Real(_) => Real(64),
                     TokenType::Integer(_) => Int { bits: 64, signed: true },
                     TokenType::Str(_) => Pnt(Box::new(Char)),
+                    TokenType::True => Bool,
+                    TokenType::False => Bool,
                     TokenType::Id(name) => {
                         if let Some(t) = Scope::find_var(scope, name) {
                             self.equivalent_types(&expected_type, &t)?;

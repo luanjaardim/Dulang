@@ -75,6 +75,8 @@ primary ::==
 	REAL
 	STRING
 	CHAR
+	"false"
+	"true"
 
 type ::==
 	union_type ("->" union_type)*  # Function type

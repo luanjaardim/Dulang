@@ -18,6 +18,8 @@ pub enum TokenType {
     If, Elif, Else, While, Loop, Switch,    // if, elif, else, while, loop, switch
     // Control Keywords
     Skip, Stop, Back,                       // skip, stop, back
+    // False and True keywords
+    False, True,                            // false, true
 
     // Types
     I(usize), U(usize), F(usize), Char, Bool,
@@ -62,6 +64,7 @@ impl Token {
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
+                "false" => False, "true" => True,
                 _ if regex::Regex::new(r"^i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^u\d+").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^f\d+").unwrap().is_match(text) => F(text[1..].parse().unwrap()),

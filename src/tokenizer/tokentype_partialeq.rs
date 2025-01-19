@@ -13,7 +13,9 @@ impl TokenType {
             (UnionType, UnionType) | (TupleType, TupleType) | (Type, Type) | (Assign, Assign) | (TypeInf, TypeInf) |
             (Ref, Ref) | (VarRef, VarRef) | (VarDef, VarDef) | (Deref, Deref) |
             (OpCurly, OpCurly) | (ClCurly, ClCurly) | (OpParen, OpParen) | (ClParen, ClParen) | (Comma, Comma) | (Dot, Dot) |
-            (Colon, Colon) | (Semicolon, Semicolon) | (TokenType::None, TokenType::None) | (Nl, Nl) | (Id(_), Id(_)) => true,
+            (Colon, Colon) | (Semicolon, Semicolon) | (TokenType::None, TokenType::None) | (Nl, Nl) | (Id(_), Id(_)) |
+            (True, True) | (False, False)
+            => true,
             _ => false,
         }
     }

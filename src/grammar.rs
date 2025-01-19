@@ -546,6 +546,8 @@ impl Parser {
         match self.peek_tk() {
             Some(tk @ Token { t: TokenType::Id(_), .. }) |
             Some(tk @ Token { t: TokenType::Str(_), .. }) |
+            Some(tk @ Token { t: TokenType::True, .. }) |
+            Some(tk @ Token { t: TokenType::False, .. }) |
             Some(tk @ Token { t: TokenType::Real(_), .. }) |
             Some(tk @ Token { t: TokenType::Integer(_), .. }) |
             Some(tk @ Token { t: TokenType::Character(_), .. }) => {
@@ -563,7 +565,7 @@ impl Parser {
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
                 TokenType::Real(String::new()), TokenType::Integer(String::new()), 
-                TokenType::Character(String::new()), TokenType::Str(String::new()), TokenType::OpParen
+                TokenType::Character(String::new()), TokenType::Str(String::new()), TokenType::OpParen, TokenType::False, TokenType::True
             ])),
             None => Err(ParseError::ExpectedToken)
         }
