@@ -614,8 +614,14 @@ impl Visitor {
             ASTNode::Leaf(tk) => {
                 let t = match &tk.t {
                     TokenType::Character(_) => Char,
-                    TokenType::Real(_) => Real(64),
-                    TokenType::Integer(_) => Int { bits: 64, signed: true },
+                    TokenType::Real(_) => {
+                        if let Real(_) = expected_type { expected_type }
+                        else { Real(64) }
+                    },
+                    TokenType::Integer(_) => {
+                        if let Int{ .. } = expected_type { expected_type }
+                        else { Int { bits: 64, signed: false } }
+                    },
                     TokenType::Str(_) => Pnt(Box::new(Char)),
                     TokenType::True => Bool,
                     TokenType::False => Bool,
