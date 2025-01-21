@@ -240,7 +240,7 @@ impl Parser {
 
                 if let ret @ Ok(_) = self.assign() { return ret }
                 self.set_state(&backup);
-                if let ret @ Ok(_) = self.fn_call(true) { return ret }
+                if let ret @ Ok(_) = self.fn_call(true, None) { return ret }
                 self.set_state(&backup);
 
                 return Err(ParseError::GeneralError(format!("Could not parse sttmt at {}", self.peek_tk().unwrap())))
@@ -314,7 +314,7 @@ impl Parser {
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Assign { var, expr })))
     }
 
-    fn fn_call(&mut self, is_sttm: bool) -> Result<Node, ParseError> {
+    fn fn_call(&mut self, is_sttm: bool, last_arg: Option<Node>) -> Result<Node, ParseError> {
         let backup = self.get_state();
         let tk = self.assert_next(&[TokenType::Id(String::new())])?;
         if self.assert_next(&[TokenType::None]).is_ok() {
@@ -322,25 +322,48 @@ impl Parser {
         }
         let mut b = backup.clone();
         let mut params = Vec::new();
-        let mut first_tk;
         loop {
-            first_tk = self.peek_tk();
-            match self.expr() {
-                Ok(e) => {
-                    // Only accepts its parameters if none of them is a Unary that did not started with '('
-                    // This caused (a + 1) or (a - 1) to be parsed as a function call, when it should be a binary operation
-                    if let ASTNode::Unary { .. } = *e.v {
-                        if first_tk.unwrap().t != TokenType::OpParen {
-                            params.clear();
-                            self.set_state(&backup);
+            match self.peek_tk() {
+                Some(Token { t: TokenType::PassR, .. }) => {
+                    _ = self.next_tk();
+                    let t = Unknown(self.get_unknown_id());
+                    if let Some(last) = last_arg { params.push(last) }
+                    return self.fn_call(is_sttm, Some(
+                            Node::new(t, Box::new(ASTNode::FnCall { caller: tk, params, is_sttm: false })
+                        )));
+                },
+                Some(Token { t: TokenType::PassL, .. }) => {
+                    _ = self.next_tk();
+                    if let Some(last) = last_arg { params.push(last) }
+                    let next_fn = self.fn_call(false, None)?;
+                    params.push(next_fn);
+                    return Ok(Node::new(Unknown(self.get_unknown_id()),
+                            Box::new(ASTNode::FnCall { caller: tk, params, is_sttm })
+                    ))
+                }
+                Some(first_tk) => {
+                    match self.expr() {
+                        Ok(e) => {
+                            // Only accepts its parameters if none of them is a Unary that did not started with '('
+                            // This caused (a + 1) or (a - 1) to be parsed as a function call, when it should be a binary operation
+                            if let ASTNode::Unary { .. } = *e.v {
+                                if first_tk.t != TokenType::OpParen {
+                                    params.clear();
+                                    self.set_state(&backup);
+                                    break
+                                }
+                            }
+                            params.push(e);
+                            b = self.get_state();
+                        },
+                        _ => {
+                            self.set_state(&b);
                             break
                         }
                     }
-                    params.push(e);
-                    b = self.get_state();
-                },
+                }
                 _ => {
-                    self.set_state(&b);
+                    println!("Gone into None Token found in grammar fn_call function");
                     break
                 }
             }
@@ -348,6 +371,7 @@ impl Parser {
         if params.is_empty() {
             return Err(ParseError::GeneralError("Expected expressions as Function Call Parameters".to_owned()))
         }
+        if let Some(last) = last_arg { params.push(last) }
         Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params, is_sttm })))
     }
 
@@ -375,7 +399,7 @@ impl Parser {
         self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.cond() { return ret }
         self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.fn_call(false) { return ret }
+        if let ret @ Ok(_) = self.fn_call(false, None) { return ret }
         self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self._type_() {
             match &ret.as_ref().unwrap().t {

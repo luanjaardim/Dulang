@@ -14,6 +14,7 @@ impl TokenType {
             (Ref, Ref) | (VarRef, VarRef) | (VarDef, VarDef) | (Deref, Deref) |
             (OpCurly, OpCurly) | (ClCurly, ClCurly) | (OpParen, OpParen) | (ClParen, ClParen) | (Comma, Comma) | (Dot, Dot) |
             (Colon, Colon) | (Semicolon, Semicolon) | (TokenType::None, TokenType::None) | (Nl, Nl) | (Id(_), Id(_)) |
+            (PassL, PassL) | (PassR, PassR) |
             (True, True) | (False, False)
             => true,
             _ => false,

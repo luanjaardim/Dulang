@@ -48,6 +48,9 @@ var ::==
 fn-call ::==
 	ID "none"   # Function with no parameters
 	ID expr*
+	fn-call ("<<" fn-call)*
+	fn-call (">>" fn-call)*
+
 
 struct ::==
 	"{" struct-body "}"

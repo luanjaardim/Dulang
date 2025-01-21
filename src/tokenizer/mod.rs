@@ -34,6 +34,7 @@ pub enum TokenType {
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,     // {, }, (, ),
     Comma, Dot, Semicolon, Colon,           // ',' , '.' , ';', ':'
+    PassR, PassL,                           // >>, <<
     None,                                   // none,
 
     Nl,                                     // New line '\n'
@@ -61,6 +62,7 @@ impl Token {
                 "=" => Assign, "::" => TypeInf, "none" => TokenType::None, "char" => Char, "bool" => Bool,
                 "->" => FnType, "|" => UnionType, "^" => TupleType, "type" => Type,
                 "&var" => VarRef, "var" => VarDef, "&" => Ref, "@" => Deref,
+                ">>" => PassR, "<<" => PassL,
                 "if" => If, "elif" => Elif, "else" => Else,
                 "while" => While, "loop" => Loop,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
