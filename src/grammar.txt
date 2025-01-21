@@ -21,7 +21,7 @@ else ::==
 	"else" inner-body
 
 assign ::==
-	("var")? var ASSIGN expr nl               # Defining constants
+	var ASSIGN expr nl               # Defining constants
 	
 loop ::==
 	"while" comparison inner-body
@@ -31,23 +31,33 @@ expr ::==
 	parsed-expr ("::" type)?
 
 parsed-expr :: ==
+	struct
 	func
-	cond
 	fn-call
 	type
-	bitwise
 	unary
+	bitwise
 
 func ::==
 	TODO: "(" (var ( "," var )*)? ")" type? ":" expr
 	"(" (var ( "," var )*)? ")" type? ":" (inner-body | func)
 
 var ::==
-	ID ("::" type)?
+	"var"? ID ("::" type)?
 
 fn-call ::==
 	ID "none"   # Function with no parameters
 	ID expr*
+
+struct ::==
+	"{" struct-body "}"
+
+struct-body ::==
+	struct-items (";" struct-items)*
+
+struct-items ::==
+	assign
+	var    # TODO
 
 bitwise ::==
 	BNOT bitwise

@@ -12,6 +12,8 @@ pub enum ExprType {
     // Pointer types
     Pnt(Box<ExprType>), PntVar(Box<ExprType>),
 
+    Struct(Vec<Var>),
+
     Type, CustomType(Box<ExprType>), Alias(String), None, Unknown(usize)
 }
 impl std::fmt::Debug for ExprType {
@@ -42,6 +44,7 @@ impl std::fmt::Debug for ExprType {
             PntVar(t) => { write!(f, "PntVar to ( ")?; t.fmt(f)?; write!(f, " )") },
             Type => write!(f, "Type"),
             None => write!(f, "None"),
+            Struct(vars) => { write!(f, "Struct ( ")?; vars.fmt(f)?; write!(f, " )") },
             Unknown(i) => write!(f, "Unknown({i})"),
         }
     }
@@ -55,7 +58,7 @@ impl ExprType {
             | (Type, Type) => true,
               (_, Unknown(_)) if !strict_cmp => true,
               (Unknown(_), _) if !strict_cmp => true,
-              (Unknown(i), Unknown(j)) if strict_cmp => true,
+              (Unknown(i), Unknown(j)) if strict_cmp && i == j => true,
 
             (Real(b1), Real(b2)) if b1 == b2 => true,
             (Int { bits: b1, signed: s1 }, Int { bits: b2, signed: s2 }) if b1 == b2 && s1 == s2 => true,
@@ -96,6 +99,13 @@ impl ExprType {
             FnType(elems) | UnionType(elems) | TupleType(elems) => elems.iter().any(|e| e.is_unknown()),
             PntVar(inner) | Pnt(inner) => inner.is_unknown(),
             _ => false,
+        }
+    }
+    fn get_inner_from_customtype(&self) -> Self {
+        if let CustomType(inner) = self {
+            return *inner.clone()
+        } else {
+            panic!("Trying to get_inner_from_customtype of non CustomType: {self:?}")
         }
     }
 }
@@ -143,6 +153,7 @@ pub struct Var {
 #[derive(Debug)]
 pub enum ScopeAttr {
     GlobScope,
+    StructScope { name: String },
     FuncScope {
         name: String,
         args_len: usize,
@@ -150,6 +161,7 @@ pub enum ScopeAttr {
         // parent will only be used when we are creating a function from a partial application of
         // other function, so its parent will be the function which its arguments are missing
         parent: Option<String>,
+        is_var: bool,
     },
     CondScope,
     LoopScope {
@@ -157,21 +169,34 @@ pub enum ScopeAttr {
     }
 }
 
-pub enum Elem { Var(Var), Scope(Scope), Type(String, ExprType) }
+pub enum Elem { Var(Var), Scope(Scope), }
 impl Elem {
     pub fn get_var(&self) -> &Var {
-        if let Elem::Var(v) =  self { v }
-        else { panic!("Trying to get a variable from a Scope Elem") }
-    }
-
-    pub fn get_type(&self) -> &ExprType {
-        if let Elem::Type(s, t) =  self { t }
+        if let Elem::Var(v) = self { v }
         else { panic!("Trying to get a variable from a Scope Elem") }
     }
 
     pub fn get_scp(&self) -> &Scope {
         if let Elem::Scope(s) =  self { s }
         else { panic!("Trying to get a Scope from a Var Elem") }
+    }
+
+    pub fn func_as_var(&self) -> Var {
+        let scp = self.get_scp();
+        if let Scope { attrs: ScopeAttr::FuncScope { name, args_len, ret_type, is_var, .. }, elems, .. } = scp {
+            Var {
+                is_var: *is_var,
+                v: Token::new(0, 0, name),
+                t: FnType(
+                    if *args_len != 0 {
+                        (0..*args_len).map(|i| elems[i].get_var().t.clone()).chain([ret_type.clone()]).collect()
+                    } else {
+                        vec![None, ret_type.clone()]
+                    })
+            }
+        } else {
+            panic!("Passed scope is not a function");
+        }
     }
 }
 impl std::fmt::Debug for Elem {
@@ -182,9 +207,6 @@ impl std::fmt::Debug for Elem {
             },
             Elem::Scope(s) => {
                 write!(f, "{s:#?}")
-            },
-            Elem::Type(s, t) => {
-                write!(f, "Alias: {s} -> {t:#?}")
             },
         }
     }
@@ -272,12 +294,9 @@ impl Visitor {
                         // TODO: A better find for Scopes, maybe search for the ScopeAttr type
                         return Some(e)
                     },
+                    (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
+                        if type_name == elem_name => return Some(e),
                     (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == elem_name => return Some(e),
-                    (Elem::Type(type_name, ..), "type") => {
-                        if type_name == elem_name {
-                            return Some(e)
-                        }
-                    },
                     _ => ()
                 }
             }
@@ -312,7 +331,7 @@ impl Visitor {
             (Alias(name), t) |
             (t, Alias(name)) => {
                 let elem_type = self.find_elem_type("type", &name).expect("Alias type not defined");
-                let alias_type = elem_type.get_type().clone();
+                let alias_type = elem_type.get_var().t.get_inner_from_customtype();
                 self.equivalent_types(&t, &alias_type)?;
             },
             (Pnt(inner1), Pnt(inner2)) | (PntVar(inner1), PntVar(inner2)) => {
@@ -357,7 +376,7 @@ impl Visitor {
             FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
-            Alias(name) => self.find_elem_type("type", &name).expect("Alias not defined").get_type().clone(),
+            Alias(name) => self.find_elem_type("type", &name).expect("Alias not defined").get_var().t.get_inner_from_customtype(),
             Pnt(inner) => Pnt(Box::new(self.infer_type_level(&*inner, level))),
             PntVar(inner) => PntVar(Box::new(self.infer_type_level(&*inner, level))),
             _ => t.clone()
@@ -370,6 +389,7 @@ impl Visitor {
         for n in &mut *ast {
             self.visit(&mut global_scope, None, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
+        self.cur_scope = &global_scope as *const Scope;
         self.glob_scope = Some(global_scope);
         self.update_types(ast)?;
         Ok(())
@@ -392,12 +412,13 @@ impl Visitor {
                 let expected_type = t.as_ref().unwrap().t.clone();
                 let expression_type = self.visit(scope, expected_type.clone(), expr)?;
                 self.equivalent_types(&expected_type, &expression_type)?;
-                if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..})) = scope.elems.get_mut(assign_index) {
+                if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, is_var: is_fn_var, .. }, ..})) = scope.elems.get_mut(assign_index) {
                     // When we have a recursive function the name is filled before
                     // we need to check if the name correspond to this one.
                     if !name.is_empty() && *name != *var_name {
                         panic!("Function {name} is not defined")
                     }
+                    *is_fn_var = *is_var;
                     *name = String::from(var_name.clone());
                 } else {
                     if let Some(v) = self.find_elem_type("var", var_name) {
@@ -407,17 +428,32 @@ impl Visitor {
                             return Ok(None)
                         }
                     }
-                    scope.elems.push(if let CustomType(alias) = expression_type {
-                        Elem::Type(var_name.clone(), *alias.clone())
-                    } else {
-                        Elem::Var(Var {
-                            is_var: *is_var,
-                            v: tk.clone(),
-                            t: self.infer_type(&expected_type),
-                        })
-                    });
+                    scope.elems.push(Elem::Var( Var {
+                        is_var: *is_var,
+                        v: tk.clone(),
+                        t: if let CustomType(_) = expression_type { expression_type } else { self.infer_type(&expected_type)}
+                    }));
                 }
                 Ok(None)
+            },
+            ASTNode::Struct(items) => {
+                let mut inner_types = vec![];
+                let mut scp = Scope {
+                    attrs: ScopeAttr::StructScope { name: String::new() },
+                    elems: vec![],
+                    scp_father: std::ptr::null(), // Must not access variables from outter scopes by now
+                };
+                for (i, item) in items.iter_mut().enumerate() {
+                    let t = Unknown(self.get_unknown_id());
+                    self.visit(&mut scp, t, item)?;
+                    inner_types.push(if let Elem::Var(v) = &scp.elems[i] {
+                        v.clone()
+                    } else {
+                        scp.elems[i].func_as_var()
+                    });
+                }
+                scope.elems.push(Elem::Scope(scp));
+                Ok(Struct(inner_types))
             },
             ASTNode::Func { args, ret, body } => {
                 let ret_type = ret.clone();
@@ -450,6 +486,7 @@ impl Visitor {
                         ret_type: fn_type.get_fn_return_type(),
                         args_len: args.len(),
                         parent: Option::None,
+                        is_var: false,
                     },
                     elems: (0..args.len()).map(|i| Elem::Var(Var {
                               is_var: args[i].0,
@@ -549,7 +586,7 @@ impl Visitor {
                     }
                     else {
                         scope.elems.push(Elem::Scope(Scope { 
-                            attrs: ScopeAttr::FuncScope { name: String::new(), args_len: args.len()-i, ret_type: ret.clone(), parent: Some(name.clone()) },
+                            attrs: ScopeAttr::FuncScope { name: String::new(), args_len: args.len()-i, ret_type: ret.clone(), parent: Some(name.clone()), is_var: false },
                             elems: args[i..].iter().map(|v| Elem::Var(v.clone())).collect(),
                             scp_father: scope.scp_father,
                         }));
@@ -742,6 +779,7 @@ impl Visitor {
             ASTNode::Ref { e, .. } => self.update_types_aux(e)?,
             ASTNode::Cast { e, .. } => self.update_types_aux(e)?,
             ASTNode::Empty | ASTNode::Leaf(_) => (),
+            ASTNode::Struct(vars) => self.update_types(vars)?,
             _ => panic!("Not implemented yet: {ast:?}"),
         }
         if ast.t.is_unknown() {
