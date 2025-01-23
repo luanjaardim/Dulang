@@ -699,7 +699,7 @@ impl Visitor {
                 self.equivalent_types(&node.t, &(if *var { PntVar(t) } else { Pnt(t) }))?;
                 Ok(node.t.clone())
             },
-            ASTNode::Deref { mut n, e } => {
+            ASTNode::Deref { mut n, e, .. } => {
                 let deref_t = Unknown(self.get_unknown_id());
                 let mut t = self.visit(scope, deref_t, e)?;
                 loop {

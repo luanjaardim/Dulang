@@ -79,6 +79,7 @@ pub enum ASTNode {
     Deref {
         n: usize,  // number of derefs
         e: Node,
+        i: Option<Node>, // when it's a Deref with syntax: e @ i
     },
     // skip, stop or back, only back and stop can have the second element (the expr they return)
     FlowChange(TokenType, Option<Node>),
@@ -344,14 +345,18 @@ impl Parser {
                 Some(first_tk) => {
                     match self.expr() {
                         Ok(e) => {
-                            // Only accepts its parameters if none of them is a Unary that did not started with '('
-                            // This caused (a + 1) or (a - 1) to be parsed as a function call, when it should be a binary operation
-                            if let ASTNode::Unary { .. } = *e.v {
-                                if first_tk.t != TokenType::OpParen {
-                                    params.clear();
-                                    self.set_state(&backup);
-                                    break
-                                }
+                            match *e.v {
+                                // Only accepts its parameters if none of them is a Unary that did not started with '('
+                                // This caused (a + 1) or (a - 1) to be parsed as a function call, when it should be a binary operation
+                                ASTNode::Deref { .. } |
+                                ASTNode::Unary { .. } => {
+                                    if first_tk.t != TokenType::OpParen {
+                                        params.clear();
+                                        self.set_state(&backup);
+                                        break
+                                    }
+                                },
+                                _ => (),
                             }
                             params.push(e);
                             b = self.get_state();
@@ -397,10 +402,6 @@ impl Parser {
         self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.func() { return ret }
         self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.cond() { return ret }
-        self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.fn_call(false, None) { return ret }
-        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self._type_() {
             match &ret.as_ref().unwrap().t {
                 t if t.is_alias() => println!("Ignore type if it's only a single alias"),
@@ -417,10 +418,7 @@ impl Parser {
                 _ => return ret,
             }
         }
-        self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.unary() { return ret }
-        self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.bitwise() { return ret }
+        if let ret @ Ok(_) = self.sub_expr(backup) { return ret }
 
         match self.peek_tk() {
             Some(tk) =>
@@ -429,6 +427,16 @@ impl Parser {
             )),
             None => Err(ParseError::ExpectedToken),
         }
+    }
+
+    fn sub_expr(&mut self, backup: (Token, usize)) -> Result<Node, ParseError> {
+        self.set_state(&backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.fn_call(false, None) { return ret }
+        self.set_state(&backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.unary() { return ret }
+        self.set_state(&backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.bitwise() { return ret }
+        Err(ParseError::GeneralError("Sub Expression not found".to_string()))
     }
 
     fn _struct_(&mut self) -> Result<Node, ParseError> {
@@ -462,7 +470,7 @@ impl Parser {
         // End of the function args ')'
         _ = self.assert_next(&[TokenType::ClParen])?;
 
-        let t = self.assert_peek(&[TokenType::Colon]);
+        _ = self.assert_peek(&[TokenType::Colon]);
         let ret = if self.assert_peek(&[TokenType::Colon]).is_ok() { Unknown(self.get_unknown_id()) }
         else { self._type_()?.t };
 
@@ -517,7 +525,7 @@ impl Parser {
                 })))
             }
             _ => {
-                Ok(self.parse_generic_chained_binary(|s| s.arith(), vec![
+                Ok(self.parse_generic_chained_binary(|s| s.indexing(), vec![
                         TokenType::GrT,
                         TokenType::GrE,
                         TokenType::LeT,
@@ -529,6 +537,24 @@ impl Parser {
                 ])?)
             }
         }
+    }
+
+    fn indexing(&mut self) -> Result<Node, ParseError> {
+        let mut e = self.arith()?;
+        loop {
+             match self.assert_next(&[TokenType::Deref]) {
+                Ok(_) => {
+                    let i = self.arith().ok();
+                    let is_some = i.is_some();
+                    e = Node::new(Unknown(self.get_unknown_id()),
+                          Box::new(ASTNode::Deref { n: 1, e, i })
+                    );
+                    if is_some { continue } else { return Ok(e) }
+                },
+                _ => break,
+            }
+        }
+        Ok(e)
     }
 
     fn arith(&mut self) -> Result<Node, ParseError> {
@@ -575,7 +601,7 @@ impl Parser {
                     _ = self.next_tk();
                 }
                 Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(
-                        ASTNode::Deref { n, e: self.primary()? }
+                        ASTNode::Deref { n, e: self.primary()?, i: None }
                     )))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
