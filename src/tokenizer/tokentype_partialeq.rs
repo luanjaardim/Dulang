@@ -8,7 +8,7 @@ impl TokenType {
             (GrE, GrE) | (LeT, LeT) | (LeE, LeE) | (And, And) | (Or, Or) | (Not, Not) | (Band, Band) | (Bor, Bor) |
             (Bnot, Bnot) | (Shl, Shl) | (Shr, Shr) | (Bxor, Bxor) |
             (If, If) | (Elif, Elif) | (Else, Else) | (While, While) |
-            (Loop, Loop) | (Switch, Switch) | (Skip, Skip) | (Stop, Stop) | (Back, Back) |
+            (Loop, Loop) | (Mod, Mod) | (Skip, Skip) | (Stop, Stop) | (Back, Back) |
             (I(_), I(_)) | (U(_), U(_)) | (F(_), F(_)) | (Char, Char) | (Bool, Bool) | (FnType, FnType) |
             (UnionType, UnionType) | (TupleType, TupleType) | (Type, Type) | (Assign, Assign) | (TypeInf, TypeInf) |
             (Ref, Ref) | (VarRef, VarRef) | (VarDef, VarDef) | (Deref, Deref) |

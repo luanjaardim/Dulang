@@ -15,7 +15,7 @@ pub enum TokenType {
     // Bitwise Operations
     Band, Bor, Bnot, Shl, Shr, Bxor,        // band, bor, bnot, shl, shr, bxor
     // Blocks
-    If, Elif, Else, While, Loop, Switch,    // if, elif, else, while, loop, switch
+    Mod, If, Elif, Else, While, Loop,       // mod, if, elif, else, while, loop
     // Control Keywords
     Skip, Stop, Back,                       // skip, stop, back
     // False and True keywords
@@ -64,7 +64,7 @@ impl Token {
                 "&var" => VarRef, "var" => VarDef, "&" => Ref, "@" => Deref,
                 ">>" => PassR, "<<" => PassL,
                 "if" => If, "elif" => Elif, "else" => Else,
-                "while" => While, "loop" => Loop,
+                "while" => While, "loop" => Loop, "mod" => Mod,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
                 "false" => False, "true" => True,
                 _ if regex::Regex::new(r"^i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),

@@ -35,6 +35,10 @@ pub enum ASTNode {
         var: Var,
         expr: Node,
     },
+    Mod {
+        name: String,
+        body: Body,
+    },
     Struct(Body),
     Func {
         args: Vec<Var>,
@@ -246,6 +250,8 @@ impl Parser {
 
                 return Err(ParseError::GeneralError(format!("Could not parse sttmt at {}", self.peek_tk().unwrap())))
             },
+            // Module definition
+            Some(Token { t: TokenType::Mod, ..}) => self.module(),
             // Cond as statement
             Some(Token { t: TokenType::If, ..}) => self.cond(),
             // Loop statement
@@ -266,8 +272,26 @@ impl Parser {
         }
     }
 
+    fn module(&mut self) -> Result<Node, ParseError> {
+        _ = self.assert_next(&[TokenType::Mod])?;
+        let (name, body) = match self.next_tk() {
+            // Importing another file as a module
+            Some(Token { t: TokenType::Str(name), .. }) => {
+                let name_without_quotes = String::from(&name[1..name.len()-1]);
+                (name_without_quotes.clone(),
+                Parser::new(&name_without_quotes)
+                    .expect(format!("Could not create a parser of the file {name}.").as_str())
+                    .parse(&mut self.unknown_id)
+                    .expect(format!("Could not parse the file {name}.").as_str()))
+            },
+            Some(Token { t: TokenType::Id(name), .. }) => (name, self.inner_body()?),
+            Some(tk) => panic!("Wrong module definition at: {tk}."),
+            _ => panic!("Expected token for module definition."),
+        };
+        Ok(Node::new(ExprType::None, Box::new(ASTNode::Mod { name, body })))
+    }
+
     fn _loop_(&mut self) -> Result<Node, ParseError> {
-        _ = self.assert_peek(&[TokenType::While, TokenType::Loop])?;
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Loop {
             cond: match self.next_tk() {
                 Some(Token { t: TokenType::While, .. }) => Some(self.expr()?),

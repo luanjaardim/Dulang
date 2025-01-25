@@ -5,6 +5,7 @@ body ::== ( sttm )*
 inner-body ::== "{" body "}"
 
 sttm ::==
+	module
 	cond
 	assign
 	loop
@@ -12,6 +13,10 @@ sttm ::==
 	STOP expr? nl
 	SKIP nl
 	fn-call
+
+module ::==
+	mod STRING nl
+	mod ID inner-body
 
 cond ::==
 	"if" comparison inner-body (elif | else)?
