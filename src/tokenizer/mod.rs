@@ -190,20 +190,26 @@ impl Tokenizer {
                 self.l += 1;
             }
             match c {
-                // Discarting elements if inside a comment
-                _ if state == SingleLineComment || state == MultLineComment => (),
                 // Comments detection
-
                 c if state == FoundComment || c == '$' => {
                     if state == FoundComment {
                         state = if c == '$' { MultLineComment } else { SingleLineComment };
                     } else {
-                        if state != Unknown {
-                            self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                        // Searching for the end of a MultiLineComment
+                        if state == MultLineComment && self.pos+2 < self.s.len() && &self.s[self.pos..self.pos+2] == "$$" {
+                            _ = chars.next()?;
+                            self.pos += 1;
+                            self.c += 1;
+                            state = Unknown;
+                        } else if state != SingleLineComment && state != MultLineComment {
+                            if state != Unknown {
+                                self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                            }
+                            state = FoundComment;
                         }
-                        state = FoundComment;
                     }
                 },
+                // Discarting elements if inside a comment
                 _ if state == SingleLineComment || state == MultLineComment => (),
                 '\\' if state == Char || state == String => {
                     _ = chars.next()?;
