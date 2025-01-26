@@ -125,6 +125,12 @@ impl PartialEq for ExprType {
 impl From<&InnerNode> for ExprType {
     fn from(value: &InnerNode) -> Self {
         match &**value {
+            ASTNode::Leaf(Token { t: TokenType::True, .. }) => Bool,
+            ASTNode::Leaf(Token { t: TokenType::False, .. }) => Bool,
+            ASTNode::Leaf(Token { t: TokenType::Real(_), .. }) => Real(64),
+            ASTNode::Leaf(Token { t: TokenType::Character(_), .. }) => Char,
+            ASTNode::Leaf(Token { t: TokenType::Str(_), .. }) => Pnt(Box::new(Char)),
+            ASTNode::Leaf(Token { t: TokenType::Integer(_), .. }) => Int { bits: 64, signed: false },
             ASTNode::Type { t: TokenType::I(bits), inner_types } if inner_types.is_empty() => Int { bits: *bits, signed: true },
             ASTNode::Type { t: TokenType::U(bits), inner_types } if inner_types.is_empty() => Int { bits: *bits, signed: false },
             ASTNode::Type { t: TokenType::F(bits), inner_types } if inner_types.is_empty() => Real(*bits),

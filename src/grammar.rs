@@ -243,6 +243,9 @@ impl Parser {
             Some(Token { t: TokenType::VarDef, ..}) => {
                 let backup = self.get_state(); // Return to before the var if it's not an assignment
 
+                // Module definition
+                if let ret @ Ok(_) = self.module() { return ret }
+                self.set_state(&backup);
                 if let ret @ Ok(_) = self.assign() { return ret }
                 self.set_state(&backup);
                 if let ret @ Ok(_) = self.fn_call(true, None) { return ret }
@@ -250,8 +253,6 @@ impl Parser {
 
                 return Err(ParseError::GeneralError(format!("Could not parse sttmt at {}", self.peek_tk().unwrap())))
             },
-            // Module definition
-            Some(Token { t: TokenType::Mod, ..}) => self.module(),
             // Cond as statement
             Some(Token { t: TokenType::If, ..}) => self.cond(),
             // Loop statement
@@ -273,22 +274,25 @@ impl Parser {
     }
 
     fn module(&mut self) -> Result<Node, ParseError> {
+        let mod_name = if let Token { t: TokenType::Id(name), .. } = self.assert_next(&[TokenType::Id(String::new())])? {
+            name
+        } else { unreachable!() };
+        _ = self.assert_next(&[TokenType::Assign])?;
         _ = self.assert_next(&[TokenType::Mod])?;
-        let (name, body) = match self.next_tk() {
-            // Importing another file as a module
-            Some(Token { t: TokenType::Str(name), .. }) => {
-                let name_without_quotes = String::from(&name[1..name.len()-1]);
-                (name_without_quotes.clone(),
-                Parser::new(&name_without_quotes)
-                    .expect(format!("Could not create a parser of the file {name}.").as_str())
+        let body = match self.peek_tk() {
+            Some(Token { t: TokenType::ModAccess(mod_path), .. }) => {
+                _ = self.next_tk();
+                let path = mod_path.replace(':', "/");
+                println!("Importing file: {path}");
+                Parser::new(&path)
+                    .expect(format!("Could not create a parser of the file {path}.").as_str())
                     .parse(&mut self.unknown_id)
-                    .expect(format!("Could not parse the file {name}.").as_str()))
+                    .expect(format!("Could not parse the file {path}.").as_str())
             },
-            Some(Token { t: TokenType::Id(name), .. }) => (name, self.inner_body()?),
-            Some(tk) => panic!("Wrong module definition at: {tk}."),
-            _ => panic!("Expected token for module definition."),
+            Some(_) => self.inner_body()?,
+            None => return Err(ParseError::ExpectedToken),
         };
-        Ok(Node::new(ExprType::None, Box::new(ASTNode::Mod { name, body })))
+        Ok(Node::new(ExprType::None, Box::new(ASTNode::Mod { name: mod_name, body })))
     }
 
     fn _loop_(&mut self) -> Result<Node, ParseError> {
@@ -636,7 +640,6 @@ impl Parser {
     }
     fn primary(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
-            Some(tk @ Token { t: TokenType::Id(_), .. }) |
             Some(tk @ Token { t: TokenType::Str(_), .. }) |
             Some(tk @ Token { t: TokenType::True, .. }) |
             Some(tk @ Token { t: TokenType::False, .. }) |
@@ -644,7 +647,8 @@ impl Parser {
             Some(tk @ Token { t: TokenType::Integer(_), .. }) |
             Some(tk @ Token { t: TokenType::Character(_), .. }) => {
                 _ = self.next_tk(); // Discart prev Token
-                Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Leaf(tk))))
+                let leaf = Box::new(ASTNode::Leaf(tk));
+                Ok(Node::new(ExprType::from(&leaf), leaf))
             },
             Some(Token { t: TokenType::OpParen, .. }) => {
                 _ = self.assert_next(&[TokenType::OpParen])?; // Discart prev Token
@@ -655,12 +659,25 @@ impl Parser {
                     None => Err(ParseError::ExpectedToken)
                 }
             },
+            Some(Token { t: TokenType::Id(_), .. }) |
+            Some(Token { t: TokenType::StruAccess(_), .. }) |
+            Some(Token { t: TokenType::ModAccess(_), .. }) => self.id(),
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
-                TokenType::Real(String::new()), TokenType::Integer(String::new()), 
-                TokenType::Character(String::new()), TokenType::Str(String::new()), TokenType::OpParen, TokenType::False, TokenType::True
-            ])),
+                            TokenType::Real(String::new()), TokenType::Integer(String::new()),
+                            TokenType::Character(String::new()), TokenType::Str(String::new()),
+                            TokenType::OpParen, TokenType::False, TokenType::True
+                        ])),
             None => Err(ParseError::ExpectedToken)
         }
+    }
+    fn id(&mut self) -> Result<Node, ParseError> {
+        Ok(Node::new(Unknown(self.get_unknown_id()),
+            Box::new(ASTNode::Leaf(self.assert_next(&[
+                TokenType::Id(String::new()),
+                TokenType::StruAccess(String::new()),
+                TokenType::ModAccess(String::new()),
+            ])?))
+        ))
     }
 
     fn parse_compounded_type(

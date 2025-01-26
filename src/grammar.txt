@@ -15,8 +15,8 @@ sttm ::==
 	fn-call
 
 module ::==
-	mod STRING nl
-	mod ID inner-body
+	ID ASSIGN "mod" (MOD_ACCESS | ID) nl
+	ID ASSIGN "mod" inner-body
 
 cond ::==
 	"if" comparison inner-body (elif | else)?
@@ -94,13 +94,18 @@ unary ::==
 
 primary ::==
 	"(" expr ")"
-	ID
+	id
 	INTEGER
 	REAL
 	STRING
 	CHAR
-	"false"
-	"true"
+	FALSE
+	TRUE
+
+id ::==
+	ID
+	STRUCT_ACCESS
+	MOD_ACCESS
 
 type ::==
 	union_type ("->" union_type)*  # Function type
