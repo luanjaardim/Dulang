@@ -31,9 +31,11 @@ pub enum TokenType {
 
     VarDef, Ref, VarRef, Deref,             // var, &, &var, @
 
+    StruAccess(String), ModAccess(String),  // foo.bar.tar , foo:bar:tar
+
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,     // {, }, (, ),
-    Comma, Dot, Semicolon, Colon,           // ',' , '.' , ';', ':'
+    Comma, Semicolon, Colon,                // ',' , ';', ':'
     PassR, PassL,                           // >>, <<
     None,                                   // none,
 
@@ -70,13 +72,13 @@ impl Token {
                 _ if regex::Regex::new(r"^i\d+$").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^u\d+$").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^f\d+$").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')"#).unwrap().is_match(text) => TokenType::Str(text.to_string()),
-                _ if regex::Regex::new(r#"^\w+(\.(\d|\w)+)+"#).unwrap().is_match(text) => TokenType::StruAccess(text.to_string()),
-                _ if regex::Regex::new(r#"^\w+(:\w+)+"#).unwrap().is_match(text) => TokenType::ModAccess(text.to_string()),
-                _ if regex::Regex::new(r"^\'(.|\\[rnt])\'").unwrap().is_match(text) => TokenType::Character(text.to_string()),
-                _ if regex::Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)").unwrap().is_match(text) => TokenType::Real(text.to_string()),
-                _ if regex::Regex::new(r"^\d+").unwrap().is_match(text) => Integer(text.to_string()),
-                _ if regex::Regex::new(r"^\w(_|\w|\d)*$").unwrap().is_match(text) => TokenType::Id(text.to_string()),
+                _ if regex::Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')$"#).unwrap().is_match(text) => TokenType::Str(text.to_string()),
+                _ if regex::Regex::new(r"^\'(.|\\[rnt])\'$").unwrap().is_match(text) => TokenType::Character(text.to_string()),
+                _ if regex::Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)$").unwrap().is_match(text) => TokenType::Real(text.to_string()),
+                _ if regex::Regex::new(r"^\d+$").unwrap().is_match(text) => Integer(text.to_string()),
+                _ if regex::Regex::new(r#"^[_A-Za-z]+(\.\w+)+$"#).unwrap().is_match(text) => TokenType::StruAccess(text.to_string()),
+                _ if regex::Regex::new(r#"^[_A-Za-z]+(:\w+)+$"#).unwrap().is_match(text) => TokenType::ModAccess(text.to_string()),
+                _ if regex::Regex::new(r"^[_A-Za-z]\w*$").unwrap().is_match(text) => TokenType::Id(text.to_string()),
 
 
                 _ => panic!("Token type is unkown: {text} with len {}", text.len())
@@ -138,7 +140,7 @@ impl Tokenizer {
 
     pub fn new(content_to_tokenize: Rc<String>) -> Self {
         Tokenizer {
-            s: content_to_tokenize, pos: 0, tk_pos: 0, l: 0, c: 0, read_tks: vec![]
+            s: content_to_tokenize, pos: 0, tk_pos: 0, l: 1, c: 1, read_tks: vec![]
         }
     }
 
@@ -160,102 +162,135 @@ impl Tokenizer {
         // Check if the Token in the cursor was already calculated
         if self.tk_pos < self.read_tks.len() { return Some(self.get_cur_tk_and_advance()) }
 
-        #[derive(PartialEq)]
+        #[derive(PartialEq, Debug)]
         enum State {
             Unknown,
             Separator,
-            Generic,
-            GenericWithColon,
+            Generic, Numeric,
+            FoundColon, GenericWithColon,
             GenericWithDot,
-            SingleLineComment,
-            MultLineComment,
+            FoundComment, SingleLineComment, MultLineComment,
         }
 
         use State::*;
         let mut chars = self.s[self.pos..].chars();
-        let (mut begin_ind, beg_c, beg_l) = (0, 0, 0);
+        let (mut begin_ind, mut beg_c, mut beg_l) = (self.pos, self.c, self.l);
         let mut state = Unknown;
 
-        loop {
-            if self.pos >= self.s.len() { return Option::None }
-            match chars.next().unwrap() {
-                // '$' => {
-                //     state = SingleLineComment
-                // },
+        let offset: usize = loop {
+            let c = chars.next()?;
+            if c == '\n' {
+                if state == SingleLineComment { state = Unknown; }
+                self.c = 0;
+                self.l += 1;
+            }
+            match c {
+                // Discarting elements if inside a comment
+                _ if state == SingleLineComment || state == MultLineComment => (),
+                // Comments detection
+
+                c if state == FoundComment || c == '$' => {
+                    if state == FoundComment {
+                        state = if c == '$' { MultLineComment } else { SingleLineComment };
+                    } else {
+                        if state != Unknown {
+                            self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                        }
+                        state = FoundComment;
+                    }
+                },
                 _ if state == SingleLineComment || state == MultLineComment => (),
                 '+' | '-' | '/' | '*' | '=' | '>' | '<' | '!' => {
-                    if state == Unknown { begin_ind = self.pos }
+                    if state == Unknown {
+                        beg_c = self.c;
+                        beg_l = self.l;
+                        begin_ind = self.pos
+                    }
                     else if state == Separator {
                         let t = Token::sep_type(&self.s[begin_ind..=self.pos]);
                         if t.is_some() {
                             self.read_tks.push(Token::new_with_tk_type(beg_c, beg_l, t.unwrap()));
-                            self.pos += 1;
+                            break 1
                         } else {
                             self.read_tks.extend([
                               Token::new(beg_c, beg_l, &self.s[begin_ind..begin_ind+1]),
                               Token::new(beg_c+1, beg_l, &self.s[self.pos..self.pos+1])
                             ]);
-                            self.pos += 2;
+                            break 2
                         }
-                        state = Unknown;
-                        break
                     } else {
                         self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
-                        break
+                        break 0
                     }
-
                     state = Separator;
                 },
-                '(' | ')' |'{' | '}'| '@' | '&' | '^' | '?' | ',' | ';' => {
+                '(' | ')' |'{' | '}'| '@' | '&' | '|' | '^' | '?' | ',' | ';' => {
+                    let t = Token::sep_type(&self.s[self.pos..self.pos+1]).unwrap();
                     if state == Unknown {
-                        self.read_tks.push(Token::new(beg_c, beg_l, &self.s[self.pos..self.pos+1]));
-                        self.pos += 1;
-                        break
+                        self.read_tks.push(Token::new_with_tk_type(self.c, self.l, t));
+                    } else {
+                        self.read_tks.extend([
+                            Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]),
+                            Token::new_with_tk_type(self.c, self.l, t)
+                        ]);
                     }
+                    break 1
                 },
                 c if c.is_whitespace() => {
                     if state == Unknown {
                         ()
                     } else {
                         self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
-                        self.pos += 1;
-                        state = Unknown;
-                        break
+                        break 1
                     }
                 },
                 '.' => {
-                    if state == Unknown { begin_ind = self.pos }
-                    if state == Generic || state == Unknown { state = GenericWithDot }
+                    if state == Unknown {
+                        begin_ind = self.pos;
+                        beg_c = self.c;
+                        beg_l = self.l;
+                    }
+                    if state == Generic { state = GenericWithDot }
+                    else if state == Unknown { state = Numeric } // Will be a Real that starts with '.': .2e2
                 },
                 ':' => {
-                    if state == Generic { state = GenericWithColon }
-                    else if state != GenericWithColon {
-                        if let Some(':') = chars.nth(self.pos+1) {
-                            self.read_tks.extend([
-                                Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]),
-                                Token::new_with_tk_type(beg_c, beg_l, TokenType::TypeInf)
-                            ]);
-                            self.pos += 2;
-                        } else {
-                            self.read_tks.extend([
-                                Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]),
-                                Token::new_with_tk_type(beg_c, beg_l, TokenType::Colon)
-                            ]);
-                            self.pos +=1;
+                    match chars.clone().next() {
+                        Some(':') => {
+                            if state == Unknown {
+                                self.read_tks.push(Token::new_with_tk_type(self.c, self.l, TokenType::TypeInf));
+                            } else {
+                                self.read_tks.extend([
+                                    Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]),
+                                    Token::new_with_tk_type(self.c, self.l, TokenType::TypeInf)
+                                ]);
+                            }
+                            break 2
+                        },
+                        e if (state == Generic || state == GenericWithColon) && e.unwrap_or(' ').is_alphanumeric() => state = GenericWithColon,
+                        _ => {
+                            if state != Unknown {
+                                self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                            }
+                            self.read_tks.push(Token::new_with_tk_type(self.c, self.l, TokenType::Colon));
+                            break 1
                         }
-                        break
-                    }
-                }
+                    };
+                },
                 c if c.is_alphanumeric() => {
                     if state == Unknown {
                         begin_ind = self.pos;
-                        state = Generic;
+                        beg_c = self.c;
+                        beg_l = self.l;
+                        state = if c.is_alphabetic() { Generic } else { Numeric };
                     }
                 },
-                _ => unreachable!(),
+                c => unreachable!("No match arm handle: {c}."),
             }
             self.pos += 1;
-        }
+            self.c += 1;
+        };
+        self.pos += offset;
+        self.c += offset;
         Some(self.get_cur_tk_and_advance())
     }
 
