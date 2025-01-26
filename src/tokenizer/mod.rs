@@ -58,7 +58,7 @@ impl Token {
                 "==" => Eq, "!=" => Neq, ">" => GrT, ">=" => GrE, "<" => LeT, "<=" => LeE,
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr,
-                "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, "." => Dot, ";" => Semicolon, ":" => Colon,
+                "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, ";" => Semicolon, ":" => Colon,
                 "=" => Assign, "::" => TypeInf, "none" => TokenType::None, "char" => Char, "bool" => Bool,
                 "->" => FnType, "|" => UnionType, "^" => TupleType, "type" => Type,
                 "&var" => VarRef, "var" => VarDef, "&" => Ref, "@" => Deref,
@@ -67,15 +67,35 @@ impl Token {
                 "while" => While, "loop" => Loop, "mod" => Mod,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
                 "false" => False, "true" => True,
-                _ if regex::Regex::new(r"^i\d+").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r"^u\d+").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r"^f\d+").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r"^[_a-zA-Z]+").unwrap().is_match(text) => TokenType::Id(text.to_string()),
+                _ if regex::Regex::new(r"^i\d+$").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"^u\d+$").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r"^f\d+$").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
+                _ if regex::Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')"#).unwrap().is_match(text) => TokenType::Str(text.to_string()),
+                _ if regex::Regex::new(r#"^\w+(\.(\d|\w)+)+"#).unwrap().is_match(text) => TokenType::StruAccess(text.to_string()),
+                _ if regex::Regex::new(r#"^\w+(:\w+)+"#).unwrap().is_match(text) => TokenType::ModAccess(text.to_string()),
+                _ if regex::Regex::new(r"^\'(.|\\[rnt])\'").unwrap().is_match(text) => TokenType::Character(text.to_string()),
+                _ if regex::Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)").unwrap().is_match(text) => TokenType::Real(text.to_string()),
+                _ if regex::Regex::new(r"^\d+").unwrap().is_match(text) => Integer(text.to_string()),
+                _ if regex::Regex::new(r"^\w(_|\w|\d)*$").unwrap().is_match(text) => TokenType::Id(text.to_string()),
 
-                _ => panic!("Token type is unkown: {text}")
+
+                _ => panic!("Token type is unkown: {text} with len {}", text.len())
             }),
         }
+    }
 
+    pub fn new_with_tk_type(c: usize, l: usize, t: TokenType) -> Self { Token { c, l, t } }
+
+    pub fn sep_type(text: &str) -> Option<TokenType> {
+        Some(match text {
+            "+" => Add, "-" => Sub, "*" => Mul, "/" => Div,
+            "==" => Eq, "!=" => Neq, ">" => GrT, ">=" => GrE, "<" => LeT, "<=" => LeE,
+            "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen,
+            "," => Comma, ";" => Semicolon, ":" => Colon,
+            "=" => Assign, "::" => TypeInf, "->" => FnType, "|" => UnionType, "^" => TupleType,
+            ">>" => PassR, "<<" => PassL, "&" => Ref, "@" => Deref,
+            _ => return Option::None
+        })
     }
 
     pub fn nl(next_line: usize) -> Token { Token { c: 0, l: next_line, t: Nl } }
@@ -140,54 +160,102 @@ impl Tokenizer {
         // Check if the Token in the cursor was already calculated
         if self.tk_pos < self.read_tks.len() { return Some(self.get_cur_tk_and_advance()) }
 
-        // Skip whitespaces
-        self.skip_ascii_whitespaces();
-
-        // Here we can search for some general pattern (Strings, Real Numbers, Comments, and return the Token early)
-        if let Some((t, len)) = self.match_patterns() {
-            self.pos += len;
-            self.c += len;
-            return if let Comment = &t {
-                self.next() // Continue search if it's a comment
-            } else {
-                self.read_tks.push(Token { c: self.c, l: self.l, t });
-                Some(self.get_cur_tk_and_advance())
-            }
+        #[derive(PartialEq)]
+        enum State {
+            Unknown,
+            Separator,
+            Generic,
+            GenericWithColon,
+            GenericWithDot,
+            SingleLineComment,
+            MultLineComment,
         }
 
-        let rest = &self.s[self.pos..];
-        // Now we are looking only to the next word(the first chars that are not whitespaces)
-        let word = match rest.chars().enumerate().find(|e| e.1.is_ascii_whitespace()) {
-            Some((pos, _)) => &rest[0..pos],
-            Option::None => if rest.is_empty() { return Option::None } else { rest }
-        };
+        use State::*;
+        let mut chars = self.s[self.pos..].chars();
+        let (mut begin_ind, beg_c, beg_l) = (0, 0, 0);
+        let mut state = Unknown;
 
-        let sep_and_pos = Tokenizer::SEPARATORS.iter()
-                              .filter_map(|sep| word.find(*sep).map_or(Option::None, |pos| Some((sep, pos))))
-                              // at the first position we have the separator, and the second is its position
-                              .reduce(|acc, cur|
-                                      if cur.1 < acc.1 { cur }  // if the cur separator appeared before
-                                      else { acc }
-                              );
-        let tk = match sep_and_pos {
-            Some((sep, pos)) => {
-                if pos == 0 {
-                    // there is no Token before the separator
-                    Token::new(self.c, self.l, sep)
-                } else {
-                    // will store the sep Token and the token before it
-                    self.read_tks.push(Token::new(self.c, self.l, &word[0..pos]));
-                    Token::new(self.c+pos, self.l, sep)
+        loop {
+            if self.pos >= self.s.len() { return Option::None }
+            match chars.next().unwrap() {
+                // '$' => {
+                //     state = SingleLineComment
+                // },
+                _ if state == SingleLineComment || state == MultLineComment => (),
+                '+' | '-' | '/' | '*' | '=' | '>' | '<' | '!' => {
+                    if state == Unknown { begin_ind = self.pos }
+                    else if state == Separator {
+                        let t = Token::sep_type(&self.s[begin_ind..=self.pos]);
+                        if t.is_some() {
+                            self.read_tks.push(Token::new_with_tk_type(beg_c, beg_l, t.unwrap()));
+                            self.pos += 1;
+                        } else {
+                            self.read_tks.extend([
+                              Token::new(beg_c, beg_l, &self.s[begin_ind..begin_ind+1]),
+                              Token::new(beg_c+1, beg_l, &self.s[self.pos..self.pos+1])
+                            ]);
+                            self.pos += 2;
+                        }
+                        state = Unknown;
+                        break
+                    } else {
+                        self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                        break
+                    }
+
+                    state = Separator;
+                },
+                '(' | ')' |'{' | '}'| '@' | '&' | '^' | '?' | ',' | ';' => {
+                    if state == Unknown {
+                        self.read_tks.push(Token::new(beg_c, beg_l, &self.s[self.pos..self.pos+1]));
+                        self.pos += 1;
+                        break
+                    }
+                },
+                c if c.is_whitespace() => {
+                    if state == Unknown {
+                        ()
+                    } else {
+                        self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                        self.pos += 1;
+                        state = Unknown;
+                        break
+                    }
+                },
+                '.' => {
+                    if state == Unknown { begin_ind = self.pos }
+                    if state == Generic || state == Unknown { state = GenericWithDot }
+                },
+                ':' => {
+                    if state == Generic { state = GenericWithColon }
+                    else if state != GenericWithColon {
+                        if let Some(':') = chars.nth(self.pos+1) {
+                            self.read_tks.extend([
+                                Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]),
+                                Token::new_with_tk_type(beg_c, beg_l, TokenType::TypeInf)
+                            ]);
+                            self.pos += 2;
+                        } else {
+                            self.read_tks.extend([
+                                Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]),
+                                Token::new_with_tk_type(beg_c, beg_l, TokenType::Colon)
+                            ]);
+                            self.pos +=1;
+                        }
+                        break
+                    }
                 }
-            },
-            Option::None => Token::new(self.c, self.l, word)
-        };
-        // update counters positions
-        let consumed_chars = if sep_and_pos.is_none() { word.len() } else { sep_and_pos?.1 + sep_and_pos?.0.len() };
-        self.pos += consumed_chars;
-        self.c += consumed_chars;
-
-        self.read_tks.push(tk);
+                c if c.is_alphanumeric() => {
+                    if state == Unknown {
+                        begin_ind = self.pos;
+                        state = Generic;
+                    }
+                },
+                _ => unreachable!(),
+            }
+            self.pos += 1;
+        }
         Some(self.get_cur_tk_and_advance())
     }
 
@@ -201,42 +269,6 @@ impl Tokenizer {
         tk
     }
 
-    /// Returns the matched pattern and the length of the match
-    fn match_patterns(&self) -> Option<(TokenType, usize)> {
-        let text = &self.s[self.pos..];
-        use regex::Regex;
-        // NOTE: the order is important here, as every Real contains Integer it must goes first
-        let patterns: [(Regex, &str) ; 5] = [
-            (Regex::new(r#"^(\$[^\$\n]*\n|\$\$[^\$]*\$\$)"#).unwrap(), "comment"), // Comments
-            (Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')"#).unwrap(), "string"),
-            (Regex::new(r"^\'(.|\\[rnt])\'").unwrap(), "char"),
-            (Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)").unwrap(), "real"),
-            (Regex::new(r"^\d+").unwrap(), "int"),
-        ];
-
-        for (r, s) in patterns {
-            if let Some(found) = r.find(text) {
-                let len = found.range().len();
-                return Some((match s {
-                    "comment" => Comment,
-                    "string" => Str(self.s[self.pos..self.pos+len].to_string()),
-                    "char" => Character(self.s[self.pos..self.pos+len].to_string()),
-                    "real" => Real(self.s[self.pos..self.pos+len].to_string()),
-                    "int" => Integer(self.s[self.pos..self.pos+len].to_string()),
-                    _ => return Option::None,
-                }, len))
-            }
-        }
-        Option::None
-    }
-
-    fn skip_ascii_whitespaces(&mut self) {
-        for c in self.s[self.pos..].chars() {
-            if !c.is_ascii_whitespace() { break }
-            if c == '\n' { self.l += 1; self.c = 0; } else { self.c += 1; }
-            self.pos += 1;
-        }
-    }
 }
 
 impl Iterator for Tokenizer {
