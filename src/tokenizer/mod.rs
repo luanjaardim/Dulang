@@ -131,6 +131,10 @@ pub struct Tokenizer {
     read_tks: Vec<Token>,
 }
 
+fn is_alphanum_or_underscoe(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
 impl Tokenizer {
 
     // NOTE: the order is important here, put the separators with length 2 first
@@ -245,7 +249,10 @@ impl Tokenizer {
                     state = Separator;
                 },
                 '(' | ')' |'{' | '}'| '@' | '&' | '|' | '^' | '?' | ',' | ';' => {
-                    let t = Token::sep_type(&self.s[self.pos..self.pos+1]).unwrap();
+                    let (offset, t) = if self.pos+4 < self.s.len() && &self.s[self.pos..self.pos+4] == "&var" {
+                        (4, TokenType::VarRef)
+                    } else { (1, Token::sep_type(&self.s[self.pos..self.pos+1]).unwrap()) };
+
                     if state == Unknown {
                         self.read_tks.push(Token::new_with_tk_type(self.c, self.l, t));
                     } else {
@@ -254,7 +261,7 @@ impl Tokenizer {
                             Token::new_with_tk_type(self.c, self.l, t)
                         ]);
                     }
-                    break 1
+                    break offset
                 },
                 c if c.is_whitespace() => {
                     if state == Unknown {
@@ -286,7 +293,7 @@ impl Tokenizer {
                             }
                             break 2
                         },
-                        e if (state == Generic || state == GenericWithColon) && e.unwrap_or(' ').is_alphanumeric() => state = GenericWithColon,
+                        e if (state == Generic || state == GenericWithColon) && is_alphanum_or_underscoe(e.unwrap_or(' ')) => state = GenericWithColon,
                         _ => {
                             if state != Unknown {
                                 self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
@@ -296,7 +303,7 @@ impl Tokenizer {
                         }
                     };
                 },
-                c if c.is_alphanumeric() => {
+                c if is_alphanum_or_underscoe(c) => {
                     if state == Unknown {
                         begin_ind = self.pos;
                         beg_c = self.c;
