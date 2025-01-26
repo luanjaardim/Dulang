@@ -81,7 +81,7 @@ impl Token {
                 _ if regex::Regex::new(r"^[_A-Za-z]\w*$").unwrap().is_match(text) => TokenType::Id(text.to_string()),
 
 
-                _ => panic!("Token type is unkown: {text} with len {}", text.len())
+                _ => panic!("Token type is unkown: {text}")
             }),
         }
     }
@@ -167,7 +167,8 @@ impl Tokenizer {
             Unknown,
             Separator,
             Generic, Numeric,
-            FoundColon, GenericWithColon,
+            String, Char,
+            GenericWithColon,
             GenericWithDot,
             FoundComment, SingleLineComment, MultLineComment,
         }
@@ -200,6 +201,25 @@ impl Tokenizer {
                     }
                 },
                 _ if state == SingleLineComment || state == MultLineComment => (),
+                '\\' if state == Char || state == String => {
+                    _ = chars.next()?;
+                    self.pos += 1;
+                    self.c += 1;
+                },
+                '\"' | '\'' => {
+                    if (state == Char && c == '\'') || (state == String && c == '\"') {
+                        self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..=self.pos]));
+                        break 1
+                    }
+                    if state != Unknown {
+                        self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                    }
+                    state = if c == '\'' { Char } else { String };
+                    beg_c = self.c;
+                    beg_l = self.l;
+                    begin_ind = self.pos;
+                },
+                _ if state == Char || state == String => (),
                 '+' | '-' | '/' | '*' | '=' | '>' | '<' | '!' => {
                     if state == Unknown {
                         beg_c = self.c;
