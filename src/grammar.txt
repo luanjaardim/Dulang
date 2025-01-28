@@ -65,8 +65,8 @@ sub-expr ::==
 	bitwise
 
 fn-call ::==
-	ID "none"   # Function with no parameters
-	ID expr*
+	id "none"   # Function with no parameters
+	id expr*
 	fn-call ("<<" fn-call)*
 	fn-call (">>" fn-call)*
 
@@ -103,6 +103,7 @@ primary ::==
 	TRUE
 
 id ::==
+	id inner-body?
 	ID
 	STRUCT_ACCESS
 	MOD_ACCESS

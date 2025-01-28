@@ -40,6 +40,7 @@ pub enum ASTNode {
         body: Body,
     },
     Struct(Body),
+    StructInit(Token, Body),
     Func {
         args: Vec<Var>,
         ret: ExprType,
@@ -213,7 +214,7 @@ impl Parser {
 
     pub fn parse(mut self, last_unknown: &mut usize) -> Result<Body, std::io::Error>  {
         use std::io::{Error, ErrorKind};
-        let ret = match self.body() {
+        let ret = match self.body(None) {
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, format!("({}) {e:?}", self.prev_tk))),
             Ok(e) if self.peek_tk().is_none() =>  Ok(e),
             _ =>  Err(Error::new(ErrorKind::InvalidInput, format!("({}) Failed to parse body.", self.prev_tk))),
@@ -222,16 +223,23 @@ impl Parser {
         ret
     }
 
-    fn body(&mut self) -> Result<Body, ParseError>  {
+    fn body(&mut self, line_end: Option<TokenType>) -> Result<Body, ParseError>  {
         let mut ast = vec![];
-        while let Ok(node) = self.parse_and_discart_nl(|s| s.sttm()) { ast.push(node); }
+        while let Ok(node) = self.parse_and_discart_nl(|s| s.sttm()) {
+            ast.push(node);
+            match (&line_end, self.peek_tk()) {
+                (Some(end), Some(Token { t, .. })) if *end == t => _ = self.next_tk(),
+                (Some(_), _) => return Ok(ast),
+                (None, _) => (),
+            }
+        }
         Ok(ast)
     }
 
     /// Parse a list of statements inside curly brackets.
-    fn inner_body(&mut self) -> Result<Body, ParseError>  {
+    fn inner_body(&mut self, line_end: Option<TokenType>) -> Result<Body, ParseError>  {
         _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::OpCurly])?))?;
-        let body = self.body()?;
+        let body = self.body(line_end)?;
         _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::ClCurly])?))?;
         Ok(body)
     }
@@ -239,6 +247,8 @@ impl Parser {
     fn sttm(&mut self) -> Result<Node, ParseError> {
         match self.peek_tk() {
             // Var definition
+            Some(Token { t: TokenType::StruAccess(_), ..})  |
+            Some(Token { t: TokenType::ModAccess(_), ..})  |
             Some(Token { t: TokenType::Id(_), ..})  |
             Some(Token { t: TokenType::VarDef, ..}) => {
                 let backup = self.get_state(); // Return to before the var if it's not an assignment
@@ -289,7 +299,7 @@ impl Parser {
                     .parse(&mut self.unknown_id)
                     .expect(format!("Could not parse the file {path}.").as_str())
             },
-            Some(_) => self.inner_body()?,
+            Some(_) => self.inner_body(None)?,
             None => return Err(ParseError::ExpectedToken),
         };
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Mod { name: mod_name, body })))
@@ -302,14 +312,14 @@ impl Parser {
                 Some(Token { t: TokenType::Loop, .. }) => None,
                 _ => return Err(ParseError::NotImplemented)  // TODO: Implement For loop
             },
-            body: self.inner_body()? })))
+            body: self.inner_body(None)? })))
     }
 
     fn cond(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::If])?;
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Conditional { 
             cond: self.expr().ok(),
-            body: self.inner_body()?,
+            body: self.inner_body(None)?,
             next: match self.peek_tk() {
                 Some(Token { t: TokenType::Elif, .. }) => Some(self.elif()?),
                 Some(Token { t: TokenType::Else, .. }) => Some(self._else_()?),
@@ -322,7 +332,7 @@ impl Parser {
         _ = self.assert_next(&[TokenType::Elif])?;
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Conditional { 
             cond: self.expr().ok(),
-            body: self.inner_body()?,
+            body: self.inner_body(None)?,
             next: match self.peek_tk() {
                 Some(Token { t: TokenType::Elif, .. }) => Some(self.elif()?),
                 Some(Token { t: TokenType::Else, .. }) => Some(self._else_()?),
@@ -333,7 +343,7 @@ impl Parser {
 
     fn _else_(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::Else])?;
-        Ok(Node::new(ExprType::None, Box::new(ASTNode::Conditional { cond: None, body: self.inner_body()?, next: None, })))
+        Ok(Node::new(ExprType::None, Box::new(ASTNode::Conditional { cond: None, body: self.inner_body(None)?, next: None, })))
     }
 
     fn assign(&mut self) ->  Result<Node, ParseError> {
@@ -345,7 +355,8 @@ impl Parser {
 
     fn fn_call(&mut self, is_sttm: bool, last_arg: Option<Node>) -> Result<Node, ParseError> {
         let backup = self.get_state();
-        let tk = self.assert_next(&[TokenType::Id(String::new())])?;
+        let e =  self.assert_next(&[TokenType::Id(String::new()), TokenType::ModAccess(String::new()), TokenType::StruAccess(String::new())]);
+        let tk = e?;
         if self.assert_next(&[TokenType::None]).is_ok() {
             return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })))
         }
@@ -505,7 +516,7 @@ impl Parser {
         // Starting the function body after the Colon: ':'
         _ = self.assert_next(&[TokenType::Colon])?;
 
-        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Func { args, ret, body: self.inner_body()? })))
+        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Func { args, ret, body: self.inner_body(None)? })))
     }
 
     fn var(&mut self) -> Result<Var, ParseError> {
@@ -671,13 +682,21 @@ impl Parser {
         }
     }
     fn id(&mut self) -> Result<Node, ParseError> {
+        let tk = self.assert_next(&[
+            TokenType::Id(String::new()),
+            TokenType::StruAccess(String::new()),
+            TokenType::ModAccess(String::new()),
+        ])?;
+        let backup = self.get_state();
+        let body = self.inner_body(Some(TokenType::Comma));
+        println!("{body:?}");
         Ok(Node::new(Unknown(self.get_unknown_id()),
-            Box::new(ASTNode::Leaf(self.assert_next(&[
-                TokenType::Id(String::new()),
-                TokenType::StruAccess(String::new()),
-                TokenType::ModAccess(String::new()),
-            ])?))
-        ))
+            Box::new(if let Ok(_) = &body {
+                ASTNode::StructInit(tk, body?)
+            } else {
+                self.set_state(&backup);
+                ASTNode::Leaf(tk)
+        })))
     }
 
     fn parse_compounded_type(
