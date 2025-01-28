@@ -736,7 +736,6 @@ impl Parser {
         ])?;
         let backup = self.get_state();
         let body = self.inner_body(Some(TokenType::Comma));
-        println!("{body:?}");
         Ok(Node::new(Unknown(self.get_unknown_id()),
             Box::new(if let Ok(_) = &body {
                 ASTNode::StructInit(tk, body?)

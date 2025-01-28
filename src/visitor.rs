@@ -87,10 +87,17 @@ impl ExprType {
             _ => panic!("Cannot get a inner type of a non compound type"),
         }
     }
-    fn get_fn_return_type(&self) -> Self {
+    fn get_inner_type(&self) -> &Vec<Self> {
         match self {
-            FnType(inner_types) => inner_types.last().unwrap().clone(),
-            _ => panic!("Cannot get the function return type of a non function type"),
+            FnType(l) | UnionType(l) | TupleType(l) => l,
+            _ => panic!("Cannot get the inner type of a non compound type"),
+        }
+    }
+    fn get_fn_return_type(&self) -> Self {
+        if let FnType(_) = self {
+            self.get_inner_type().last().unwrap().clone()
+        } else {
+             panic!("Cannot get the function return type of a non function type")
         }
     }
     fn is_unknown(&self) -> bool {
@@ -156,7 +163,7 @@ pub struct Var {
     pub t: ExprType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScopeAttr {
     GlobScope,
     StructScope { name: String },
@@ -175,6 +182,7 @@ pub enum ScopeAttr {
     }
 }
 
+#[derive(Clone)]
 pub enum Elem { Var(Var), Scope(Scope), }
 impl Elem {
     pub fn get_var(&self) -> &Var {
@@ -189,20 +197,7 @@ impl Elem {
 
     pub fn func_as_var(&self) -> Var {
         let scp = self.get_scp();
-        if let Scope { attrs: ScopeAttr::FuncScope { name, args_len, ret_type, is_var, .. }, elems, .. } = scp {
-            Var {
-                is_var: *is_var,
-                v: Token::new(0, 0, name),
-                t: FnType(
-                    if *args_len != 0 {
-                        (0..*args_len).map(|i| elems[i].get_var().t.clone()).chain([ret_type.clone()]).collect()
-                    } else {
-                        vec![None, ret_type.clone()]
-                    })
-            }
-        } else {
-            panic!("Passed scope is not a function");
-        }
+        scp.func_as_var()
     }
 }
 impl std::fmt::Debug for Elem {
@@ -219,7 +214,7 @@ impl std::fmt::Debug for Elem {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scope {
     pub attrs: ScopeAttr,
     pub elems: Vec<Elem>,
@@ -259,6 +254,23 @@ impl Scope {
         }
     }
 
+    fn func_as_var(&self) -> Var {
+        if let Scope { attrs: ScopeAttr::FuncScope { name, args_len, ret_type, is_var, .. }, elems, .. } = self {
+            Var {
+                is_var: *is_var,
+                v: Token::new(0, 0, name),
+                t: FnType(
+                    if *args_len != 0 {
+                        (0..*args_len).map(|i| elems[i].get_var().t.clone()).chain([ret_type.clone()]).collect()
+                    } else {
+                        vec![None, ret_type.clone()]
+                    })
+            }
+        } else {
+            panic!("Passed scope is not a function");
+        }
+    }
+
 }
 
 #[derive(Debug)]
@@ -275,11 +287,12 @@ pub struct Visitor {
     cur_scope: *const Scope,
     pub unknown_map: Vec<ExprType>,
     unknown_id: usize,
+    last_def_name: Option<String>,
 }
 
 impl Visitor {
     pub fn new(unknown_id: usize) -> Self {
-        Visitor { glob_scope: Option::None, cur_scope: std::ptr::null(), unknown_id, unknown_map: vec![Unknown(0); unknown_id+1] }
+        Visitor { glob_scope: Option::None, cur_scope: std::ptr::null(), unknown_id, unknown_map: vec![Unknown(0); unknown_id+1], last_def_name: Option::None }
     }
 
     fn get_unknown_id(&mut self) -> usize {
@@ -401,13 +414,16 @@ impl Visitor {
         Ok(())
     }
 
-    fn visit(&mut self, scope: &mut Scope, expected_type: ExprType, node: &mut Node) -> Result<ExprType, VisitorError> {
+    fn visit(&mut self, scope: *mut Scope, expected_type: ExprType, node: &mut Node) -> Result<ExprType, VisitorError> {
+        let scope = unsafe { &mut *scope };
         self.cur_scope = &*scope as *const Scope;
         match &mut *node.v {
+                                                                // TODO: Get different types of TokenType here, ModAccess and StruAccess
             ASTNode::Assign { var: (is_var, ref tk @ Token { t: TokenType::Id(ref var_name), .. }, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
                 let assign_index = scope.elems.len();
+                self.last_def_name = Some(var_name.to_string());
                 *t = Some(t.clone()
                            .map_or(
                                Node::new(Unknown(self.get_unknown_id()),
@@ -486,9 +502,9 @@ impl Visitor {
                 self.equivalent_types(&fn_type, &expected_type)?;
                 let fn_type = self.infer_type(&expected_type);
 
-                let mut scp = Scope {
+                let scp = Scope {
                     attrs: ScopeAttr::FuncScope {
-                        name: String::new(), // will be filled when return the function call
+                        name: self.last_def_name.take().expect("Function name was not defined previously"),
                         ret_type: fn_type.get_fn_return_type(),
                         args_len: args.len(),
                         parent: Option::None,
@@ -501,10 +517,13 @@ impl Visitor {
                           })).collect(),
                     scp_father: scope,
                 };
-                for node in body {
-                    self.visit(&mut scp, None, node)?;
-                }
+                // Pushing the function scope before its elements are visited to enable recursive functions definitions
                 scope.elems.push(Elem::Scope(scp));
+                if let Elem::Scope(func_scope_ref) = scope.elems.last_mut().unwrap() {
+                    for node in body {
+                        self.visit(func_scope_ref, None, node)?;
+                    }
+                }
                 Ok(fn_type)
             },
             ASTNode::Loop { cond, body } => {
@@ -547,57 +566,49 @@ impl Visitor {
                 }
                 if let Token { t: TokenType::Id(name), .. } = &caller {
 
-                    let (args, ret) = if let Some(Elem::Scope(
-                        scp @ Scope { attrs: ScopeAttr::FuncScope { args_len, ret_type, .. }, .. })) = self.find_elem_type("func", name)
-                    {
-                        (if *args_len == 0 {
-                            vec![]
-                        } else {
-                            (0..*args_len).map(|i| scp.elems[i].get_var().clone()).collect()
-                        }, ret_type.clone())
-                    } else if let Some(Scope { attrs: ScopeAttr::FuncScope { name: cur_name, args_len, ret_type, .. }, elems, .. })
-                               = scope.get_cur_func_scp()
-                    {
-                            if cur_name.is_empty() { // possibly calling a recursive function
-                                *cur_name = name.clone();
-                            } else if *cur_name != *name {
-                                panic!("Function {name} is not defined")
-                            }
-                            ((0..*args_len).map(|i| elems[i].get_var().clone()).collect(), ret_type.clone())
+                    let scp_fn = self.find_elem_type("func", name).expect(&format!("Function '{name}' is not defined")).get_scp();
+                    let fn_as_var = scp_fn.func_as_var();
+                    let fn_type = fn_as_var.t.get_inner_type();
+                    let params_types = if let None = fn_type[0] { vec![] } else { fn_type[..fn_type.len()-1].to_vec() };
+                    let ret_type = fn_type.last().unwrap();
+                    let params_vars: Vec<Elem> = scp_fn.elems[..params_types.len()].iter().map(|e| e.clone()).collect();
 
-                    } else {
-                        panic!("Function {name} is not defined")
-                    };
-
-                    if params.len() > args.len() {
+                    if params.len() > params_types.len() {
                         panic!("Function receiving more than suported parameters: {node:?}");
-                    } else if *is_sttm && !ExprType::expr_type_eq(&ret, &None, true) {
+                    } else if *is_sttm && !ExprType::expr_type_eq(ret_type, &None, true) {
                         panic!("Function call of {caller} is a statement but its return is ignored");
-                    } else if !*is_sttm && ExprType::expr_type_eq(&ret, &None, true) {
+                    } else if !*is_sttm && ExprType::expr_type_eq(ret_type, &None, true) && params.len() == params_types.len() {
                         panic!("Function call of {caller} is an assignment but returns none");
-                    } else if args.len() == 0 {
-                        if !params.is_empty() {
-                            panic!("Function receive no parameters, but received {}", params.len());
-                        }
                     }
 
                     let mut i = 0;
                     while i < params.len() {
-                        self.visit(scope, args[i].t.clone(), &mut params[i])?;
+                        // println!("{:?} :::::: {:?}", params_types[i], params[i] );
+                        self.visit(scope, params_types[i].clone(), &mut params[i])?;
+                        // println!("here {:?} ::::::: {:?}", params_types[i], self.infer_type(&params_types[i]));
                         i += 1;
                     }
-                    if i == args.len() {
-                        node.t = ret.clone();
-                        Ok(ret)
+                    let t = if i == params_types.len() {
+                        node.t = ret_type.clone();
+                        ret_type.clone()
                     }
                     else {
-                        scope.elems.push(Elem::Scope(Scope { 
-                            attrs: ScopeAttr::FuncScope { name: String::new(), args_len: args.len()-i, ret_type: ret.clone(), parent: Some(name.clone()), is_var: false },
-                            elems: args[i..].iter().map(|v| Elem::Var(v.clone())).collect(),
+                        scope.elems.push(Elem::Scope(Scope {
+                            attrs: ScopeAttr::FuncScope {
+                                name: String::new(),
+                                args_len: params_types.len()-i,
+                                ret_type: ret_type.clone(),
+                                parent: Some(name.clone()),
+                                is_var: false
+                            },
+                            elems: params_vars[i..].to_vec(),
                             scp_father: scope.scp_father,
                         }));
-                        Ok(FnType(args[i..].iter().map(|v| v.t.clone()).chain([ret]).collect()))
-                    }
+                        FnType(fn_type[i..].to_vec())
+                    };
+                    node.t = t.clone();
+                    self.equivalent_types(&expected_type, &t)?;
+                    Ok(t)
                 } else {
                     panic!("At the moment, the caller can only be the function name")
                 }
@@ -658,11 +669,11 @@ impl Visitor {
                 let t = match &tk.t {
                     TokenType::Character(_) => Char,
                     TokenType::Real(_) => {
-                        if let Real(_) = expected_type { expected_type }
+                        if let Real(_) = expected_type { expected_type.clone() }
                         else { Real(64) }
                     },
                     TokenType::Integer(_) => {
-                        if let Int{ .. } = expected_type { expected_type }
+                        if let Int{ .. } = expected_type { expected_type.clone() }
                         else { Int { bits: 64, signed: false } }
                     },
                     TokenType::Str(_) => Pnt(Box::new(Char)),
@@ -680,6 +691,7 @@ impl Visitor {
                     _ => return Err(VisitorError::NotImplemented(*node.v.clone())),
                 };
                 self.equivalent_types(&t, &node.t)?;
+                self.equivalent_types(&t, &expected_type)?;
                 Ok(t)
             },
             ASTNode::Cast { e, t } => {
