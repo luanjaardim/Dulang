@@ -77,6 +77,8 @@ pub enum ASTNode {
         e: Node,
         t: ExprType
     },
+    Array(Body),
+    Tuple(Body),
     Ref {
         var: bool,
         e: Node,
@@ -204,9 +206,9 @@ impl Parser {
     }
 
     /// Parse something between two Nl (new lines '\n'), they may not exist also
-    fn parse_and_discart_nl<T: std::fmt::Debug>(
+    fn parse_and_discart_nl<T>(
         &mut self,
-        mut method: impl FnMut(&mut Self) -> Result<T, ParseError>,
+        method: impl Fn(&mut Self) -> Result<T, ParseError>,
     ) -> Result<T, ParseError>  {
         _ = self.assert_next(&[TokenType::Nl]);
         method(self)
@@ -223,9 +225,13 @@ impl Parser {
         ret
     }
 
-    fn body(&mut self, line_end: Option<TokenType>) -> Result<Body, ParseError>  {
+    fn body_aux<T>(
+        &mut self,
+        line_end: Option<TokenType>,
+        method: impl Fn(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<Vec<T>, ParseError>  {
         let mut ast = vec![];
-        while let Ok(node) = self.parse_and_discart_nl(|s| s.sttm()) {
+        while let Ok(node) = self.parse_and_discart_nl(&method) {
             ast.push(node);
             match (&line_end, self.peek_tk()) {
                 (Some(end), Some(Token { t, .. })) if *end == t => _ = self.next_tk(),
@@ -236,11 +242,32 @@ impl Parser {
         Ok(ast)
     }
 
+    fn body(&mut self, line_end: Option<TokenType>) -> Result<Body, ParseError>  {
+        self.body_aux(line_end, |s| s.sttm())
+    }
+
+    fn inner_body_aux(&mut self, line_end: Option<TokenType>, first: TokenType, second: TokenType) -> Result<Body, ParseError>  {
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[first.clone()])?))?;
+        let body = self.body(line_end)?;
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[second.clone()])?))?;
+        Ok(body)
+    }
+
     /// Parse a list of statements inside curly brackets.
     fn inner_body(&mut self, line_end: Option<TokenType>) -> Result<Body, ParseError>  {
-        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::OpCurly])?))?;
-        let body = self.body(line_end)?;
-        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::ClCurly])?))?;
+        self.inner_body_aux(line_end, TokenType::OpCurly, TokenType::ClCurly)
+    }
+
+    fn parse_with_delim_and_end_line<T>(
+        &mut self,
+        line_end: Option<TokenType>,
+        first: TokenType,
+        second: TokenType,
+        method: impl Fn(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<Vec<T>, ParseError> {
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[first.clone()])?))?;
+        let body = self.body_aux(line_end, method)?;
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[second.clone()])?))?;
         Ok(body)
     }
 
@@ -439,6 +466,8 @@ impl Parser {
 
         if let ret @ Ok(_) = self._struct_() { return ret }
         self.set_state(&backup); // restore state of the Tokenizer
+        if let ret @ Ok(_) = self.array() { return ret }
+        self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.func() { return ret }
         self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self._type_() {
@@ -493,6 +522,18 @@ impl Parser {
             n
         }) { ast.push(node); }
         Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Struct(ast))))
+    }
+
+    fn array(&mut self) -> Result<Node, ParseError> {
+        Ok(Node::new(
+                Unknown(self.get_unknown_id()),
+                Box::new(ASTNode::Array(self.parse_with_delim_and_end_line(
+                    Some(TokenType::Comma),
+                    TokenType::OpSqrBra,
+                    TokenType::ClSqrBra,
+                    |s| s.expr()
+                )?))
+        ))
     }
 
     fn func(&mut self) -> Result<Node, ParseError> {
@@ -662,12 +703,18 @@ impl Parser {
                 Ok(Node::new(ExprType::from(&leaf), leaf))
             },
             Some(Token { t: TokenType::OpParen, .. }) => {
-                _ = self.assert_next(&[TokenType::OpParen])?; // Discart prev Token
-                let expr = self.expr()?;
-                match self.next_tk() {
-                    Some(Token { t: TokenType::ClParen, .. }) => Ok(expr),
-                    Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::ClParen])),
-                    None => Err(ParseError::ExpectedToken)
+                let mut in_parenthesis = self.parse_with_delim_and_end_line(
+                    Some(TokenType::Comma),
+                    TokenType::OpParen,
+                    TokenType::ClParen,
+                    |s| s.expr()
+                )?;
+                if in_parenthesis.len() == 1 {
+                    let mut node = Node::new(ExprType::None, Box::new(ASTNode::Empty));
+                    std::mem::swap(&mut node, &mut in_parenthesis[0]);
+                    Ok(node)
+                } else {
+                    Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Tuple(in_parenthesis))))
                 }
             },
             Some(Token { t: TokenType::Id(_), .. }) |

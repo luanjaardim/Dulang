@@ -35,6 +35,7 @@ pub enum TokenType {
 
     // Symbols
     OpCurly, ClCurly, OpParen, ClParen,     // {, }, (, ),
+    OpSqrBra, ClSqrBra,                     // [, ],
     Comma, Semicolon, Colon,                // ',' , ';', ':'
     PassR, PassL,                           // >>, <<
     None,                                   // none,
@@ -60,7 +61,8 @@ impl Token {
                 "==" => Eq, "!=" => Neq, ">" => GrT, ">=" => GrE, "<" => LeT, "<=" => LeE,
                 "and" => And, "or" => Or, "not" => Not,
                 "band" => Band, "bor" => Bor, "bnot" => Bnot, "bxor" => Bxor, "shl" => Shl, "shr" => Shr,
-                "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "," => Comma, ";" => Semicolon, ":" => Colon,
+                "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen, "[" => OpSqrBra, "]" => ClSqrBra,
+                "," => Comma, ";" => Semicolon, ":" => Colon,
                 "=" => Assign, "::" => TypeInf, "none" => TokenType::None, "char" => Char, "bool" => Bool,
                 "->" => FnType, "|" => UnionType, "^" => TupleType, "type" => Type,
                 "&var" => VarRef, "var" => VarDef, "&" => Ref, "@" => Deref,
@@ -92,7 +94,7 @@ impl Token {
         Some(match text {
             "+" => Add, "-" => Sub, "*" => Mul, "/" => Div,
             "==" => Eq, "!=" => Neq, ">" => GrT, ">=" => GrE, "<" => LeT, "<=" => LeE,
-            "{" => OpCurly, "}" => ClCurly, "(" => OpParen,")" => ClParen,
+            "{" => OpCurly, "}" => ClCurly, "(" => OpParen, ")" => ClParen, "[" => OpSqrBra, "]" => ClSqrBra,
             "," => Comma, ";" => Semicolon, ":" => Colon,
             "=" => Assign, "::" => TypeInf, "->" => FnType, "|" => UnionType, "^" => TupleType,
             ">>" => PassR, "<<" => PassL, "&" => Ref, "@" => Deref,
@@ -234,7 +236,8 @@ impl Tokenizer {
                     if state == Unknown {
                         beg_c = self.c;
                         beg_l = self.l;
-                        begin_ind = self.pos
+                        begin_ind = self.pos;
+                        state = Separator;
                     }
                     else if state == Separator {
                         let t = Token::sep_type(&self.s[begin_ind..=self.pos]);
@@ -252,9 +255,8 @@ impl Tokenizer {
                         self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
                         break 0
                     }
-                    state = Separator;
                 },
-                '(' | ')' |'{' | '}'| '@' | '&' | '|' | '^' | '?' | ',' | ';' => {
+                '(' | ')' |'{' | '}' | '[' | ']' | '@' | '&' | '|' | '^' | '?' | ',' | ';' => {
                     let (offset, t) = if self.pos+4 < self.s.len() && &self.s[self.pos..self.pos+4] == "&var" {
                         (4, TokenType::VarRef)
                     } else { (1, Token::sep_type(&self.s[self.pos..self.pos+1]).unwrap()) };
@@ -277,6 +279,10 @@ impl Tokenizer {
                         break 1
                     }
                 },
+                _ if state == Separator => {
+                    self.read_tks.push(Token::new(beg_c, beg_l, &self.s[begin_ind..self.pos]));
+                    break 0
+                }
                 '.' => {
                     if state == Unknown {
                         begin_ind = self.pos;

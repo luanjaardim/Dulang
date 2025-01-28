@@ -37,17 +37,13 @@ expr ::==
 
 parsed-expr :: ==
 	struct
+	array
 	func
 	type
 	sub-expr
 
-func ::==
-	TODO: "(" (var ( "," var )*)? ")" type? ":" expr
-	"(" (var ( "," var )*)? ")" type? ":" (inner-body | func)
-
 var ::==
 	"var"? ID ("::" type)?
-
 
 struct ::==
 	"{" struct-body "}"
@@ -58,6 +54,13 @@ struct-body ::==
 struct-items ::==
 	assign
 	var    # TODO
+
+array ::==
+	"[" (expr ("," expr)*)? "]"
+
+func ::==
+	TODO: "(" (var ( "," var )*)? ")" type? ":" expr
+	"(" (var ( "," var )*)? ")" type? ":" (inner-body | func)
 
 sub-expr ::==
 	fn-call
@@ -93,7 +96,7 @@ unary ::==
 	primary
 
 primary ::==
-	"(" expr ")"
+	"(" expr ("," expr)* ")"
 	id
 	INTEGER
 	REAL
