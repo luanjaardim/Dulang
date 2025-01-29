@@ -508,20 +508,10 @@ impl Parser {
     }
 
     fn _struct_(&mut self) -> Result<Node, ParseError> {
-        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::OpCurly])?))?;
-        let body = self._struct_body()?;
-        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[TokenType::ClCurly])?))?;
-        Ok(body)
-    }
-
-    fn _struct_body(&mut self) -> Result<Node, ParseError> {
-        let mut ast = vec![];
-        while let Ok(node) = self.parse_and_discart_nl(|s| {
-            let n = s.assign();
-            _ = s.assert_next(&[TokenType::Semicolon])?;
-            n
-        }) { ast.push(node); }
-        Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Struct(ast))))
+        let b = self.inner_body_aux(Some(TokenType::Semicolon), TokenType::OpCurly, TokenType::ClCurly)?;
+        Ok(Node::new(Unknown(self.get_unknown_id()),
+            Box::new(ASTNode::Struct(b))
+        ))
     }
 
     fn array(&mut self) -> Result<Node, ParseError> {

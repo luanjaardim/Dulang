@@ -419,10 +419,10 @@ impl Visitor {
         self.cur_scope = &*scope as *const Scope;
         match &mut *node.v {
                                                                 // TODO: Get different types of TokenType here, ModAccess and StruAccess
-            ASTNode::Assign { var: (is_var, ref tk @ Token { t: TokenType::Id(ref var_name), .. }, t), expr } => {
+            ASTNode::Assign { var: (is_var, ref tk @ Token { t: ref tk_type, .. }, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
-                let assign_index = scope.elems.len();
+                let var_name = tk_type.clone().get_id_name();
                 self.last_def_name = Some(var_name.to_string());
                 *t = Some(t.clone()
                            .map_or(
@@ -434,16 +434,11 @@ impl Visitor {
                 let expected_type = t.as_ref().unwrap().t.clone();
                 let expression_type = self.visit(scope, expected_type.clone(), expr)?;
                 self.equivalent_types(&expected_type, &expression_type)?;
-                if let Some(Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, is_var: is_fn_var, .. }, ..})) = scope.elems.get_mut(assign_index) {
-                    // When we have a recursive function the name is filled before
-                    // we need to check if the name correspond to this one.
-                    if !name.is_empty() && *name != *var_name {
-                        panic!("Function {name} is not defined")
-                    }
-                    *is_fn_var = *is_var;
-                    *name = String::from(var_name.clone());
-                } else {
-                    if let Some(v) = self.find_elem_type("var", var_name) {
+                // If it's Some it means that we still have to create the variable
+                // if not, it means that the definition already used this name
+                // TODO: Use the 'is_var' with the variables that don't enter this if
+                if self.last_def_name.is_some() {
+                    if let Some(v) = self.find_elem_type("var", &var_name) {
                         let def = v.get_var().clone();
                         if def.is_var {
                             self.equivalent_types(&def.t, &expression_type)?;
@@ -461,7 +456,7 @@ impl Visitor {
             ASTNode::Struct(items) => {
                 let mut inner_types = vec![];
                 let mut scp = Scope {
-                    attrs: ScopeAttr::StructScope { name: String::new() },
+                    attrs: ScopeAttr::StructScope { name: self.last_def_name.take().expect("Struct was not previously defined.") },
                     elems: vec![],
                     scp_father: std::ptr::null(), // Must not access variables from outter scopes by now
                 };
@@ -474,6 +469,7 @@ impl Visitor {
                         scp.elems[i].func_as_var()
                     });
                 }
+                self.last_def_name = Option::None;
                 scope.elems.push(Elem::Scope(scp));
                 Ok(Struct(inner_types))
             },
@@ -524,6 +520,7 @@ impl Visitor {
                         self.visit(func_scope_ref, None, node)?;
                     }
                 }
+                self.last_def_name = Option::None;
                 Ok(fn_type)
             },
             ASTNode::Loop { cond, body } => {
@@ -561,24 +558,26 @@ impl Visitor {
                 Ok(None)
             },
             ASTNode::FnCall { caller, params, is_sttm } => {
-                if *is_sttm { // A function that returns none is a statement
-                    node.t = None;
-                }
                 if let Token { t: TokenType::Id(name), .. } = &caller {
 
+                    // If the FnCall returns a function, partial application, this will be its name
+                    // only creates a FuncScope with the parent_func if var_name if Some.
+                    let var_name = self.last_def_name.take();
                     let scp_fn = self.find_elem_type("func", name).expect(&format!("Function '{name}' is not defined")).get_scp();
                     let fn_as_var = scp_fn.func_as_var();
                     let fn_type = fn_as_var.t.get_inner_type();
                     let params_types = if let None = fn_type[0] { vec![] } else { fn_type[..fn_type.len()-1].to_vec() };
-                    let ret_type = fn_type.last().unwrap();
                     let params_vars: Vec<Elem> = scp_fn.elems[..params_types.len()].iter().map(|e| e.clone()).collect();
+
+                    let cur_ret_type = fn_type.last().unwrap();
+                    let ret_type = if *is_sttm { // A function that returns none is a statement
+                        self.equivalent_types(cur_ret_type, &None)?;
+                        node.t = None;
+                        None
+                    } else { cur_ret_type.clone() };
 
                     if params.len() > params_types.len() {
                         panic!("Function receiving more than suported parameters: {node:?}");
-                    } else if *is_sttm && !ExprType::expr_type_eq(ret_type, &None, true) {
-                        panic!("Function call of {caller} is a statement but its return is ignored");
-                    } else if !*is_sttm && ExprType::expr_type_eq(ret_type, &None, true) && params.len() == params_types.len() {
-                        panic!("Function call of {caller} is an assignment but returns none");
                     }
 
                     let mut i = 0;
@@ -592,10 +591,10 @@ impl Visitor {
                         node.t = ret_type.clone();
                         ret_type.clone()
                     }
-                    else {
+                    else if let Some(func_name) = var_name {
                         scope.elems.push(Elem::Scope(Scope {
                             attrs: ScopeAttr::FuncScope {
-                                name: String::new(),
+                                name: func_name,
                                 args_len: params_types.len()-i,
                                 ret_type: ret_type.clone(),
                                 parent: Some(name.clone()),
@@ -605,9 +604,19 @@ impl Visitor {
                             scp_father: scope.scp_father,
                         }));
                         FnType(fn_type[i..].to_vec())
+                    } else {
+                        FnType(fn_type[i..].to_vec())
                     };
                     node.t = t.clone();
                     self.equivalent_types(&expected_type, &t)?;
+                    let infered_type = self.infer_type(&t);
+
+                    if *is_sttm && !ExprType::expr_type_eq(&infered_type, &None, true) {
+                        panic!("Function call of {caller} is a statement but its return is ignored");
+                    } else if !*is_sttm && ExprType::expr_type_eq(&infered_type, &None, true) {
+                        panic!("Function call of {caller} is an assignment but returns none");
+                    }
+
                     Ok(t)
                 } else {
                     panic!("At the moment, the caller can only be the function name")
@@ -744,10 +753,7 @@ impl Visitor {
     }
 
     pub fn update_types(&mut self, ast: &mut Vec<Node>) -> Result<(), std::io::Error> {
-        use std::io::{Error, ErrorKind};
-        for n in ast {
-            self.update_types_aux(n)?;
-        }
+        for n in ast { self.update_types_aux(n)? }
         Ok(())
     }
 

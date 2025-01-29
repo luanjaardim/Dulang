@@ -44,6 +44,15 @@ pub enum TokenType {
 
     //RealAdd, RealSub, RealMul, RealDiv,   // +., -., *., /. (Maybe?)
 }
+impl TokenType {
+    pub fn get_id_name(self) -> String {
+        match self {
+            Id(name) | StruAccess(name) | ModAccess(name) => name,
+            _ => panic!("Passed TokenType ({:?}) is not and id.", self)
+        }
+    }
+
+}
 
 #[derive(Clone)]
 pub struct Token {
