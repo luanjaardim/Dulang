@@ -35,10 +35,7 @@ pub enum ASTNode {
         var: Var,
         expr: Node,
     },
-    Mod {
-        name: String,
-        body: Body,
-    },
+    Mod(Body),
     Struct(Body),
     StructInit(Token, Body),
     Func {
@@ -311,9 +308,8 @@ impl Parser {
     }
 
     fn module(&mut self) -> Result<Node, ParseError> {
-        let mod_name = if let Token { t: TokenType::Id(name), .. } = self.assert_next(&[TokenType::Id(String::new())])? {
-            name
-        } else { unreachable!() };
+        let mod_name_tk = self.assert_next(&[TokenType::Id(String::new())])?;
+
         _ = self.assert_next(&[TokenType::Assign])?;
         _ = self.assert_next(&[TokenType::Mod])?;
         let body = match self.peek_tk() {
@@ -329,7 +325,11 @@ impl Parser {
             Some(_) => self.inner_body(None)?,
             None => return Err(ParseError::ExpectedToken),
         };
-        Ok(Node::new(ExprType::None, Box::new(ASTNode::Mod { name: mod_name, body })))
+        Ok(Node::new(ExprType::None, Box::new(
+            ASTNode::Assign { var: (false, mod_name_tk, None),
+                              expr: Node::new(ExprType::None, Box::new(ASTNode::Mod(body))) 
+            }
+        )))
     }
 
     fn _loop_(&mut self) -> Result<Node, ParseError> {

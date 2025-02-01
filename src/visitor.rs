@@ -167,6 +167,7 @@ pub struct Var {
 pub enum ScopeAttr {
     GlobScope,
     StructScope { name: String },
+    ModScope { name: String },
     FuncScope {
         name: String,
         args_len: usize,
@@ -305,17 +306,29 @@ impl Visitor {
         let mut scp_ref = unsafe {
              &*self.cur_scope
         };
-        loop {
+        let mut last_pos = 0;
+        'inf_loop :loop {
+            let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(':') {
+                let cur_elem_name = &elem_name[last_pos..last_pos+pos];
+                last_pos += pos + 1;
+                ("mod", cur_elem_name)
+            } else {
+                (t, &elem_name[last_pos..])
+            };
             for e in scp_ref.elems.iter().rev() {
-                match (e, t) {
-                    (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == elem_name => return Some(e),
+                match (e, cur_t) {
+                    (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
+                    (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name, .. }, .. }), "mod") if name == cur_elem_name => {
+                        scp_ref = scope;
+                        continue 'inf_loop;
+                    },
                     (Elem::Scope(_), "scope") => {
                         // TODO: A better find for Scopes, maybe search for the ScopeAttr type
                         return Some(e)
                     },
                     (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
-                        if type_name == elem_name => return Some(e),
-                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == elem_name => return Some(e),
+                        if type_name == cur_elem_name => return Some(e),
+                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == cur_elem_name => return Some(e),
                     _ => ()
                 }
             }
@@ -367,7 +380,7 @@ impl Visitor {
                     }
                 }
             },
-            (t, t2) => if t != t2 { return Err(VisitorError::MismatchedTypes(f.clone(), s.clone())) }
+            (t, t2) => if t != t2 { return Err(VisitorError::MismatchedTypes(self.infer_type(f), self.infer_type(s))) }
         };
         // println!("f_end: {:?}, s_end: {:?}", self.infer_type(f), self.infer_type(s));
         Ok(())
@@ -418,11 +431,10 @@ impl Visitor {
         let scope = unsafe { &mut *scope };
         self.cur_scope = &*scope as *const Scope;
         match &mut *node.v {
-                                                                // TODO: Get different types of TokenType here, ModAccess and StruAccess
             ASTNode::Assign { var: (is_var, ref tk @ Token { t: ref tk_type, .. }, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
-                let var_name = tk_type.clone().get_id_name();
+                let var_name = tk_type.clone().get_id_name().unwrap();
                 self.last_def_name = Some(var_name.to_string());
                 *t = Some(t.clone()
                            .map_or(
@@ -469,9 +481,23 @@ impl Visitor {
                         scp.elems[i].func_as_var()
                     });
                 }
-                self.last_def_name = Option::None;
+                self.last_def_name = Option::None; // Avoid that any definition inside this scope get its name used after it
                 scope.elems.push(Elem::Scope(scp));
                 Ok(Struct(inner_types))
+            },
+            ASTNode::Mod(body) => {
+                let mut scp = Scope {
+                    attrs: ScopeAttr::ModScope { name: self.last_def_name.take().expect("Module was not previously defined.") },
+                    elems: vec![],
+                    scp_father: std::ptr::null(), // Must not access variables from outter scopes by now
+                };
+
+                for sttm in body {
+                    self.visit(&mut scp, None, sttm)?;
+                }
+                self.last_def_name = Option::None; // Avoid that any definition inside this scope get its name used after it
+                scope.elems.push(Elem::Scope(scp));
+                Ok(None)
             },
             ASTNode::Func { args, ret, body } => {
                 let ret_type = ret.clone();
@@ -558,12 +584,12 @@ impl Visitor {
                 Ok(None)
             },
             ASTNode::FnCall { caller, params, is_sttm } => {
-                if let Token { t: TokenType::Id(name), .. } = &caller {
+                if let Some(name) = caller.t.get_id_name() {
 
                     // If the FnCall returns a function, partial application, this will be its name
                     // only creates a FuncScope with the parent_func if var_name if Some.
                     let var_name = self.last_def_name.take();
-                    let scp_fn = self.find_elem_type("func", name).expect(&format!("Function '{name}' is not defined")).get_scp();
+                    let scp_fn = self.find_elem_type("func", &name).expect(&format!("Function '{name}' is not defined")).get_scp();
                     let fn_as_var = scp_fn.func_as_var();
                     let fn_type = fn_as_var.t.get_inner_type();
                     let params_types = if let None = fn_type[0] { vec![] } else { fn_type[..fn_type.len()-1].to_vec() };
@@ -588,6 +614,8 @@ impl Visitor {
                         i += 1;
                     }
                     let t = if i == params_types.len() {
+                        // Get the name back so a variable can be declared at Assign
+                        self.last_def_name = var_name;
                         node.t = ret_type.clone();
                         ret_type.clone()
                     }
@@ -688,8 +716,11 @@ impl Visitor {
                     TokenType::Str(_) => Pnt(Box::new(Char)),
                     TokenType::True => Bool,
                     TokenType::False => Bool,
+                    TokenType::StruAccess(name) |
+                    TokenType::ModAccess(name) |
                     TokenType::Id(name) => {
-                        if let Some(t) = Scope::find_var(scope, name) {
+                        if let Some(elem) = self.find_elem_type("var", name) {
+                            let t = elem.get_var().t.clone();
                             self.equivalent_types(&expected_type, &t)?;
                             self.infer_type(&expected_type)
                         }
@@ -704,7 +735,8 @@ impl Visitor {
                 Ok(t)
             },
             ASTNode::Cast { e, t } => {
-                let e_type = self.visit(scope, expected_type, e)?;
+                let mut e_type = Unknown(self.get_unknown_id());
+                e_type = self.visit(scope, e_type, e)?;
                 Ok(match (&e_type, &*t) {
                     (None, None) => None,
                     (FnType(_), FnType(_)) | // At the moment it's not possible cast any function type
@@ -713,6 +745,7 @@ impl Visitor {
                         return Err(VisitorError::CastError(e_type.clone(), t.clone()))
                     },
                     _ => {
+                        self.equivalent_types(&expected_type, &t)?;
                         node.t = t.clone();
                         t.clone()
                     }
@@ -804,6 +837,7 @@ impl Visitor {
             ASTNode::Cast { e, .. } => self.update_types_aux(e)?,
             ASTNode::Empty | ASTNode::Leaf(_) => (),
             ASTNode::Struct(vars) => self.update_types(vars)?,
+            ASTNode::Mod(body) => self.update_types(body)?,
             _ => panic!("Not implemented yet: {ast:?}"),
         }
         if ast.t.is_unknown() {
