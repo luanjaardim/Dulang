@@ -213,6 +213,7 @@ impl Parser {
 
     pub fn parse(mut self, last_unknown: &mut usize) -> Result<Body, std::io::Error>  {
         use std::io::{Error, ErrorKind};
+        self.unknown_id = *last_unknown;
         let ret = match self.body(None) {
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, format!("({}) {e:?}", self.prev_tk))),
             Ok(e) if self.peek_tk().is_none() =>  Ok(e),
