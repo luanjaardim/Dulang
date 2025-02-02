@@ -223,23 +223,6 @@ pub struct Scope {
 }
 
 impl Scope {
-    fn find_var(scp: *const Scope, var_name: &str) -> Option<ExprType> {
-        unsafe {
-            if scp.is_null() { return Option::None }
-
-            let scp_ref = &*scp;
-            for e in scp_ref.elems.iter().rev() {
-                if let Elem::Var(var) = e {
-                    if let Token { t: TokenType::Id(name), .. } = &var.v {
-                        if name == var_name {
-                            return Some(var.t.clone())
-                        }
-                    } else { unreachable!("Token type should be an Id") }
-                }
-            }
-            Scope::find_var(scp_ref.scp_father, var_name)
-        }
-    }
 
     fn is_inside_loop(&self) -> bool {
         if let ScopeAttr::LoopScope { .. } = self.attrs { true }
@@ -706,11 +689,17 @@ impl Visitor {
                 let t = match &tk.t {
                     TokenType::Character(_) => Char,
                     TokenType::Real(_) => {
-                        if let Real(_) = expected_type { expected_type.clone() }
+                        if let Real(_) = self.infer_type(&expected_type) { 
+                            node.t = expected_type.clone();
+                            expected_type.clone()
+                        }
                         else { Real(64) }
                     },
                     TokenType::Integer(_) => {
-                        if let Int{ .. } = expected_type { expected_type.clone() }
+                        if let Int{ .. } = self.infer_type(&expected_type) {
+                            node.t = expected_type.clone();
+                            expected_type.clone()
+                        }
                         else { Int { bits: 64, signed: false } }
                     },
                     TokenType::Str(_) => Pnt(Box::new(Char)),

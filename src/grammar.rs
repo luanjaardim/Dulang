@@ -500,7 +500,13 @@ impl Parser {
 
     fn sub_expr(&mut self, backup: (Token, usize)) -> Result<Node, ParseError> {
         self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.fn_call(false, None) { return ret }
+        if let ret @ Ok(_) = self.fn_call(false, None) {
+            if let ASTNode::Struct(_) = &*ret.as_ref().unwrap().v {
+                println!("Ignore if its argument is a Struct");
+            } else {
+                return ret
+            }
+        }
         self.set_state(&backup); // restore state of the Tokenizer
         if let ret @ Ok(_) = self.unary() { return ret }
         self.set_state(&backup); // restore state of the Tokenizer
@@ -726,7 +732,12 @@ impl Parser {
             TokenType::ModAccess(String::new()),
         ])?;
         let backup = self.get_state();
-        let body = self.inner_body(Some(TokenType::Comma));
+        let body = self.parse_with_delim_and_end_line(
+            Some(TokenType::Comma),
+            TokenType::OpCurly,
+            TokenType::ClCurly,
+            |s| s.assign()
+        );
         Ok(Node::new(Unknown(self.get_unknown_id()),
             Box::new(if let Ok(_) = &body {
                 ASTNode::StructInit(tk, body?)
