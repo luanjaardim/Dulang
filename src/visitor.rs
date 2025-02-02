@@ -12,7 +12,7 @@ pub enum ExprType {
     // Pointer types
     Pnt(Box<ExprType>), PntVar(Box<ExprType>),
 
-    Struct(Vec<Var>),
+    Struct(Vec<Var>), StructInstance(String),
 
     Type, CustomType(Box<ExprType>), Alias(String), None, Unknown(usize)
 }
@@ -45,6 +45,7 @@ impl std::fmt::Debug for ExprType {
             Type => write!(f, "Type"),
             None => write!(f, "None"),
             Struct(vars) => { write!(f, "Struct ( ")?; vars.fmt(f)?; write!(f, " )") },
+            StructInstance(s) => write!(f, "StructInstance({s})"),
             Unknown(i) => write!(f, "Unknown({i})"),
         }
     }
@@ -69,6 +70,7 @@ impl ExprType {
                if l1.len() != l2.len() { return false }
                l1.iter().enumerate().all(|(i, e)| Self::expr_type_eq(e, &l2[i], strict_cmp))
             },
+            (StructInstance(name), StructInstance(name2)) if name == name2 => true,
 
             (Pnt(t1), Pnt(t2)) |
             (PntVar(t1), PntVar(t2)) => Self::expr_type_eq(&**t1, &**t2, strict_cmp),
@@ -285,9 +287,11 @@ impl Visitor {
         self.unknown_id
     }
 
-    fn find_elem_type(&self, t: &str, elem_name: &str) -> Option<&Elem> {
-        let mut scp_ref = unsafe {
-             &*self.cur_scope
+    fn find_elem_type<'a, 'b: 'a>(&'a self, t: &str, elem_name: &str, root_scp: Option<&'b Scope>) -> Option<&'a Elem> {
+        let mut scp_ref = if root_scp.is_some() {
+            root_scp.unwrap()
+        } else {
+            unsafe { &*self.cur_scope }
         };
         let mut last_pos = 0;
         'inf_loop :loop {
@@ -300,8 +304,9 @@ impl Visitor {
             };
             for e in scp_ref.elems.iter().rev() {
                 match (e, cur_t) {
+                    (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "struct") |
                     (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
-                    (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name, .. }, .. }), "mod") if name == cur_elem_name => {
+                    (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name }, .. }), "mod") if name == cur_elem_name => {
                         scp_ref = scope;
                         continue 'inf_loop;
                     },
@@ -345,7 +350,7 @@ impl Visitor {
             (Alias(n1), Alias(n2)) if n1 == n2 => (),
             (Alias(name), t) |
             (t, Alias(name)) => {
-                let elem_type = self.find_elem_type("type", &name).expect("Alias type not defined");
+                let elem_type = self.find_elem_type("type", &name, Option::None).expect("Alias type not defined");
                 let alias_type = elem_type.get_var().t.get_inner_from_customtype();
                 self.equivalent_types(&t, &alias_type)?;
             },
@@ -391,7 +396,7 @@ impl Visitor {
             FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
-            Alias(name) => self.find_elem_type("type", &name).expect("Alias not defined").get_var().t.get_inner_from_customtype(),
+            Alias(name) => self.find_elem_type("type", &name, Option::None).expect("Alias not defined").get_var().t.get_inner_from_customtype(),
             Pnt(inner) => Pnt(Box::new(self.infer_type_level(&*inner, level))),
             PntVar(inner) => PntVar(Box::new(self.infer_type_level(&*inner, level))),
             _ => t.clone()
@@ -417,8 +422,8 @@ impl Visitor {
             ASTNode::Assign { var: (is_var, ref tk @ Token { t: ref tk_type, .. }, t), expr } => {
                 // if the current assignment creates an Function Scope we need to update its name
                 // with the current variable name, otherwise we are creating a non-function variable
-                let var_name = tk_type.clone().get_id_name().unwrap();
-                self.last_def_name = Some(var_name.to_string());
+                let var_name = tk_type.clone().get_id_name().unwrap().to_string();
+                self.last_def_name = Some(var_name.clone());
                 *t = Some(t.clone()
                            .map_or(
                                Node::new(Unknown(self.get_unknown_id()),
@@ -433,7 +438,7 @@ impl Visitor {
                 // if not, it means that the definition already used this name
                 // TODO: Use the 'is_var' with the variables that don't enter this if
                 if self.last_def_name.is_some() {
-                    if let Some(v) = self.find_elem_type("var", &var_name) {
+                    if let Some(v) = self.find_elem_type("var", &var_name, Option::None) {
                         let def = v.get_var().clone();
                         if def.is_var {
                             self.equivalent_types(&def.t, &expression_type)?;
@@ -467,6 +472,50 @@ impl Visitor {
                 self.last_def_name = Option::None; // Avoid that any definition inside this scope get its name used after it
                 scope.elems.push(Elem::Scope(scp));
                 Ok(Struct(inner_types))
+            },
+            ASTNode::StructInit(tk, body) => {
+                let type_name = tk.t.get_id_name().unwrap();
+                let get_var = |e: &Elem| {
+                    match e {
+                        Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope {..}, ..}) => scp.func_as_var(),
+                        Elem::Var(v) => v.clone(),
+                        _ => panic!("You should not define a non variable/function inside struct")
+                    }
+                };
+                let defs = self.find_elem_type("struct", &type_name, Option::None)
+                            .expect(&format!("Struct {type_name} not defined previously."))
+                            .get_scp()
+                            .elems.iter()
+                            .map(|e| get_var(e))
+                            .filter(|v| v.is_var).collect::<Vec<Var>>();
+                let mut defined_scp = Scope {
+                    attrs: ScopeAttr::StructScope { name: type_name.to_string() },
+                    elems: vec![],
+                    scp_father: std::ptr::null(), // Must not access variables from outter scopes by now
+                };
+                for def in body {
+                    self.visit(&mut defined_scp, None, def)?;
+                }
+
+                let defined_vars = defined_scp.elems.iter().map(|e| get_var(e)).collect::<Vec<Var>>();
+                if defined_vars.len() > defs.len() {
+                    panic!("Received more parameters than supported, at: {}", tk)
+                }
+                let mut i = 0;
+                for found_var in defined_vars {
+                    let expected_var = &defs[i];
+                    let (expected_name, found_name) = (expected_var.v.t.get_id_name().unwrap(), found_var.v.t.get_id_name().unwrap());
+                    if expected_name == found_name {
+                        self.equivalent_types(&expected_var.t, &found_var.t)?;
+                    } else {
+                        panic!("Expected assignment to field: {expected_name}, found: {found_name}")
+                    }
+                    i += 1;
+                }
+                if i != defs.len() {
+                    panic!("Missing var values to be setted in Struct initialization, at: {}", tk)
+                }
+                Ok(StructInstance(type_name.to_string()))
             },
             ASTNode::Mod(body) => {
                 let mut scp = Scope {
@@ -572,7 +621,7 @@ impl Visitor {
                     // If the FnCall returns a function, partial application, this will be its name
                     // only creates a FuncScope with the parent_func if var_name if Some.
                     let var_name = self.last_def_name.take();
-                    let scp_fn = self.find_elem_type("func", &name).expect(&format!("Function '{name}' is not defined")).get_scp();
+                    let scp_fn = self.find_elem_type("func", &name, Option::None).expect(&format!("Function '{name}' is not defined")).get_scp();
                     let fn_as_var = scp_fn.func_as_var();
                     let fn_type = fn_as_var.t.get_inner_type();
                     let params_types = if let None = fn_type[0] { vec![] } else { fn_type[..fn_type.len()-1].to_vec() };
@@ -608,7 +657,7 @@ impl Visitor {
                                 name: func_name,
                                 args_len: params_types.len()-i,
                                 ret_type: ret_type.clone(),
-                                parent: Some(name.clone()),
+                                parent: Some(name.to_string()),
                                 is_var: false
                             },
                             elems: params_vars[i..].to_vec(),
@@ -708,7 +757,7 @@ impl Visitor {
                     TokenType::StruAccess(name) |
                     TokenType::ModAccess(name) |
                     TokenType::Id(name) => {
-                        if let Some(elem) = self.find_elem_type("var", name) {
+                        if let Some(elem) = self.find_elem_type("var", name, Option::None) {
                             let t = elem.get_var().t.clone();
                             self.equivalent_types(&expected_type, &t)?;
                             self.infer_type(&expected_type)
@@ -826,6 +875,7 @@ impl Visitor {
             ASTNode::Cast { e, .. } => self.update_types_aux(e)?,
             ASTNode::Empty | ASTNode::Leaf(_) => (),
             ASTNode::Struct(vars) => self.update_types(vars)?,
+            ASTNode::StructInit(_, body) => self.update_types(body)?,
             ASTNode::Mod(body) => self.update_types(body)?,
             _ => panic!("Not implemented yet: {ast:?}"),
         }

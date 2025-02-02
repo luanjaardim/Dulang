@@ -45,9 +45,9 @@ pub enum TokenType {
     //RealAdd, RealSub, RealMul, RealDiv,   // +., -., *., /. (Maybe?)
 }
 impl TokenType {
-    pub fn get_id_name(&self) -> Option<String> {
+    pub fn get_id_name(&self) -> Option<&str> {
         match self {
-            Id(name) | StruAccess(name) | ModAccess(name) => Some(name.to_string()),
+            Id(name) | StruAccess(name) | ModAccess(name) => Some(name),
             _ => Option::None,
         }
     }
