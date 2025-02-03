@@ -27,6 +27,7 @@ else ::==
 
 assign ::==
 	var ASSIGN expr nl               # Defining constants
+	"var" ID ASSIGN "pass" nl        # Only inside Struct definitions
 	
 loop ::==
 	"while" comparison inner-body

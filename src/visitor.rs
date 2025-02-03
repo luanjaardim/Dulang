@@ -765,7 +765,14 @@ impl Visitor {
                         else {
                             return Err(VisitorError::VariableNotDeclared(name.to_string()))
                         }
-                    }
+                    },
+                    TokenType::PassDef => {
+                        if let Scope { attrs: ScopeAttr::StructScope { .. }, .. } = scope {
+                            expected_type.clone()
+                        } else {
+                            panic!("Skip definitions is only allowed inside a Struct definition")
+                        }
+                    },
                     _ => return Err(VisitorError::NotImplemented(*node.v.clone())),
                 };
                 self.equivalent_types(&t, &node.t)?;

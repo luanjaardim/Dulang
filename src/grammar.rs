@@ -377,7 +377,13 @@ impl Parser {
     fn assign(&mut self) ->  Result<Node, ParseError> {
         let var = self.var()?;
         _ = self.assert_next(&[TokenType::Assign])?;
-        let expr = self.expr()?;
+        let expr = if let Some(tk @ Token { t: TokenType::PassDef, .. }) = self.peek_tk() {
+            if var.0 == false {
+                panic!("You cannot pass a definition of a constant: {}", var.1)
+            }
+            _ = self.next_tk();
+            Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Leaf(tk)))
+        } else { self.expr()? };
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Assign { var, expr })))
     }
 
