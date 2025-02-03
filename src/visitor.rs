@@ -450,6 +450,11 @@ impl Visitor {
                         v: tk.clone(),
                         t: if let CustomType(_) = expression_type { expression_type } else { self.infer_type(&expected_type)}
                     }));
+                } else if let Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, is_var: variable, .. }, .. }) = scope.elems.last_mut().unwrap() {
+                    if &var_name != name {
+                        panic!("Function name assertion failed")
+                    }
+                    *variable = *is_var;
                 }
                 Ok(None)
             },
