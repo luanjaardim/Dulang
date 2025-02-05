@@ -463,16 +463,29 @@ impl Visitor {
                 let mut scp = Scope {
                     attrs: ScopeAttr::StructScope { name: self.last_def_name.take().expect("Struct was not previously defined.") },
                     elems: vec![],
-                    scp_father: std::ptr::null(), // Must not access variables from outter scopes by now
+                    scp_father: scope,
                 };
                 for (i, item) in items.iter_mut().enumerate() {
                     let t = Unknown(self.get_unknown_id());
-                    self.visit(&mut scp, t, item)?;
-                    inner_types.push(if let Elem::Var(v) = &scp.elems[i] {
-                        v.clone()
+                    let ret_type = self.visit(&mut scp, t, item)?;
+                    if let StructInstance(_) = ret_type {
+                        let v = Var {
+                            is_var: false,
+                            // When implementing something from another struct we use a special
+                            // Token to define the variable, Nl Token
+                            v: Token::new_with_tk_type(0, 0, TokenType::Nl),
+                            t: ret_type
+                        };
+                        scp.elems.push(Elem::Var(v.clone()));
+                        inner_types.push(v);
                     } else {
-                        scp.elems[i].func_as_var()
-                    });
+                        inner_types.push(if let Elem::Var(v) = &scp.elems[i] {
+                            v.clone()
+                        } else {
+                            scp.elems[i].func_as_var()
+                        });
+                    }
+
                 }
                 self.last_def_name = Option::None; // Avoid that any definition inside this scope get its name used after it
                 scope.elems.push(Elem::Scope(scp));

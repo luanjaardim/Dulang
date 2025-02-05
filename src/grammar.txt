@@ -54,7 +54,6 @@ struct-body ::==
 
 struct-items ::==
 	assign
-	var    # TODO
 
 array ::==
 	"[" (expr ("," expr)*)? "]"

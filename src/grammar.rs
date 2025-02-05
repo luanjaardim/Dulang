@@ -521,7 +521,19 @@ impl Parser {
     }
 
     fn _struct_(&mut self) -> Result<Node, ParseError> {
-        let b = self.inner_body_aux(Some(TokenType::Semicolon), TokenType::OpCurly, TokenType::ClCurly)?;
+        let b = self.parse_with_delim_and_end_line(Some(TokenType::Semicolon), TokenType::OpCurly, TokenType::ClCurly,
+            |s| {
+                let backup = s.get_state();
+                let _id = s.id();
+                if let Ok(ref implement) = _id {
+                    if let ASTNode::StructInit(_, _) = *implement.v {
+                        return _id
+                    }
+                }
+                s.set_state(&backup);
+                s.sttm()
+            }
+        )?;
         Ok(Node::new(Unknown(self.get_unknown_id()),
             Box::new(ASTNode::Struct(b))
         ))
