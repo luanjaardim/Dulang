@@ -506,11 +506,15 @@ impl Parser {
 
     fn sub_expr(&mut self, backup: (Token, usize)) -> Result<Node, ParseError> {
         self.set_state(&backup); // restore state of the Tokenizer
-        if let ret @ Ok(_) = self.fn_call(false, None) {
-            if let ASTNode::Struct(_) = &*ret.as_ref().unwrap().v {
-                println!("Ignore if its argument is a Struct");
-            } else {
-                return ret
+        let func_call = self.fn_call(false, None);
+        if func_call.is_ok() {
+            match &*func_call.as_ref().unwrap().v {
+                ASTNode::FnCall { params, .. } if params.len() == 1 => {
+                    match &*params[0].v {
+                        ASTNode::StructInit(..) | ASTNode::Struct(_) => println!("Ignore if its argument is a Struct"),
+                        _ => return func_call,
+                    }
+                }, _ => unreachable!()
             }
         }
         self.set_state(&backup); // restore state of the Tokenizer

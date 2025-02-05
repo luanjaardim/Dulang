@@ -450,6 +450,7 @@ impl Visitor {
                         v: tk.clone(),
                         t: if let CustomType(_) = expression_type { expression_type } else { self.infer_type(&expected_type)}
                     }));
+                    self.last_def_name.take(); // After use, remove the last_def_name
                 } else if let Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, is_var: variable, .. }, .. }) = scope.elems.last_mut().unwrap() {
                     if &var_name != name {
                         panic!("Function name assertion failed")
@@ -492,6 +493,7 @@ impl Visitor {
                 Ok(Struct(inner_types))
             },
             ASTNode::StructInit(tk, body) => {
+                let backup_assignment_name = self.last_def_name.take();
                 let type_name = tk.t.get_id_name().unwrap();
                 let get_var = |e: &Elem| {
                     match e {
@@ -533,6 +535,7 @@ impl Visitor {
                 if i != defs.len() {
                     panic!("Missing var values to be setted in Struct initialization, at: {}", tk)
                 }
+                self.last_def_name = backup_assignment_name;
                 Ok(StructInstance(type_name.to_string()))
             },
             ASTNode::Mod(body) => {
