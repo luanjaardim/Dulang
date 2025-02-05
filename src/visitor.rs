@@ -420,6 +420,7 @@ impl Visitor {
         for n in &mut *ast {
             self.visit(&mut global_scope, None, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
+        self.update_defs_types(&mut global_scope);
         self.cur_scope = &global_scope as *const Scope;
         self.glob_scope = Some(global_scope);
         self.update_types(ast)?;
@@ -859,6 +860,21 @@ impl Visitor {
                 Ok(CustomType(Box::new(node.t.clone())))
             }
             _ => Err(VisitorError::NotImplemented(*node.v.clone()))
+        }
+    }
+
+    pub fn update_defs_types(&self, scp: &mut Scope) {
+        for i in 0..scp.elems.len() {
+            match &mut scp.elems[i] {
+                Elem::Var(v) => v.t = self.infer_type(&v.t),
+                Elem::Scope(s @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => {
+                    if let ScopeAttr::FuncScope { ret_type, .. } = &mut s.attrs {
+                        *ret_type = self.infer_type(ret_type);
+                    }
+                    self.update_defs_types(s);
+                },
+                Elem::Scope(s) => self.update_defs_types(s),
+            }
         }
     }
 
