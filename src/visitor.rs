@@ -110,11 +110,11 @@ impl ExprType {
             _ => false,
         }
     }
-    fn get_inner_from_customtype(&self) -> Self {
+    fn get_inner_if_customtype(self) -> Self {
         if let CustomType(inner) = self {
-            return *inner.clone()
+            return *inner
         } else {
-            panic!("Trying to get_inner_from_customtype of non CustomType: {self:?}")
+            self
         }
     }
 }
@@ -196,6 +196,14 @@ impl Elem {
     pub fn get_scp(&self) -> &Scope {
         if let Elem::Scope(s) =  self { s }
         else { panic!("Trying to get a Scope from a Var Elem") }
+    }
+
+    pub fn get_type(&self) -> ExprType {
+        match self {
+            Elem::Var(v) => v.t.clone(),
+            Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }) => StructInstance(name.to_string()),
+            _ => panic!("Trying to get a type from a non-type Elem")
+        }
     }
 
     pub fn func_as_var(&self) -> Var {
@@ -314,6 +322,7 @@ impl Visitor {
                         // TODO: A better find for Scopes, maybe search for the ScopeAttr type
                         return Some(e)
                     },
+                    (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "type") |
                     (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
                         if type_name == cur_elem_name => return Some(e),
                     (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == cur_elem_name => return Some(e),
@@ -347,12 +356,14 @@ impl Visitor {
             },
             (Unknown(i), t) |
             (t, Unknown(i)) => self.unknown_map[i] = t,
-            (Alias(n1), Alias(n2)) if n1 == n2 => (),
+            (StructInstance(n1), StructInstance(n2)) | (Alias(n1), Alias(n2)) if n1 == n2 => (),
             (Alias(name), t) |
             (t, Alias(name)) => {
-                let elem_type = self.find_elem_type("type", &name, Option::None).expect("Alias type not defined");
-                let alias_type = elem_type.get_var().t.get_inner_from_customtype();
-                self.equivalent_types(&t, &alias_type)?;
+                let elem_type = self.find_elem_type("type", &name, Option::None)
+                                    .expect("Alias type not defined")
+                                    .get_type()
+                                    .get_inner_if_customtype();
+                self.equivalent_types(&t, &elem_type)?;
             },
             (Pnt(inner1), Pnt(inner2)) | (PntVar(inner1), PntVar(inner2)) => {
                 self.equivalent_types(&*inner1, &*inner2)?;
@@ -396,7 +407,7 @@ impl Visitor {
             FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
-            Alias(name) => self.find_elem_type("type", &name, Option::None).expect("Alias not defined").get_var().t.get_inner_from_customtype(),
+            Alias(name) => self.find_elem_type("type", &name, Option::None).expect("Alias not defined").get_type().get_inner_if_customtype(),
             Pnt(inner) => Pnt(Box::new(self.infer_type_level(&*inner, level))),
             PntVar(inner) => PntVar(Box::new(self.infer_type_level(&*inner, level))),
             _ => t.clone()
