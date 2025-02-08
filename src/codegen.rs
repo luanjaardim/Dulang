@@ -109,9 +109,15 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
     }
 
     pub fn compile(&mut self, obj_file_name: &str) {
+        let main_func = self.module.add_function(obj_file_name, self.ctx.i32_type().fn_type(&[], false), None);
+        let main_block = self.ctx.append_basic_block(main_func, "entry");
+        self.builder.position_at_end(main_block);
+
         for sttm in self.ast {
             self.compile_sttm(sttm);
         }
+        // End of main
+        self.builder.build_return(Some(&self.ctx.i32_type().const_zero())).unwrap();
         println!("{}" , self.module.to_string());
     }
 
@@ -194,6 +200,18 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                         self.add_def(var_name, DefType::Var(pnt));
                         self.builder.build_store(pnt, e).unwrap();
                     }
+                }
+            },
+            ASTNode::FlowChange(tk, expr) =>  {
+                match tk {
+                    TokenType::Back => {
+                        let e : Option<Box<dyn BasicValue>> = expr.as_ref().map(|e| {
+                            let expr = self.compile_expr(e);
+                            Box::new(expr) as Box<dyn BasicValue>
+                        });
+                        self.builder.build_return(e.as_deref()).unwrap();
+                    },
+                    _ => unreachable!(),
                 }
             },
             _ => unreachable!()
