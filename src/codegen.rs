@@ -1,0 +1,332 @@
+use inkwell::builder::{Builder, BuilderError};
+use inkwell::context::Context;
+use inkwell::module::Module;
+use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum};
+use inkwell::values::{AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, PointerValue, FunctionValue};
+use inkwell::AddressSpace;
+use crate::grammar::ASTNode;
+use crate::tokenizer::TokenType;
+use crate::{visitor::{Scope, ScopeAttr, Visitor, Elem, ExprType}, grammar::Node, tokenizer::Token};
+
+use std::collections::HashMap;
+use std::error::Error;
+use std::io::Write;
+
+pub enum CodeGenError<'n> {
+    NotImplemented(&'n Node),
+}
+
+#[derive(Debug)]
+pub enum DefType<'ctx> {
+    Var(PointerValue<'ctx>),
+    Fn(FunctionValue<'ctx>),
+    Const(BasicValueEnum<'ctx>)
+}
+impl<'ctx> DefType<'ctx> {
+    fn get_var(&self) -> &PointerValue<'ctx> {
+        match self {
+            DefType::Var(pnt) => pnt,
+            _ => panic!("Using get_var on a DefType that is not a Var")
+        }
+    }
+    fn get_fn(&self) -> &FunctionValue<'ctx> {
+        match self {
+            DefType::Fn(func) => func,
+            _ => panic!("Using get_fn on a DefType that is not a Fn")
+        }
+    }
+    fn get_const(&self) -> &BasicValueEnum<'ctx> {
+        match self {
+            DefType::Const(constant) => constant,
+            _ => panic!("Using get_const on a DefType that is not a Const")
+        }
+    }
+}
+
+pub struct CodeGen<'ctx, 'ast, 'vis> 
+where
+    'vis: 'ast
+{
+    ctx: &'ctx Context,
+    module: Module<'ctx>,
+    builder: Builder<'ctx>,
+    cur_scp: &'vis Scope,
+    cur_ind: usize,
+    ast: &'ast Vec<Node>,
+    defs: HashMap<String, Vec<DefType<'ctx>>>,
+}
+
+impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
+
+    pub fn new(ctx: &'ctx Context, ast: &'ast Vec<Node>, visitor: &'vis Visitor, module_name: &str) -> Result<Self, std::io::Error> {
+        let cg = CodeGen {
+            ctx,
+            module: ctx.create_module(module_name),
+            builder: ctx.create_builder(),
+            cur_scp: visitor.glob_scope.as_ref().unwrap(),
+            cur_ind: 0,
+            ast,
+            defs: HashMap::new(),
+        };
+        Ok(cg)
+    }
+
+    fn get_def(&self, name: &str) -> &DefType<'ctx> {
+        self.defs[name].last().unwrap()
+    }
+    fn add_def(&mut self, name: &str, elem: DefType<'ctx>) {
+        let def_name = self.next_def().get_name().unwrap();
+        assert!(def_name == name); // Assert that every definition follows the correct order
+        if let Some(v) = self.defs.get_mut(name) {
+            v.push(elem)
+        } else {
+            self.defs.insert(name.to_string(), vec![elem]);
+        }
+    }
+    fn clear_cur_scp_vars(&mut self) {
+        // println!("{:?}", self.cur_scp);
+        for e in self.cur_scp.elems.iter().rev() {
+            let var_name = e.get_name().unwrap();
+            // println!("{var_name}: {:?}", self.defs.get(var_name));
+            self.defs.get_mut(var_name).unwrap().pop().expect("The vector was empty");
+        }
+    }
+    fn backup_defs_cursor(&self) -> (*const Scope, usize) {
+        (self.cur_scp, self.cur_ind)
+    }
+    fn set_defs_cursor(&mut self, (scp, pos): (*const Scope, usize)) {
+        (self.cur_scp, self.cur_ind) = (unsafe { &*scp as &Scope }, pos);
+    }
+    fn next_def(&mut self) -> &Elem {
+        self.cur_ind += 1;
+        &self.cur_scp.elems[self.cur_ind-1]
+    }
+    fn peek_def(&self) -> &Elem {
+        &self.cur_scp.elems[self.cur_ind]
+    }
+    fn find_def(&self, name: &str) -> Option<&Elem> {
+        self.cur_scp.find_elem_type("any", name, Some(self.cur_ind))
+    }
+
+    pub fn compile(&mut self, obj_file_name: &str) {
+        for sttm in self.ast {
+            self.compile_sttm(sttm);
+        }
+        println!("{}" , self.module.to_string());
+    }
+
+    fn compile_func(&mut self, name: &str, func: &Node) {
+
+        if let ASTNode::Func { body, .. } = &*func.v {
+            println!("here {:?}", self.peek_def());
+            let func_scope = self.peek_def().get_scp();
+            let v = func_scope.func_as_var();
+            let body_cursor = (func_scope as *const Scope, 0);
+            let backup_cursor = self.backup_defs_cursor();
+            self.set_defs_cursor(body_cursor);
+            // unsafe { println!("{:?}", &*backup_cursor.0 as &Scope); }
+
+            let inner_types = v.t.get_inner_type();
+            let (mut params_types, ret_type) = inner_types.split_at(inner_types.len()-1);
+            if params_types.len() == 1 && ExprType::expr_type_eq(&params_types[0], &ExprType::None, true) {
+                params_types = &[];
+            }
+            let _params_type = params_types.iter().map(|t| self.get_basic_type_metadata(t)).collect::<Vec<BasicMetadataTypeEnum>>();
+            let function_type = self.get_basic_type(&ret_type[0]).fn_type(&_params_type, false);
+            let function = self.module.add_function(name, function_type, None);
+
+            for p in function.get_params() {
+                let param = self.peek_def().get_var().clone();
+                let param_name = param.v.t.get_id_name().unwrap();
+                p.set_name(&param_name);
+                self.add_def(&param_name, DefType::Const(p));
+            }
+
+            let entry_block = self.ctx.append_basic_block(function, "entry");
+            // Set the position of the builder at the end of entry_block of the function
+            self.builder.position_at_end(entry_block);
+            for sttm in body {
+                self.compile_sttm(sttm);
+            }
+
+            // Cleaning the values of variables after compiling the scope
+            self.clear_cur_scp_vars();
+            // Goes one Scope back after compiling the function body
+            self.set_defs_cursor(backup_cursor);
+            self.add_def(name, DefType::Fn(function));
+
+        } else { unreachable!() }
+
+    }
+
+    fn compile_sttm(&mut self, sttm: &Node) {
+        match &*sttm.v {
+            ASTNode::Assign { var: (is_var, tk, _), expr } => {
+                let var_name = tk.t.get_id_name().unwrap();
+                if let ASTNode::Func { .. } = &*expr.v {
+                    self.compile_func(var_name, expr);
+                } else {
+                    let e = self.compile_expr(expr);
+                    if !*is_var {
+                        if let Some(elem) = self.find_def(var_name) {
+                            let v = elem.get_var();
+                            if v.is_var {
+                                let def = self.get_def(var_name).get_var().clone();
+                                self.builder.build_store(def, e).unwrap();
+                            } else {
+                                self.add_def(var_name, DefType::Const(e));
+                            }
+                        } else {
+                            self.add_def(var_name, DefType::Const(e));
+                        }
+                    } else {
+                        // Creating a variable, alocate space and store
+                        let def = self.peek_def();
+                        let variable = def.get_var().clone();
+                        let v_type = self.get_basic_type(&variable.t);
+                        let v_name = variable.v.t.get_id_name().unwrap();
+                        let pnt = self.builder.build_alloca(v_type, v_name).unwrap();
+                        self.add_def(var_name, DefType::Var(pnt));
+                        let e = self.compile_expr(expr);
+                        self.builder.build_store(pnt, e).unwrap();
+                    }
+                }
+            },
+            _ => unreachable!()
+        }
+    }
+
+    fn compile_expr(&self, expr: &Node) -> BasicValueEnum<'ctx> {
+        match &*expr.v {
+            // ASTNode::Func { args, ret, body } => self.compile_func(expr),
+            ASTNode::Binary { .. } => self.compile_bin_op(expr),
+            ASTNode::Leaf(l) => {
+                match &l.t {
+                    // TODO: change false to proper create a integer that is signed
+                    TokenType::Integer(num) => self.get_basic_type(&expr.t).into_int_type().const_int(num.parse::<u64>().unwrap(), false).into(),
+                    TokenType::Id(name) => self.get_def(name).get_const().clone(),
+                    _ => unreachable!()
+                }
+            },
+            _ => {
+                unreachable!()
+            },
+        }
+    }
+
+    fn compile_bin_op(&self, bin: &Node) -> BasicValueEnum<'ctx> {
+        use ExprType::*;
+        let (op, lhs, rhs) = if let ASTNode::Binary { op, l, r } = &*bin.v {
+            (op, self.compile_expr(l), self.compile_expr(r))
+        } else { unreachable!() };
+        let bld = &self.builder;
+
+        match op.t {
+            TokenType::Add => {
+                match &bin.t {
+                    Int { .. } | Char => bld.build_int_add(lhs.into_int_value(), rhs.into_int_value(), "addtmp").unwrap().into(),
+                    Real(_) => bld.build_float_add(lhs.into_float_value(), rhs.into_float_value(), "faddtmp").unwrap().into(),
+                    _ => unreachable!("Not implemented"),
+                }
+            },
+            TokenType::Sub => {
+                match &bin.t {
+                    Int { .. } | Char => bld.build_int_sub(lhs.into_int_value(), rhs.into_int_value(), "subtmp").unwrap().into(),
+                    Real(_) => bld.build_float_sub(lhs.into_float_value(), rhs.into_float_value(), "fsubtmp").unwrap().into(),
+                    _ => unreachable!("Not implemented"),
+                }
+            },
+            TokenType::Mul => {
+                match &bin.t {
+                    Int { .. } | Char => bld.build_int_mul(lhs.into_int_value(), rhs.into_int_value(), "multmp").unwrap().into(),
+                    Real(_) => bld.build_float_mul(lhs.into_float_value(), rhs.into_float_value(), "fmultmp").unwrap().into(),
+                    _ => unreachable!("Not implemented"),
+                }
+            },
+            TokenType::Div => {
+                match &bin.t {
+                    // TODO: refactor to check if use or not the unsigned div
+                    Int { .. } | Char => bld.build_int_unsigned_div(lhs.into_int_value(), rhs.into_int_value(), "divtmp").unwrap().into(),
+                    Real(_) => bld.build_float_div(lhs.into_float_value(), rhs.into_float_value(), "fdivtmp").unwrap().into(),
+                    _ => unreachable!("Not implemented"),
+                }
+            },
+            _ => unreachable!("Not implemented")
+        }
+    }
+
+    fn get_basic_type_metadata(&self, t: &ExprType) -> BasicMetadataTypeEnum<'ctx> {
+        self.get_basic_type(t).into()
+    }
+
+    fn get_basic_type(&self, t: &ExprType) -> BasicTypeEnum<'ctx> {
+        match self.get_type(t) {
+            AnyTypeEnum::IntType(t) => t.into(),
+            AnyTypeEnum::FloatType(t) => t.into(),
+            AnyTypeEnum::PointerType(t) => t.into(),
+            _ => panic!("The passed type is not a Basic Type")
+        }
+    }
+
+    /// Return None when the ExprType is Void, as Void does not implements BasicType trait
+    fn get_type(&self, t: &ExprType) -> AnyTypeEnum<'ctx> {
+        let context = self.ctx;
+        match t {
+            ExprType::Int { bits, .. } => context.custom_width_int_type(*bits as u32).into(),
+            ExprType::Real(bits) => context.f64_type().into(), // TODO: use bits to return the correct type
+            ExprType::Char => context.i8_type().into(),
+            ExprType::Bool => context.custom_width_int_type(1).into(),
+            ExprType::None => context.void_type().into(),
+            ExprType::FnType(inner_types) => {
+                context.i8_type().fn_type(&[], false).into()
+            },
+            _ => context.ptr_type(inkwell::AddressSpace::default()).into(),
+        }
+    }
+
+    pub fn test(&self) {
+        // Create a new LLVM context and module
+        let context = Context::create();
+        let module = context.create_module("printf_example");
+        let builder = context.create_builder();
+
+        // Declare the `printf` function
+        let i32_type = context.i32_type();
+        let ptr_type = context.ptr_type(inkwell::AddressSpace::default());
+        let printf_type = i32_type.fn_type(&[ptr_type.into()], true);
+        let printf = module.add_function("printf", printf_type, None);
+
+        // Define the `main` function
+        let main_type = i32_type.fn_type(&[], false);
+        let main_func = module.add_function("main", main_type, None);
+        let entry_block = context.append_basic_block(main_func, "entry");
+        builder.position_at_end(entry_block);
+
+        // Create a format string
+        let hello_world = builder.build_global_string_ptr("Hello, generated printf!\n", ".str").unwrap();
+
+        // Call `printf` with the format string
+        builder.build_call(printf, &[hello_world.as_pointer_value().into()], "").unwrap();
+
+        // Return 0 from `main`
+        builder.build_return(Some(&i32_type.const_int(0, false))).unwrap();
+
+        // Print the generated LLVM IR
+        // module.print_to_stderr();
+        // Write the LLVM IR to a file
+        let ir_file_path = "output.ll";
+        let mut file = std::fs::File::create(ir_file_path).expect("Failed to create IR file");
+        let llvm_ir = module.to_string();
+        file.write_all(llvm_ir.as_bytes())
+            .expect("Failed to write IR to file");
+
+        // Optionally, compile and execute the module
+        // let engine = module
+        //     .create_jit_execution_engine(OptimizationLevel::None)
+        //     .unwrap();
+        // unsafe {
+        //     engine.run_function(main_func, &[]);
+        // }
+    }
+
+}

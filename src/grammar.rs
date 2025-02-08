@@ -514,7 +514,7 @@ impl Parser {
                         ASTNode::StructInit(..) | ASTNode::Struct(_) => println!("Ignore if its argument is a Struct"),
                         _ => return func_call,
                     }
-                }, _ => unreachable!()
+                }, _ => return func_call
             }
         }
         self.set_state(&backup); // restore state of the Tokenizer

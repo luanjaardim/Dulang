@@ -51,7 +51,7 @@ impl std::fmt::Debug for ExprType {
     }
 }
 impl ExprType {
-    fn expr_type_eq(f: &ExprType, s: &ExprType, strict_cmp: bool) -> bool {
+    pub fn expr_type_eq(f: &ExprType, s: &ExprType, strict_cmp: bool) -> bool {
         match (f, s) {
             (Char, Char)
             | (Bool, Bool)
@@ -89,7 +89,7 @@ impl ExprType {
             _ => panic!("Cannot get a inner type of a non compound type"),
         }
     }
-    fn get_inner_type(&self) -> &Vec<Self> {
+    pub fn get_inner_type(&self) -> &Vec<Self> {
         match self {
             FnType(l) | UnionType(l) | TupleType(l) => l,
             _ => panic!("Cannot get the inner type of a non compound type"),
@@ -188,6 +188,16 @@ pub enum ScopeAttr {
 #[derive(Clone)]
 pub enum Elem { Var(Var), Scope(Scope), }
 impl Elem {
+    pub fn get_name(&self) -> Option<&str> {
+        Some(match self {
+            Elem::Var(v) => v.v.t.get_id_name().unwrap(),
+            Elem::Scope(Scope { attrs: ScopeAttr::ModScope { name }, ..})    |
+            Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, ..}) |
+            Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..}) => name,
+            _ => return Option::None,
+        })
+    }
+
     pub fn get_var(&self) -> &Var {
         if let Elem::Var(v) = self { v }
         else { panic!("Trying to get a variable from a Scope Elem") }
@@ -248,7 +258,7 @@ impl Scope {
         }
     }
 
-    fn func_as_var(&self) -> Var {
+    pub fn func_as_var(&self) -> Var {
         if let Scope { attrs: ScopeAttr::FuncScope { name, args_len, ret_type, is_var, .. }, elems, .. } = self {
             Var {
                 is_var: *is_var,
@@ -265,6 +275,56 @@ impl Scope {
         }
     }
 
+    pub fn find_elem_type(&self, t: &str, elem_name: &str, mut start_ind: Option<usize>) -> Option<&Elem> {
+        let mut scp_ref = self;
+        let mut last_pos = 0;
+
+        'inf_loop :loop {
+            let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(':') {
+                let cur_elem_name = &elem_name[last_pos..last_pos+pos];
+                last_pos += pos + 1;
+                ("mod", cur_elem_name)
+            } else {
+                (t, &elem_name[last_pos..])
+            };
+            if !scp_ref.elems.is_empty() {
+                let end = start_ind.take().unwrap_or(scp_ref.elems.len()-1);
+                for e in scp_ref.elems[..=end].iter().rev() {
+                    match (e, cur_t) {
+                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "any") |
+                        (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "any") |
+                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "struct") |
+                        (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
+                        (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name }, .. }), "mod") if name == cur_elem_name => {
+                            scp_ref = scope;
+                            continue 'inf_loop;
+                        },
+                        (Elem::Scope(_), "scope") => {
+                            // TODO: A better find for Scopes, maybe search for the ScopeAttr type
+                            return Some(e)
+                        },
+                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "any") |
+                        (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "any") |
+                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "type") |
+                        (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
+                            if type_name == cur_elem_name => return Some(e),
+                        (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "any") |
+                        (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == cur_elem_name => return Some(e),
+                        _ => ()
+                    }
+                }
+            }
+            scp_ref = unsafe {
+                if scp_ref.scp_father.is_null() {
+                    break
+                } else {
+                    &*scp_ref.scp_father
+                }
+            };
+        }
+        Option::None
+    }
+
 }
 
 #[derive(Debug)]
@@ -277,7 +337,7 @@ pub enum VisitorError {
 }
 
 pub struct Visitor {
-    pub glob_scope: Option<Scope>,
+    pub glob_scope: Option<Box<Scope>>,
     cur_scope: *const Scope,
     pub unknown_map: Vec<ExprType>,
     unknown_id: usize,
@@ -296,48 +356,12 @@ impl Visitor {
     }
 
     fn find_elem_type<'a, 'b: 'a>(&'a self, t: &str, elem_name: &str, root_scp: Option<&'b Scope>) -> Option<&'a Elem> {
-        let mut scp_ref = if root_scp.is_some() {
+        let scp_ref = if root_scp.is_some() {
             root_scp.unwrap()
         } else {
             unsafe { &*self.cur_scope }
         };
-        let mut last_pos = 0;
-        'inf_loop :loop {
-            let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(':') {
-                let cur_elem_name = &elem_name[last_pos..last_pos+pos];
-                last_pos += pos + 1;
-                ("mod", cur_elem_name)
-            } else {
-                (t, &elem_name[last_pos..])
-            };
-            for e in scp_ref.elems.iter().rev() {
-                match (e, cur_t) {
-                    (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "struct") |
-                    (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
-                    (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name }, .. }), "mod") if name == cur_elem_name => {
-                        scp_ref = scope;
-                        continue 'inf_loop;
-                    },
-                    (Elem::Scope(_), "scope") => {
-                        // TODO: A better find for Scopes, maybe search for the ScopeAttr type
-                        return Some(e)
-                    },
-                    (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "type") |
-                    (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
-                        if type_name == cur_elem_name => return Some(e),
-                    (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == cur_elem_name => return Some(e),
-                    _ => ()
-                }
-            }
-            scp_ref = unsafe {
-                if scp_ref.scp_father.is_null() {
-                    break
-                } else {
-                    &*scp_ref.scp_father
-                }
-            };
-        }
-        Option::None
+        scp_ref.find_elem_type(t, elem_name, Option::None)
     }
 
     fn equivalent_types(&mut self, f: &ExprType, s: &ExprType) -> Result<(), VisitorError> {
@@ -416,12 +440,12 @@ impl Visitor {
 
     pub fn traverse(&mut self, ast: &mut Vec<Node>) -> Result<(), std::io::Error> {
         use std::io::{Error, ErrorKind};
-        let mut global_scope = Scope { attrs: ScopeAttr::GlobScope, elems: vec![], scp_father: std::ptr::null() };
+        let mut global_scope = Box::new(Scope { attrs: ScopeAttr::GlobScope, elems: vec![], scp_father: std::ptr::null() });
         for n in &mut *ast {
-            self.visit(&mut global_scope, None, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
+            self.visit(&mut *global_scope, None, n).map_err(|e| Error::new(ErrorKind::InvalidInput, format!("Visitor Error: {e:?}")))?;
         }
         self.update_defs_types(&mut global_scope);
-        self.cur_scope = &global_scope as *const Scope;
+        self.cur_scope = &*global_scope as *const Scope;
         self.glob_scope = Some(global_scope);
         self.update_types(ast)?;
         Ok(())
