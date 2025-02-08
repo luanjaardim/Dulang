@@ -52,6 +52,7 @@ pub enum ASTNode {
         cond: Option<Node>, // Loop will have a None cond
         body: Body,
     },
+    Extern(Vec<Var>),
     Binary {
         op: Token,
         l: Node,
@@ -293,6 +294,7 @@ impl Parser {
             // Loop statement
             Some(Token { t: TokenType::Loop, ..}) |
             Some(Token { t: TokenType::While, ..}) => self._loop_(),
+            Some(Token { t: TokenType::Extern, ..}) => self._extern_(),
             Some(Token { t: TokenType::Back, ..}) |
             Some(Token { t: TokenType::Stop, ..}) => {
                 let tk = self.assert_next(&[ TokenType::Back, TokenType::Stop ])?;
@@ -372,6 +374,12 @@ impl Parser {
     fn _else_(&mut self) -> Result<Node, ParseError> {
         _ = self.assert_next(&[TokenType::Else])?;
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Conditional { cond: None, body: self.inner_body(None)?, next: None, })))
+    }
+
+    fn _extern_(&mut self) -> Result<Node, ParseError> {
+        _ = self.assert_next(&[TokenType::Extern])?;
+        let defs = self.parse_with_delim_and_end_line(Some(TokenType::Nl), TokenType::OpCurly, TokenType::ClCurly, |s| s.var())?;
+        Ok(Node::new(ExprType::None, Box::new(ASTNode::Extern(defs))))
     }
 
     fn assign(&mut self) ->  Result<Node, ParseError> {

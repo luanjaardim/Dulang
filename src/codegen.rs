@@ -1,7 +1,7 @@
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum};
+use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum, FunctionType};
 use inkwell::values::{AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, PointerValue, FunctionValue};
 use inkwell::AddressSpace;
 use crate::grammar::ASTNode;
@@ -20,7 +20,8 @@ pub enum CodeGenError<'n> {
 pub enum DefType<'ctx> {
     Var(PointerValue<'ctx>),
     Fn(FunctionValue<'ctx>),
-    Const(BasicValueEnum<'ctx>)
+    Const(BasicValueEnum<'ctx>),
+    Empty,
 }
 impl<'ctx> DefType<'ctx> {
     fn get_var(&self) -> &PointerValue<'ctx> {
@@ -107,6 +108,21 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
     fn find_def(&self, name: &str) -> Option<&Elem> {
         self.cur_scp.find_elem_type("any", name, Some(self.cur_ind))
     }
+    fn get_func_type(&self, t: &ExprType) -> FunctionType<'ctx> {
+        if let ExprType::FnType(inner) = t {
+            let (params_types, ret_type) = inner.split_at(inner.len()-1);
+            let _params_types = if let ExprType::None = params_types[0] {
+                vec![]
+            } else {
+                params_types.iter().map(|t| self.get_basic_type_metadata(t)).collect::<Vec<BasicMetadataTypeEnum>>()
+            };
+            if let ExprType::None = ret_type[0] {
+                self.ctx.void_type().fn_type(&_params_types, false)
+            } else {
+                self.get_basic_type(&ret_type[0]).fn_type(&_params_types, false)
+            }
+        } else { panic!("Not a function type") }
+    }
 
     pub fn compile(&mut self, obj_file_name: &str) {
         let main_func = self.module.add_function(obj_file_name, self.ctx.i32_type().fn_type(&[], false), None);
@@ -130,17 +146,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             let backup_cursor = self.backup_defs_cursor();
             self.set_defs_cursor(body_cursor);
 
-            let inner_types = v.t.get_inner_type();
-            let (mut params_types, ret_type) = inner_types.split_at(inner_types.len()-1);
-            if params_types.len() == 1 && ExprType::expr_type_eq(&params_types[0], &ExprType::None, true) {
-                params_types = &[];
-            }
-            let _params_type = params_types.iter().map(|t| self.get_basic_type_metadata(t)).collect::<Vec<BasicMetadataTypeEnum>>();
-            let function_type = if let ExprType::None = &ret_type[0] {
-                self.ctx.void_type().fn_type(&_params_type, false)
-            } else {
-                self.get_basic_type(&ret_type[0]).fn_type(&_params_type, false)
-            };
+            let function_type = self.get_func_type(&v.t);
             let function = self.module.add_function(name, function_type, None);
 
             for p in function.get_params() {
@@ -214,6 +220,15 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     _ => unreachable!(),
                 }
             },
+            ASTNode::Extern(defs) => {
+                for (_, tk, _) in defs {
+                    let fn_name = tk.t.get_id_name().unwrap();
+                    let func = self.find_def(fn_name).unwrap().func_as_var();
+                    let func_type = self.get_func_type(&func.t);
+                    self.module.add_function(fn_name, func_type, None);
+                    self.add_def(tk.t.get_id_name().unwrap(), DefType::Empty);
+                }
+            }
             _ => unreachable!()
         }
     }

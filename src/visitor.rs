@@ -675,6 +675,33 @@ impl Visitor {
                 }
                 Ok(None)
             },
+            ASTNode::Extern(defs) => {
+                for (_, tk, ty) in defs {
+                    let fn_type = ty.as_ref().unwrap().t.get_inner_type();
+                    let (mut params_types, ret_type) = fn_type.split_at(fn_type.len()-1);
+                    if let None = params_types[0] {
+                        params_types = &[];
+                    }
+                    scope.elems.push(Elem::Scope(
+                        Scope {
+                            attrs: ScopeAttr::FuncScope {
+                                name: tk.t.get_id_name().unwrap().to_string(),
+                                args_len: params_types.len(),
+                                ret_type: ret_type[0].clone(),
+                                parent: Option::None,
+                                is_var: false
+                            },
+                            elems: params_types.iter().map(|t| Elem::Var(Var {
+                                is_var: false,
+                                v: Token::nl(0),
+                                t: t.clone()
+                            })).collect(),
+                            scp_father: scope,
+                        }
+                    ));
+                }
+                Ok(None)
+            },
             ASTNode::FnCall { caller, params, is_sttm } => {
                 if let Some(name) = caller.t.get_id_name() {
 
@@ -959,6 +986,7 @@ impl Visitor {
             ASTNode::Struct(vars) => self.update_types(vars)?,
             ASTNode::StructInit(_, body) => self.update_types(body)?,
             ASTNode::Mod(body) => self.update_types(body)?,
+            ASTNode::Extern(_) => (), // TODO: possibly do something here
             _ => panic!("Not implemented yet: {ast:?}"),
         }
         if ast.t.is_unknown() {

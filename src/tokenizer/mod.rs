@@ -38,7 +38,7 @@ pub enum TokenType {
     OpSqrBra, ClSqrBra,                     // [, ],
     Comma, Semicolon, Colon,                // ',' , ';', ':'
     PassR, PassL,                           // >>, <<
-    None, PassDef,                          // none, pass
+    None, PassDef, Extern,                  // none, pass, extern
 
     Nl,                                     // New line '\n'
 
@@ -76,7 +76,7 @@ impl Token {
                 "->" => FnType, "|" => UnionType, "^" => TupleType, "type" => Type,
                 "&var" => VarRef, "var" => VarDef, "&" => Ref, "@" => Deref,
                 ">>" => PassR, "<<" => PassL,
-                "if" => If, "elif" => Elif, "else" => Else, "pass" => PassDef,
+                "if" => If, "elif" => Elif, "else" => Else, "pass" => PassDef, "extern" => Extern,
                 "while" => While, "loop" => Loop, "mod" => Mod,
                 "skip" => Skip, "stop" => Stop, "back" => Back,
                 "false" => False, "true" => True,
