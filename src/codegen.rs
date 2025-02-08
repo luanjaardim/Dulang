@@ -208,7 +208,17 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 match &l.t {
                     // TODO: change false to proper create a integer that is signed
                     TokenType::Integer(num) => self.get_basic_type(&expr.t).into_int_type().const_int(num.parse::<u64>().unwrap(), false).into(),
-                    TokenType::Id(name) => self.get_def(name).get_const().clone(),
+                    TokenType::Id(name) => {
+                        match self.get_def(name) {
+                            DefType::Var(pnt) => {
+                                let v = self.find_def(name).unwrap().get_var();
+                                let v_type = self.get_basic_type(&v.t);
+                                self.builder.build_load(v_type, *pnt, "tmpload").unwrap()
+                            },
+                            DefType::Const(constant) => constant.clone(),
+                            _ => unreachable!()
+                        }
+                    }
                     _ => unreachable!()
                 }
             },
