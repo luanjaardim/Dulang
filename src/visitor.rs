@@ -288,7 +288,7 @@ impl Scope {
                 (t, &elem_name[last_pos..])
             };
             if !scp_ref.elems.is_empty() {
-                let end = start_ind.take().unwrap_or(scp_ref.elems.len()-1);
+                let end = start_ind.take().unwrap_or(usize::MAX).min(scp_ref.elems.len()-1);
                 for e in scp_ref.elems[..=end].iter().rev() {
                     match (e, cur_t) {
                         (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "any") |
@@ -474,11 +474,14 @@ impl Visitor {
                 // if not, it means that the definition already used this name
                 // TODO: Use the 'is_var' with the variables that don't enter this if
                 if self.last_def_name.is_some() {
-                    if let Some(v) = self.find_elem_type("var", &var_name, Option::None) {
-                        let def = v.get_var().clone();
-                        if def.is_var {
-                            self.equivalent_types(&def.t, &expression_type)?;
-                            return Ok(None)
+                    // Only checks if the variable already exists and is a variable if it's assignment without 'var'
+                    if !*is_var {
+                        if let Some(v) = self.find_elem_type("var", &var_name, Option::None) {
+                            let def = v.get_var().clone();
+                            if def.is_var {
+                                self.equivalent_types(&def.t, &expression_type)?;
+                                return Ok(None)
+                            }
                         }
                     }
                     scope.elems.push(Elem::Var( Var {

@@ -118,13 +118,11 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
     fn compile_func(&mut self, name: &str, func: &Node) {
 
         if let ASTNode::Func { body, .. } = &*func.v {
-            println!("here {:?}", self.peek_def());
             let func_scope = self.peek_def().get_scp();
             let v = func_scope.func_as_var();
             let body_cursor = (func_scope as *const Scope, 0);
             let backup_cursor = self.backup_defs_cursor();
             self.set_defs_cursor(body_cursor);
-            // unsafe { println!("{:?}", &*backup_cursor.0 as &Scope); }
 
             let inner_types = v.t.get_inner_type();
             let (mut params_types, ret_type) = inner_types.split_at(inner_types.len()-1);
@@ -181,13 +179,13 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                         }
                     } else {
                         // Creating a variable, alocate space and store
+                        println!("{:?}", self.cur_scp);
                         let def = self.peek_def();
                         let variable = def.get_var().clone();
                         let v_type = self.get_basic_type(&variable.t);
                         let v_name = variable.v.t.get_id_name().unwrap();
                         let pnt = self.builder.build_alloca(v_type, v_name).unwrap();
                         self.add_def(var_name, DefType::Var(pnt));
-                        let e = self.compile_expr(expr);
                         self.builder.build_store(pnt, e).unwrap();
                     }
                 }
