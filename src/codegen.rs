@@ -130,7 +130,11 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 params_types = &[];
             }
             let _params_type = params_types.iter().map(|t| self.get_basic_type_metadata(t)).collect::<Vec<BasicMetadataTypeEnum>>();
-            let function_type = self.get_basic_type(&ret_type[0]).fn_type(&_params_type, false);
+            let function_type = if let ExprType::None = &ret_type[0] {
+                self.ctx.void_type().fn_type(&_params_type, false)
+            } else {
+                self.get_basic_type(&ret_type[0]).fn_type(&_params_type, false)
+            };
             let function = self.module.add_function(name, function_type, None);
 
             for p in function.get_params() {
@@ -140,6 +144,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 self.add_def(&param_name, DefType::Const(p));
             }
 
+            let previous_block = self.builder.get_insert_block();
             let entry_block = self.ctx.append_basic_block(function, "entry");
             // Set the position of the builder at the end of entry_block of the function
             self.builder.position_at_end(entry_block);
@@ -149,6 +154,8 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
 
             // Cleaning the values of variables after compiling the scope
             self.clear_cur_scp_vars();
+            // Return build to its previous position
+            self.builder.position_at_end(previous_block.unwrap_or(entry_block));
             // Goes one Scope back after compiling the function body
             self.set_defs_cursor(backup_cursor);
             self.add_def(name, DefType::Fn(function));
@@ -179,7 +186,6 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                         }
                     } else {
                         // Creating a variable, alocate space and store
-                        println!("{:?}", self.cur_scp);
                         let def = self.peek_def();
                         let variable = def.get_var().clone();
                         let v_type = self.get_basic_type(&variable.t);
