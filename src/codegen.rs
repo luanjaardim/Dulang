@@ -208,6 +208,10 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     }
                 }
             },
+            ASTNode::FnCall { caller, params, is_sttm } => {
+                assert!(*is_sttm);
+                self.compile_fn_call(caller.t.get_id_name().unwrap(), params);
+            },
             ASTNode::FlowChange(tk, expr) =>  {
                 match tk {
                     TokenType::Back => {
