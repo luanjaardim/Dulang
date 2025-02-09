@@ -2,7 +2,7 @@ use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum, FunctionType};
-use inkwell::values::{AnyValue, AnyValueEnum, BasicValue, BasicValueEnum, PointerValue, FunctionValue};
+use inkwell::values::{AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FunctionValue, PointerValue};
 use inkwell::AddressSpace;
 use crate::grammar::ASTNode;
 use crate::tokenizer::TokenType;
@@ -134,7 +134,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
         }
         // End of main
         self.builder.build_return(Some(&self.ctx.i32_type().const_zero())).unwrap();
-        println!("{}" , self.module.to_string());
+        std::fs::write("test.ll", self.module.to_string()).unwrap();
     }
 
     fn compile_func(&mut self, name: &str, func: &Node) {
@@ -225,8 +225,8 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     let fn_name = tk.t.get_id_name().unwrap();
                     let func = self.find_def(fn_name).unwrap().func_as_var();
                     let func_type = self.get_func_type(&func.t);
-                    self.module.add_function(fn_name, func_type, None);
-                    self.add_def(tk.t.get_id_name().unwrap(), DefType::Empty);
+                    let function = self.module.add_function(fn_name, func_type, None);
+                    self.add_def(tk.t.get_id_name().unwrap(), DefType::Fn(function));
                 }
             }
             _ => unreachable!()
@@ -237,10 +237,15 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
         match &*expr.v {
             // ASTNode::Func { args, ret, body } => self.compile_func(expr),
             ASTNode::Binary { .. } => self.compile_bin_op(expr),
+            ASTNode::FnCall { caller, params, .. } =>{
+                let expr = self.compile_fn_call(caller.t.get_id_name().unwrap(), params);
+                expr.try_as_basic_value().left_or_else(|_| panic!("Expected expr to be not None"))
+            },
             ASTNode::Leaf(l) => {
                 match &l.t {
                     // TODO: change false to proper create a integer that is signed
                     TokenType::Integer(num) => self.get_basic_type(&expr.t).into_int_type().const_int(num.parse::<u64>().unwrap(), false).into(),
+                    TokenType::Str(s) => self.builder.build_global_string_ptr(s, ".str").unwrap().as_basic_value_enum(),
                     TokenType::Id(name) => {
                         match self.get_def(name) {
                             DefType::Var(pnt) => {
@@ -300,6 +305,12 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             },
             _ => unreachable!("Not implemented")
         }
+    }
+
+    fn compile_fn_call(&self, name: &str, params: &Vec<Node>) -> CallSiteValue<'ctx> {
+        let func = self.get_def(name).get_fn();
+        let parameters = params.iter().map(|p| self.compile_expr(p).into()).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+        self.builder.build_call(*func, &parameters, "tmpcall").unwrap()
     }
 
     fn get_basic_type_metadata(&self, t: &ExprType) -> BasicMetadataTypeEnum<'ctx> {
