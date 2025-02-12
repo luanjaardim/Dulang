@@ -189,13 +189,10 @@ pub enum ScopeAttr {
 pub enum Elem { Var(Var), Scope(Scope), }
 impl Elem {
     pub fn get_name(&self) -> Option<&str> {
-        Some(match self {
-            Elem::Var(v) => v.v.t.get_id_name().unwrap(),
-            Elem::Scope(Scope { attrs: ScopeAttr::ModScope { name }, ..})    |
-            Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, ..}) |
-            Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..}) => name,
-            _ => return Option::None,
-        })
+        match self {
+            Elem::Var(v) => Some(v.v.t.get_id_name().unwrap()),
+            Elem::Scope(scp) => scp.get_name(),
+        }
     }
 
     pub fn get_var(&self) -> &Var {
@@ -251,7 +248,16 @@ impl Scope {
         }
     }
 
-    fn get_cur_func_scp(&mut self) -> Option<&mut Self> {
+    pub fn get_name(&self) -> Option<&str> {
+        match self {
+            Scope { attrs: ScopeAttr::ModScope { name }, ..}    |
+            Scope { attrs: ScopeAttr::StructScope { name }, ..} |
+            Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..} => Some(name),
+            _ => Option::None,
+        }
+    }
+
+    pub fn get_cur_func_scp(&self) -> Option<&Self> {
         if let ScopeAttr::FuncScope { .. } = self.attrs { Some(self) }
         else {
             unsafe { (self.scp_father as *mut Scope).as_mut().map_or(Option::None, |f| f.get_cur_func_scp()) }

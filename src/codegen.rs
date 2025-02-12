@@ -1,9 +1,10 @@
+use inkwell::basic_block::BasicBlock;
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum, FunctionType};
 use inkwell::values::{AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FunctionValue, PointerValue};
-use inkwell::AddressSpace;
+use inkwell::{AddressSpace, IntPredicate};
 use crate::grammar::ASTNode;
 use crate::tokenizer::TokenType;
 use crate::{visitor::{Scope, ScopeAttr, Visitor, Elem, ExprType}, grammar::Node, tokenizer::Token};
@@ -208,6 +209,12 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     }
                 }
             },
+            ASTNode::Conditional { .. } => {
+                let cur_block = self.builder.get_insert_block().unwrap();
+                let end_cond = self.ctx.insert_basic_block_after(cur_block, "end_branch");
+                self.compile_conditional(&end_cond, sttm);
+                self.builder.position_at_end(end_cond);
+            }
             ASTNode::FnCall { caller, params, is_sttm } => {
                 assert!(*is_sttm);
                 self.compile_fn_call(caller.t.get_id_name().unwrap(), params);
@@ -235,6 +242,34 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             }
             _ => unreachable!()
         }
+    }
+
+    fn compile_conditional(&mut self, end_block: &BasicBlock<'ctx>, cond: &Node) {
+        if let ASTNode::Conditional { cond, body, next } = &*cond.v {
+
+            if let Some(expr) =  cond.as_ref() {
+                let before_branch = self.builder.get_insert_block().unwrap();
+                let then_branch = self.ctx.insert_basic_block_after(before_branch, "if");
+                let else_branch = self.ctx.insert_basic_block_after(then_branch, "else");
+                let val = self.compile_expr(expr).into_int_value();
+                self.builder.build_conditional_branch(val, then_branch, else_branch).unwrap();
+                self.builder.position_at_end(then_branch);
+                for sttm in body {
+                    self.compile_sttm(sttm);
+                }
+                self.builder.build_unconditional_branch(*end_block).unwrap();
+                self.builder.position_at_end(else_branch);
+                if let Some(n) = next {
+                    self.compile_conditional(end_block, n);
+                }
+
+            } else {
+                for sttm in body {
+                    self.compile_sttm(sttm);
+                }
+                self.builder.build_unconditional_branch(*end_block).unwrap();
+            }
+        } else { unreachable!() }
     }
 
     fn compile_expr(&self, expr: &Node) -> BasicValueEnum<'ctx> {
@@ -306,6 +341,16 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     Real(_) => bld.build_float_div(lhs.into_float_value(), rhs.into_float_value(), "fdivtmp").unwrap().into(),
                     _ => unreachable!("Not implemented"),
                 }
+            },
+            TokenType::Eq | TokenType::LeT | TokenType::LeE | TokenType::GrT | TokenType::GrE | TokenType::Neq => {
+                use TokenType::{Neq, Eq, LeE, LeT, GrE, GrT};
+                self.builder.build_int_compare(match &op.t {
+                    Neq => IntPredicate::NE, Eq => IntPredicate::EQ,
+                    LeT => IntPredicate::ULT, LeE => IntPredicate::ULE,
+                    GrT => IntPredicate::UGT, GrE => IntPredicate::UGE,
+                    _ => panic!("Comparison not implemented")
+                     // TODO: Verify cast lhs and rhs into flot or into int
+                }, lhs.into_int_value(), rhs.into_int_value(), "cmp").unwrap().into()
             },
             _ => unreachable!("Not implemented")
         }
