@@ -214,6 +214,12 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 let end_cond = self.ctx.insert_basic_block_after(cur_block, "end_branch");
                 self.compile_conditional(&end_cond, sttm);
                 self.builder.position_at_end(end_cond);
+            },
+            ASTNode::Loop { .. } => {
+                let cur_block = self.builder.get_insert_block().unwrap();
+                let end_cond = self.ctx.insert_basic_block_after(cur_block, "end_loop");
+                self.compile_loop(&end_cond, sttm);
+                self.builder.position_at_end(end_cond);
             }
             ASTNode::FnCall { caller, params, is_sttm } => {
                 assert!(*is_sttm);
@@ -270,6 +276,26 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 self.builder.build_unconditional_branch(*end_block).unwrap();
             }
         } else { unreachable!() }
+    }
+
+    fn compile_loop(&mut self, end_block: &BasicBlock<'ctx>, _loop: &Node) {
+
+        if let ASTNode::Loop { cond, body } = &*_loop.v {
+            let before_branch = self.builder.get_insert_block().unwrap();
+            let cond_branch = self.ctx.insert_basic_block_after(before_branch, "loop_cond");
+            let body_branch = self.ctx.insert_basic_block_after(cond_branch, "loop_body");
+            self.builder.build_unconditional_branch(cond_branch).unwrap();
+            self.builder.position_at_end(cond_branch);
+            let e = self.compile_expr(cond.as_ref().expect("loop still in development"));
+            self.builder.build_conditional_branch(e.into_int_value(), body_branch, *end_block).unwrap();
+            self.builder.position_at_end(body_branch);
+            for sttm in body {
+                self.compile_sttm(sttm);
+            }
+            self.builder.build_unconditional_branch(cond_branch).unwrap();
+
+        } else { unreachable!() }
+
     }
 
     fn compile_expr(&self, expr: &Node) -> BasicValueEnum<'ctx> {
