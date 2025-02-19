@@ -83,7 +83,7 @@ impl Token {
                 _ if regex::Regex::new(r"^i\d+$").unwrap().is_match(text) => I(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^u\d+$").unwrap().is_match(text) => U(text[1..].parse().unwrap()),
                 _ if regex::Regex::new(r"^f\d+$").unwrap().is_match(text) => F(text[1..].parse().unwrap()),
-                _ if regex::Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')$"#).unwrap().is_match(text) => TokenType::Str(text.to_string()),
+                _ if regex::Regex::new(r#"^(\".*\"|\'\'(\w|\W)*\'\')$"#).unwrap().is_match(text) => TokenType::Str(text[1..text.len()-1].to_string()),
                 _ if regex::Regex::new(r"^\'(.|\\[rnt])\'$").unwrap().is_match(text) => TokenType::Character(text.to_string()),
                 _ if regex::Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)$").unwrap().is_match(text) => TokenType::Real(text.to_string()),
                 _ if regex::Regex::new(r"^\d+$").unwrap().is_match(text) => Integer(text.to_string()),

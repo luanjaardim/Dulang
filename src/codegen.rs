@@ -284,7 +284,26 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 match &l.t {
                     // TODO: change false to proper create a integer that is signed
                     TokenType::Integer(num) => self.get_basic_type(&expr.t).into_int_type().const_int(num.parse::<u64>().unwrap(), false).into(),
-                    TokenType::Str(s) => self.builder.build_global_string_ptr(s, ".str").unwrap().as_basic_value_enum(),
+                    TokenType::Str(s) => {
+                        let mut llvm_str: Vec<u8> = vec![];
+                        let mut found_scape = false;
+                        for c in s.bytes() {
+                            if found_scape {
+                                llvm_str.push(match c {
+                                    b'n' => 10,
+                                    b'r' => 13,
+                                    b't' => 9,
+                                    b'0' => 0,
+                                    _ => panic!("Scape char not implemented")
+                                });
+                                found_scape = false;
+                            } else {
+                                if c == b'\\' { found_scape = true; continue }
+                                llvm_str.push(c);
+                            }
+                        }
+                        self.builder.build_global_string_ptr(&llvm_str.into_iter().map(|b| b as char).collect::<String>(), ".str").unwrap().as_basic_value_enum()
+                    },
                     TokenType::Id(name) => {
                         match self.get_def(name) {
                             DefType::Var(pnt) => {
