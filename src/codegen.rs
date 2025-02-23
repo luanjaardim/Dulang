@@ -140,48 +140,71 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
 
     fn compile_func(&mut self, name: &str, func: &Node) {
 
-        if let ASTNode::Func { body, .. } = &*func.v {
-            let func_scope = self.peek_def().get_scp();
-            let v = func_scope.func_as_var();
-            let body_cursor = (func_scope as *const Scope, 0);
-            let backup_cursor = self.backup_defs_cursor();
-            self.set_defs_cursor(body_cursor);
+        match &*func.v {
+            expr @ ASTNode::Func { .. } | expr @ ASTNode::FnCall { .. } => {
+                let func_scope = self.peek_def().get_scp();
+                let v = func_scope.func_as_var();
+                let body_cursor = (func_scope as *const Scope, 0);
+                let backup_cursor = self.backup_defs_cursor();
+                self.set_defs_cursor(body_cursor);
 
-            let function_type = self.get_func_type(&v.t);
-            let function = self.module.add_function(name, function_type, None);
+                let function_type = self.get_func_type(&v.t);
+                let function = self.module.add_function(name, function_type, None);
 
-            for p in function.get_params() {
-                let param = self.peek_def().get_var().clone();
-                let param_name = param.v.t.get_id_name().unwrap();
-                p.set_name(&param_name);
-                self.add_def(&param_name, DefType::Const(p));
-            }
+                for p in function.get_params() {
+                    let param = self.peek_def().get_var().clone();
+                    let param_name = param.v.t.get_id_name().unwrap();
+                    p.set_name(&param_name);
+                    self.add_def(&param_name, DefType::Const(p));
+                }
 
-            let previous_block = self.builder.get_insert_block();
-            let entry_block = self.ctx.append_basic_block(function, "entry");
-            // Set the position of the builder at the end of entry_block of the function
-            self.builder.position_at_end(entry_block);
-            for sttm in body {
-                self.compile_sttm(sttm);
-            }
+                let previous_block = self.builder.get_insert_block();
+                let entry_block = self.ctx.append_basic_block(function, "entry");
+                // Set the position of the builder at the end of entry_block of the function
+                self.builder.position_at_end(entry_block);
 
-            // Cleaning the values of variables after compiling the scope
-            self.clear_cur_scp_vars();
-            // Return build to its previous position
-            self.builder.position_at_end(previous_block.unwrap_or(entry_block));
-            // Goes one Scope back after compiling the function body
-            self.set_defs_cursor(backup_cursor);
-            self.add_def(name, DefType::Fn(function));
+                // Build the body of the function, it can be built from a partial application
+                match expr {
+                    ASTNode::FnCall { caller, params, .. } => {
+                        let caller_func = self.get_def(caller.t.get_id_name().unwrap()).get_fn().clone();
 
-        } else { unreachable!() }
+                        let args_params: Vec<BasicMetadataValueEnum<'ctx>> = function.get_params().iter().map(|p| p.clone().into()).collect();
+                        let parameters = args_params.into_iter().chain(params.iter().map(|p| self.compile_expr(p).into())).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+                        let return_value = self.builder.build_call(caller_func, &parameters, "ret-call").unwrap().try_as_basic_value();
 
+                        if return_value.is_left() {
+                            let l = return_value.left();
+                            self.builder.build_return(Some(l.as_ref().unwrap())).unwrap();
+                        } else {
+                            self.builder.build_return(None).unwrap();
+                        }
+                    },
+                    ASTNode::Func { body, .. } => {
+                        for sttm in body {
+                            self.compile_sttm(sttm);
+                        }
+                    },
+                    _ => unreachable!()
+                }
+
+                // Cleaning the values of variables after compiling the scope
+                self.clear_cur_scp_vars();
+                // Return build to its previous position
+                self.builder.position_at_end(previous_block.unwrap_or(entry_block));
+                // Goes one Scope back after compiling the function body
+                self.set_defs_cursor(backup_cursor);
+                self.add_def(name, DefType::Fn(function));
+
+            },
+            _ => unreachable!(),
+        }
     }
 
     fn compile_sttm(&mut self, sttm: &Node) {
         match &*sttm.v {
             ASTNode::Assign { var: (is_var, tk, _), expr } => {
                 let var_name = tk.t.get_id_name().unwrap();
-                if let ASTNode::Func { .. } = &*expr.v {
+                if let ExprType::FnType(_) = expr.t {
                     self.compile_func(var_name, expr);
                 } else {
                     let e = self.compile_expr(expr);
