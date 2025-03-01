@@ -12,7 +12,7 @@ pub enum ExprType {
     // Pointer types
     Pnt(Box<ExprType>), PntVar(Box<ExprType>),
 
-    Struct(Vec<Var>), StructInstance(String),
+    Struct(Vec<Var>), StructInstance(String), Array(Box<ExprType>, usize),
 
     Type, CustomType(Box<ExprType>), Alias(String), None, Unknown(usize)
 }
@@ -42,6 +42,7 @@ impl std::fmt::Debug for ExprType {
             Alias(s) => write!(f, "Alias({s})"),
             Pnt(t) => { write!(f, "Pnt to ( ")?; t.fmt(f)?; write!(f, " )") },
             PntVar(t) => { write!(f, "PntVar to ( ")?; t.fmt(f)?; write!(f, " )") },
+            Array(elems_type, len) => { write!(f, "Array [ ")?; elems_type.fmt(f)?; write!(f, "; {len} ]") },
             Type => write!(f, "Type"),
             None => write!(f, "None"),
             Struct(vars) => { write!(f, "Struct ( ")?; vars.fmt(f)?; write!(f, " )") },
@@ -396,6 +397,9 @@ impl Visitor {
                 self.equivalent_types(&t, &elem_type)?;
             },
             (Pnt(inner1), Pnt(inner2)) | (PntVar(inner1), PntVar(inner2)) => {
+                self.equivalent_types(&*inner1, &*inner2)?;
+            },
+            (Array(inner1, l1), Array(inner2, l2)) if l1 == l2 => {
                 self.equivalent_types(&*inner1, &*inner2)?;
             },
             (FnType(inner1), FnType(inner2)) |
@@ -904,7 +908,7 @@ impl Visitor {
                     if n == 0 { break }
                     n -= 1;
                     match t {
-                        PntVar(inner) | Pnt(inner) => t = *inner,
+                        PntVar(inner) | Pnt(inner) | Array(inner, _) => t = *inner,
                         inner @ Unknown(_) => {
                             self.equivalent_types(&expected_type, &inner)?;
                             return Ok(self.infer_type(&expected_type))
@@ -918,6 +922,13 @@ impl Visitor {
             ASTNode::Empty => {
                 // NOTE: This should only happen when we are creating an alias of some type, a CustomType
                 Ok(CustomType(Box::new(node.t.clone())))
+            }
+            ASTNode::Array(elems) => {
+                let inner_type = Unknown(self.get_unknown_id());
+                for elem in &mut *elems {
+                    self.visit(scope, inner_type.clone(), elem)?;
+                }
+                Ok(Array(Box::new(self.infer_type(&inner_type)), elems.len()))
             }
             _ => Err(VisitorError::NotImplemented(*node.v.clone()))
         }
@@ -990,6 +1001,7 @@ impl Visitor {
             ASTNode::Cast { e, .. } => self.update_types_aux(e)?,
             ASTNode::Empty | ASTNode::Leaf(_) => (),
             ASTNode::Struct(vars) => self.update_types(vars)?,
+            ASTNode::Array(elems) => self.update_types(elems)?,
             ASTNode::StructInit(_, body) => self.update_types(body)?,
             ASTNode::Mod(body) => self.update_types(body)?,
             ASTNode::Extern(_) => (), // TODO: possibly do something here
