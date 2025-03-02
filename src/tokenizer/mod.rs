@@ -87,8 +87,8 @@ impl Token {
                 _ if regex::Regex::new(r"^\'(.|\\[rnt])\'$").unwrap().is_match(text) => TokenType::Character(text.to_string()),
                 _ if regex::Regex::new(r"^(\d+\.\d*|\.\d+|\d+e(-?)\d+)$").unwrap().is_match(text) => TokenType::Real(text.to_string()),
                 _ if regex::Regex::new(r"^\d+$").unwrap().is_match(text) => Integer(text.to_string()),
-                _ if regex::Regex::new(r#"^[_A-Za-z]\w+(\.\w+)+$"#).unwrap().is_match(text) => TokenType::StruAccess(text.to_string()),
-                _ if regex::Regex::new(r#"^[_A-Za-z]\w+(:[_A-Za-z]\w+)+$"#).unwrap().is_match(text) => TokenType::ModAccess(text.to_string()),
+                _ if regex::Regex::new(r#"^[_A-Za-z]\w*(\.\w+)+$"#).unwrap().is_match(text) => TokenType::StruAccess(text.to_string()),
+                _ if regex::Regex::new(r#"^[_A-Za-z]\w*(:[_A-Za-z]\w*)+$"#).unwrap().is_match(text) => TokenType::ModAccess(text.to_string()),
                 _ if regex::Regex::new(r"^[_A-Za-z]\w*$").unwrap().is_match(text) => TokenType::Id(text.to_string()),
 
 

@@ -287,10 +287,10 @@ impl Scope {
         let mut last_pos = 0;
 
         'inf_loop :loop {
-            let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(':') {
+            let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(&[':', '.']) {
                 let cur_elem_name = &elem_name[last_pos..last_pos+pos];
                 last_pos += pos + 1;
-                ("mod", cur_elem_name)
+                (if &elem_name[pos..=pos] == ":" { "mod" } else { "any" }, cur_elem_name)
             } else {
                 (t, &elem_name[last_pos..])
             };
@@ -851,7 +851,33 @@ impl Visitor {
                     TokenType::Str(_) => Pnt(Box::new(Char)),
                     TokenType::True => Bool,
                     TokenType::False => Bool,
-                    TokenType::StruAccess(name) |
+                    TokenType::StruAccess(name) => {
+                        let mut cur_scp = &*scope;
+                        let mut cur_t = None;
+                        for word in name.split('.') {
+                            if let Ok(num) = word.parse::<usize>() {
+                                if let TupleType(v) = cur_t {
+                                    cur_t = v.get(num).expect(&format!("Trying to access field {num} of Tuple with {} elems", v.len())).clone();
+                                } else {
+                                    panic!("Cannot access a struct field with numbers.")
+                                }
+                            } else {
+                                match cur_scp.find_elem_type("any", word, Option::None) {
+                                    Some(Elem::Var(v)) => {
+                                        match &v.t {
+                                            StructInstance(struct_name) => {
+                                                cur_scp = cur_scp.find_elem_type("struct", struct_name, Option::None).unwrap().get_scp();
+                                            },
+                                            _ => cur_t = v.t.clone(),
+                                        }
+                                    },
+                                    Some(Elem::Scope(s)) => cur_scp = s,
+                                    Option::None => panic!("Element not found"),
+                                }
+                            }
+                        }
+                        cur_t
+                    },
                     TokenType::ModAccess(name) |
                     TokenType::Id(name) => {
                         if let Some(elem) = self.find_elem_type("var", name, Option::None) {
@@ -930,6 +956,14 @@ impl Visitor {
                 }
                 Ok(Array(Box::new(self.infer_type(&inner_type)), elems.len()))
             }
+            ASTNode::Tuple(elems) => {
+                let mut t = vec![];
+                for elem in &mut *elems {
+                    let tmp = Unknown(self.get_unknown_id());
+                    t.push(self.visit(scope, tmp, elem)?);
+                }
+                Ok(TupleType(t))
+            },
             _ => Err(VisitorError::NotImplemented(*node.v.clone()))
         }
     }
@@ -1002,6 +1036,7 @@ impl Visitor {
             ASTNode::Empty | ASTNode::Leaf(_) => (),
             ASTNode::Struct(vars) => self.update_types(vars)?,
             ASTNode::Array(elems) => self.update_types(elems)?,
+            ASTNode::Tuple(elems) => self.update_types(elems)?,
             ASTNode::StructInit(_, body) => self.update_types(body)?,
             ASTNode::Mod(body) => self.update_types(body)?,
             ASTNode::Extern(_) => (), // TODO: possibly do something here
