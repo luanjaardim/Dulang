@@ -107,7 +107,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
         &self.cur_scp.elems[self.cur_ind]
     }
     fn find_def(&self, name: &str) -> Option<&Elem> {
-        self.cur_scp.find_elem_type("any", name, Some(self.cur_ind))
+        self.cur_scp.find_elem_type("any", name, Some(self.cur_ind as isize))
     }
     fn get_func_type(&self, t: &ExprType) -> FunctionType<'ctx> {
         if let ExprType::FnType(inner) = t {

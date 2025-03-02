@@ -170,6 +170,7 @@ pub struct Var {
 pub enum ScopeAttr {
     GlobScope,
     StructScope { name: String },
+    TupleScope { name: String, t: ExprType },
     ModScope { name: String },
     FuncScope {
         name: String,
@@ -282,7 +283,7 @@ impl Scope {
         }
     }
 
-    pub fn find_elem_type(&self, t: &str, elem_name: &str, mut start_ind: Option<usize>) -> Option<&Elem> {
+    pub fn find_elem_type(&self, t: &str, elem_name: &str, mut start_ind: Option<isize>) -> Option<&Elem> {
         let mut scp_ref = self;
         let mut last_pos = 0;
 
@@ -290,34 +291,55 @@ impl Scope {
             let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(&[':', '.']) {
                 let cur_elem_name = &elem_name[last_pos..last_pos+pos];
                 last_pos += pos + 1;
-                (if &elem_name[pos..=pos] == ":" { "mod" } else { "any" }, cur_elem_name)
+                (if &elem_name[pos..=pos] == "." {"field"} else {"mod"}, cur_elem_name)
             } else {
                 (t, &elem_name[last_pos..])
             };
             if !scp_ref.elems.is_empty() {
-                let end = start_ind.take().unwrap_or(usize::MAX).min(scp_ref.elems.len()-1);
-                for e in scp_ref.elems[..=end].iter().rev() {
-                    match (e, cur_t) {
-                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "any") |
-                        (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "any") |
-                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "struct") |
-                        (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
-                        (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name }, .. }), "mod") if name == cur_elem_name => {
-                            scp_ref = scope;
-                            continue 'inf_loop;
-                        },
-                        (Elem::Scope(_), "scope") => {
-                            // TODO: A better find for Scopes, maybe search for the ScopeAttr type
-                            return Some(e)
-                        },
-                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "any") |
-                        (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "any") |
-                        (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "type") |
-                        (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
-                            if type_name == cur_elem_name => return Some(e),
-                        (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "any") |
-                        (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == cur_elem_name => return Some(e),
-                        _ => ()
+                let end = start_ind.take().unwrap_or(isize::MAX).min(scp_ref.elems.len() as isize -1);
+                if end >= 0 {
+                    for (i, e) in scp_ref.elems[..=end as usize].iter().enumerate().rev() {
+                        match (e, cur_t) {
+                            (Elem::Var( Var { v: Token { t: TokenType::Nl, .. }, t: StructInstance(struct_name), .. }), _) => {
+                                if let Some(parent_struct) = scp_ref.find_elem_type("struct", struct_name, Some(i as isize - 1)) {
+                                    let tmp_scp = parent_struct.get_scp();
+                                    if let ret @ Some(_) = tmp_scp.find_elem_type("any", cur_elem_name, Option::None) {
+                                        return ret
+                                    }
+                                    // If it's not an element of the parent struct, continue the search
+                                } else {
+                                    panic!("Parent struct {struct_name} does not exist.")
+                                }
+                            },
+                            (Elem::Scope(Scope { attrs: ScopeAttr::TupleScope { name, .. }, .. }), "any") |
+                            (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "any") |
+                            (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "any") |
+                            (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name }, .. }), "struct") |
+                            (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
+
+                            (Elem::Var(Var { t: StructInstance(name), .. }), "field") => {
+                                scp_ref = scp_ref.find_elem_type("struct", name, Option::None).unwrap().get_scp();
+                                continue 'inf_loop;
+                            },
+                            (Elem::Scope(scope @ Scope { attrs: ScopeAttr::StructScope { name }, .. }), "field") |
+                            (Elem::Scope(scope @ Scope { attrs: ScopeAttr::TupleScope { name, .. }, .. }), "field") |
+                            (Elem::Scope(scope @ Scope { attrs: ScopeAttr::ModScope { name }, .. }), "mod") if name == cur_elem_name => {
+                                scp_ref = scope;
+                                continue 'inf_loop;
+                            },
+                            (Elem::Scope(_), "scope") => {
+                                // TODO: A better find for Scopes, maybe search for the ScopeAttr type
+                                return Some(e)
+                            },
+                            (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "any") |
+                            (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "any") |
+                            (Elem::Scope(Scope { attrs: ScopeAttr::StructScope { name: type_name }, .. }), "type") |
+                            (Elem::Var( Var { v: Token { t: TokenType::Id(type_name), .. }, t: CustomType(_), .. }), "type") 
+                                if type_name == cur_elem_name => return Some(e),
+                            (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "any") |
+                            (Elem::Var(Var { v: Token { t: TokenType::Id(var_name), .. }, .. }), "var") if var_name == cur_elem_name => return Some(e),
+                            _ => ()
+                        }
                     }
                 }
             }
@@ -776,7 +798,7 @@ impl Visitor {
 
                     Ok(t)
                 } else {
-                    panic!("At the moment, the caller can only be the function name")
+                    panic!("At the moment, the caller can only be the function name or as a StrucAccess/ModAccess")
                 }
             },
             ASTNode::FlowChange(tk_type, ret) => {
@@ -851,37 +873,16 @@ impl Visitor {
                     TokenType::Str(_) => Pnt(Box::new(Char)),
                     TokenType::True => Bool,
                     TokenType::False => Bool,
-                    TokenType::StruAccess(name) => {
-                        let mut cur_scp = &*scope;
-                        let mut cur_t = None;
-                        for word in name.split('.') {
-                            if let Ok(num) = word.parse::<usize>() {
-                                if let TupleType(v) = cur_t {
-                                    cur_t = v.get(num).expect(&format!("Trying to access field {num} of Tuple with {} elems", v.len())).clone();
-                                } else {
-                                    panic!("Cannot access a struct field with numbers.")
-                                }
-                            } else {
-                                match cur_scp.find_elem_type("any", word, Option::None) {
-                                    Some(Elem::Var(v)) => {
-                                        match &v.t {
-                                            StructInstance(struct_name) => {
-                                                cur_scp = cur_scp.find_elem_type("struct", struct_name, Option::None).unwrap().get_scp();
-                                            },
-                                            _ => cur_t = v.t.clone(),
-                                        }
-                                    },
-                                    Some(Elem::Scope(s)) => cur_scp = s,
-                                    Option::None => panic!("Element not found"),
-                                }
-                            }
-                        }
-                        cur_t
-                    },
+                    TokenType::StruAccess(name)|
                     TokenType::ModAccess(name) |
                     TokenType::Id(name) => {
-                        if let Some(elem) = self.find_elem_type("var", name, Option::None) {
-                            let t = elem.get_var().t.clone();
+                        if let Some(elem) = self.find_elem_type("any", name, Option::None) {
+                            let t = match elem {
+                                Elem::Var(v) => v.t.clone(),
+                                Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => scp.func_as_var().t,
+                                Elem::Scope(Scope { attrs: ScopeAttr::TupleScope { t, .. }, .. }) => t.clone(),
+                                _ => panic!("Elem {elem:?} not implemented as a Leaf.")
+                            };
                             self.equivalent_types(&expected_type, &t)?;
                             self.infer_type(&expected_type)
                         }
@@ -958,11 +959,28 @@ impl Visitor {
             }
             ASTNode::Tuple(elems) => {
                 let mut t = vec![];
-                for elem in &mut *elems {
-                    let tmp = Unknown(self.get_unknown_id());
-                    t.push(self.visit(scope, tmp, elem)?);
+                let tuple_type = Unknown(self.get_unknown_id());
+                let mut scp = Scope {
+                    attrs: ScopeAttr::TupleScope { name: self.last_def_name.take().unwrap(), t: tuple_type.clone() },
+                    elems: vec![],
+                    scp_father: scope,
+                };
+                for (i, elem) in elems.iter_mut().enumerate() {
+                    let tmp_t = Unknown(self.get_unknown_id());
+                    self.last_def_name = Some(i.to_string());
+                    t.push(self.visit(&mut scp, tmp_t.clone(), elem)?);
+                    if i+1 != scp.elems.len() {
+                        scp.elems.push(
+                            Elem::Var(Var {
+                                is_var: false,
+                                v: Token::new_with_tk_type(0, 0, TokenType::Id(self.last_def_name.take().unwrap())),
+                                t: tmp_t
+                        }));
+                    }
                 }
-                Ok(TupleType(t))
+                scope.elems.push(Elem::Scope(scp));
+                self.equivalent_types(&tuple_type, &TupleType(t.clone()))?;
+                Ok(self.infer_type(&tuple_type))
             },
             _ => Err(VisitorError::NotImplemented(*node.v.clone()))
         }
