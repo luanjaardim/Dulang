@@ -367,8 +367,34 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     _ => unreachable!()
                 }
             },
+            ASTNode::Deref { e, i, .. } => {
+                let ty = self.get_basic_type(&expr.t);
+                let var = self.compile_expr(e).into_pointer_value();
+                let ind = if let Some(i) = i {
+                    self.compile_expr(i).into_int_value()
+                } else { self.ctx.i64_type().const_int(0, false) };
+                let elem_pnt = unsafe {
+                    self.builder.build_in_bounds_gep(ty, var, &[ind], "get_elem_at").unwrap()
+                };
+                self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
+            },
+            ASTNode::Array(arr) => {
+                let (ty, size) = if let ExprType::Array(inner, size) = &expr.t {
+                    (self.get_basic_type(inner), *size as u64)
+                } else { panic!("Array type is not array??") };
+                let ar_pnt = self.builder.build_array_alloca(ty, self.ctx.i64_type().const_int(size, false), "static_array").unwrap();
+
+                for (i, elem) in arr.iter().enumerate() {
+                    let val = self.compile_expr(elem);
+                    let arr_elem_pnt = unsafe {
+                        self.builder.build_in_bounds_gep(ty, ar_pnt, &[self.ctx.i64_type().const_int(i as u64, false)], "arr_elem_pnt").unwrap()
+                    };
+                    self.builder.build_store(arr_elem_pnt, val).unwrap();
+                }
+                ar_pnt.into()
+            },
             _ => {
-                unreachable!()
+                unreachable!("compile_expr: Not implemented {:?}", *expr.v)
             },
         }
     }

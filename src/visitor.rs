@@ -944,6 +944,7 @@ impl Visitor {
                         _ => unreachable!("Tried to deref more than possible at {:?}", e.v),
                     };
                 }
+                self.equivalent_types(&node.t, &t)?;
                 Ok(t)
             },
             ASTNode::Empty => {
