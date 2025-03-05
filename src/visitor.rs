@@ -1,13 +1,15 @@
+use std::collections::BTreeSet;
 use crate::{grammar::{Node, InnerNode, ASTNode}, tokenizer::{Token, TokenType}};
 
+
 use ExprType::*;
-#[derive(Clone)]
+#[derive(Clone, Ord, PartialOrd, Eq)]
 pub enum ExprType {
     // Types
     Int{ bits: usize, signed: bool }, Real(usize), Char, Bool,
 
     // Compounded types
-    FnType(Vec<ExprType>), UnionType(Vec<ExprType>), TupleType(Vec<ExprType>),
+    FnType(Vec<ExprType>), UnionType(BTreeSet<ExprType>), TupleType(Vec<ExprType>),
 
     // Pointer types
     Pnt(Box<ExprType>), PntVar(Box<ExprType>),
@@ -30,7 +32,12 @@ impl std::fmt::Debug for ExprType {
             },
             UnionType(e) => {
                 write!(f, "(Union: ")?;
-                for i in 0..e.len() { e[i].fmt(f)?; if i < e.len()-1 { write!(f, ", ")? } }
+                let (len, mut i) = (e.len(), 0);
+                for elem in e {
+                    elem.fmt(f)?;
+                    if i < len-1 { write!(f, ", ")? }
+                    i += 1
+                }
                 write!(f, ")")
             },
             TupleType(e) => {
@@ -66,11 +73,11 @@ impl ExprType {
             (Int { bits: b1, signed: s1 }, Int { bits: b2, signed: s2 }) if b1 == b2 && s1 == s2 => true,
 
             (FnType(l1), FnType(l2))
-            | (UnionType(l1), UnionType(l2))
             | (TupleType(l1), TupleType(l2)) => {
                if l1.len() != l2.len() { return false }
                l1.iter().enumerate().all(|(i, e)| Self::expr_type_eq(e, &l2[i], strict_cmp))
             },
+            (UnionType(s1), UnionType(s2)) => s1 == s2,
             (StructInstance(name), StructInstance(name2)) if name == name2 => true,
 
             (Pnt(t1), Pnt(t2)) |
@@ -86,13 +93,13 @@ impl ExprType {
     }
     fn get_nth_inner_type(&self, nth: usize) -> Self {
         match self {
-            FnType(l) | UnionType(l) | TupleType(l) => l[nth].clone(),
+            FnType(l) | TupleType(l) => l[nth].clone(),
             _ => panic!("Cannot get a inner type of a non compound type"),
         }
     }
     pub fn get_inner_type(&self) -> &Vec<Self> {
         match self {
-            FnType(l) | UnionType(l) | TupleType(l) => l,
+            FnType(l) | TupleType(l) => l,
             _ => panic!("Cannot get the inner type of a non compound type"),
         }
     }
@@ -106,7 +113,8 @@ impl ExprType {
     fn is_unknown(&self) -> bool {
         match self {
             Unknown(_) => true,
-            FnType(elems) | UnionType(elems) | TupleType(elems) => elems.iter().any(|e| e.is_unknown()),
+            FnType(elems) | TupleType(elems) => elems.iter().any(|e| e.is_unknown()),
+            UnionType(elems) => elems.iter().any(|e| e.is_unknown()),
             PntVar(inner) | Pnt(inner) => inner.is_unknown(),
             _ => false,
         }
@@ -160,7 +168,7 @@ impl From<&InnerNode> for ExprType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Var {
     pub is_var: bool,
     pub v: Token,
@@ -426,7 +434,6 @@ impl Visitor {
                 self.equivalent_types(&*inner1, &*inner2)?;
             },
             (FnType(inner1), FnType(inner2)) |
-            (UnionType(inner1), UnionType(inner2)) |
             (TupleType(inner1), TupleType(inner2)) => {
                 if inner1.len() != inner2.len() {
                     return Err(VisitorError::MismatchedTypes(f.clone(), s.clone()))
@@ -434,6 +441,18 @@ impl Visitor {
                     for (e1, e2) in inner1.iter().zip(inner2.iter()) {
                         self.equivalent_types(e1, e2)?;
                     }
+                }
+            },
+            (UnionType(s1), UnionType(s2)) => { if s1 != s2 {
+                    return Err(VisitorError::MismatchedTypes(f.clone(), s.clone()))
+            } },
+            (UnionType(s1), t) | (t, UnionType(s1)) => {
+                let final_t = self.infer_type(&t);
+                if final_t.is_unknown() {
+                    return Err(VisitorError::GeneralError(format!("Unknown type '{t:?}' cannot be equivalent to UnionType({s1:?})")))
+                }
+                if !s1.contains(&final_t) {
+                    return Err(VisitorError::MismatchedTypes(self.infer_type(f), self.infer_type(s)))
                 }
             },
             (t, t2) => if t != t2 { return Err(VisitorError::MismatchedTypes(self.infer_type(f), self.infer_type(s))) }
@@ -1015,7 +1034,9 @@ impl Visitor {
                 self.update_types_aux(expr)?;
                 let final_type = self.infer_type(&node.t);
                 node.t = final_type.clone();
-                expr.t = final_type;
+                if expr.t.is_unknown() {
+                    expr.t = final_type;
+                }
             },
             ASTNode::Func { args, ret, body } => {
                 *ret = self.infer_type(ret);

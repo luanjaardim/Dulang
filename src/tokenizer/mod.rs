@@ -2,7 +2,7 @@ use std::rc::Rc;
 pub mod tokentype_partialeq;
 
 use TokenType::*;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Ord, PartialOrd)]
 pub enum TokenType {
     Str(String), Integer(String), Real(String), Character(String), Comment, Id(String),
 
@@ -54,7 +54,7 @@ impl TokenType {
 
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Token {
     c : usize,
     l : usize,
