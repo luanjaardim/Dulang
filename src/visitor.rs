@@ -150,6 +150,7 @@ impl From<&InnerNode> for ExprType {
             ASTNode::Type { t: TokenType::Type, inner_types } if inner_types.is_empty() => Type,
             ASTNode::Type { t: TokenType::Ref, inner_types } if inner_types.len() == 1 => Pnt(Box::new(ExprType::from(&inner_types[0]))),
             ASTNode::Type { t: TokenType::VarRef, inner_types } if inner_types.len() == 1 => PntVar(Box::new(ExprType::from(&inner_types[0]))),
+            ASTNode::Type { t: TokenType::Arr(len), inner_types } if inner_types.len() == 1 => Array(Box::new(ExprType::from(&inner_types[0])), *len),
             ASTNode::Type { t: TokenType::FnType, inner_types } => FnType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
             ASTNode::Type { t: TokenType::UnionType, inner_types } => UnionType(inner_types.iter().map(|it| ExprType::from(it)).collect()),
             ASTNode::Type { t: TokenType::TupleType, inner_types } => TupleType(inner_types.iter().map(|it| ExprType::from(it)).collect()),

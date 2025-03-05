@@ -29,7 +29,7 @@ pub enum TokenType {
 
     Assign, Type, TypeInf,                  // =, type, ::
 
-    VarDef, Ref, VarRef, Deref,             // var, &, &var, @
+    VarDef, Ref, VarRef, Deref, Arr(usize), // var, &, &var, @
 
     StruAccess(String), ModAccess(String),  // foo.bar.tar , foo:bar:tar
 

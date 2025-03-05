@@ -10,7 +10,7 @@ impl TokenType {
             (Bnot, Bnot) | (Shl, Shl) | (Shr, Shr) | (Bxor, Bxor) |
             (If, If) | (Elif, Elif) | (Else, Else) | (While, While) |
             (Loop, Loop) | (Mod, Mod) | (Skip, Skip) | (Stop, Stop) | (Back, Back) | (Extern, Extern) |
-            (I(_), I(_)) | (U(_), U(_)) | (F(_), F(_)) | (Char, Char) | (Bool, Bool) | (FnType, FnType) |
+            (I(_), I(_)) | (U(_), U(_)) | (F(_), F(_)) | (Char, Char) | (Bool, Bool) | (FnType, FnType) | (Arr(_), Arr(_)) |
             (UnionType, UnionType) | (TupleType, TupleType) | (Type, Type) | (Assign, Assign) | (TypeInf, TypeInf) |
             (Ref, Ref) | (VarRef, VarRef) | (VarDef, VarDef) | (Deref, Deref) | (ClSqrBra, ClSqrBra) | (OpSqrBra, OpSqrBra) |
             (OpCurly, OpCurly) | (ClCurly, ClCurly) | (OpParen, OpParen) | (ClParen, ClParen) | (Comma, Comma) |

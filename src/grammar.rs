@@ -818,6 +818,16 @@ impl Parser {
                 _ =  self.assert_next(&[TokenType::Ref, TokenType::VarRef])?;
                 Ok(Box::new(ASTNode::Type { t, inner_types: vec![self.ptr_type()?] }))
             }
+            Some(Token { t: TokenType::OpSqrBra, .. }) => {
+                _ = self.assert_next(&[TokenType::OpSqrBra])?;
+                let inner_t = self.parse_type()?;
+                _ = self.assert_next(&[TokenType::Comma])?;
+                let len = if let Token { t: TokenType::Integer(num), .. } = self.assert_next(&[TokenType::Integer("".to_string())])? {
+                    num.parse::<usize>().unwrap()
+                } else { unreachable!() };
+                _ = self.assert_next(&[TokenType::ClSqrBra])?;
+                Ok(Box::new(ASTNode::Type { t: TokenType::Arr(len), inner_types: vec![inner_t] }))
+            },
             _ => {
                 self.basic_types()
             }
