@@ -7,6 +7,7 @@ use inkwell::values::{AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue
 use inkwell::{AddressSpace, IntPredicate};
 use crate::grammar::ASTNode;
 use crate::tokenizer::TokenType;
+use crate::visitor::Var;
 use crate::{visitor::{Scope, ScopeAttr, Visitor, Elem, ExprType}, grammar::Node, tokenizer::Token};
 
 use std::collections::HashMap;
@@ -22,6 +23,8 @@ pub enum DefType<'ctx> {
     Var(PointerValue<'ctx>),
     Fn(FunctionValue<'ctx>),
     Const(BasicValueEnum<'ctx>),
+    // Contains it's constant value and the pointer to where it was allocated
+    Tuple(BasicValueEnum<'ctx>, PointerValue<'ctx>),
     Empty,
 }
 impl<'ctx> DefType<'ctx> {
@@ -41,6 +44,12 @@ impl<'ctx> DefType<'ctx> {
         match self {
             DefType::Const(constant) => constant,
             _ => panic!("Using get_const on a DefType that is not a Const")
+        }
+    }
+    fn get_tuple(&self) -> (&BasicValueEnum<'ctx>, &PointerValue<'ctx>) {
+        match self {
+            DefType::Tuple(val, pnt) => (val, pnt),
+            _ => panic!("Using get_tuple on a DefType that is not a Tuple")
         }
     }
 }
@@ -210,10 +219,15 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     let e = self.compile_expr(expr);
                     if !*is_var {
                         if let Some(elem) = self.find_def(var_name) {
-                            let v = elem.get_var();
-                            if v.is_var {
+                            let is_var = if let Elem::Var(Var { is_var, .. }) = elem { *is_var } else { false };
+                            if is_var {
                                 let def = self.get_def(var_name).get_var().clone();
                                 self.builder.build_store(def, e).unwrap();
+                            } else if let Elem::Scope(Scope { attrs: ScopeAttr::TupleScope { .. }, .. }) = elem {
+                                let struct_ty = e.get_type();
+                                let struct_pnt = self.builder.build_alloca(struct_ty, "tuple").unwrap();
+                                self.builder.build_store(struct_pnt, e).unwrap();
+                                self.add_def(var_name, DefType::Tuple(e, struct_pnt));
                             } else {
                                 self.add_def(var_name, DefType::Const(e));
                             }
@@ -333,6 +347,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 match &l.t {
                     // TODO: change false to proper create a integer that is signed
                     TokenType::Integer(num) => self.get_basic_type(&expr.t).into_int_type().const_int(num.parse::<u64>().unwrap(), false).into(),
+                    TokenType::Real(num) => self.get_basic_type(&expr.t).into_float_type().const_float(num.parse::<f64>().unwrap()).into(),
                     TokenType::Str(s) => {
                         let mut llvm_str: Vec<u8> = vec![];
                         let mut found_scape = false;
@@ -353,7 +368,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                         }
                         self.builder.build_global_string_ptr(&llvm_str.into_iter().map(|b| b as char).collect::<String>(), ".str").unwrap().as_basic_value_enum()
                     },
-                    TokenType::Id(name) => {
+                    TokenType::Id(name) =>
                         match self.get_def(name) {
                             DefType::Var(pnt) => {
                                 let v = self.find_def(name).unwrap().get_var();
@@ -362,9 +377,24 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                             },
                             DefType::Const(constant) => constant.clone(),
                             _ => unreachable!()
+                        },
+                    TokenType::StruAccess(name) => {
+                        let mut words = name.split('.');
+                        let def = self.get_def(words.next().unwrap()).get_tuple();
+                        let (mut ty, mut pnt) = (def.0.get_type(), *def.1);
+                        while let Some(w) = words.next() {
+                            if let Ok(num) = w.parse::<u32>() {
+                                pnt = self.builder.build_struct_gep(ty, pnt, num, "tuple_access").unwrap();
+                                if ty.is_struct_type() {
+                                    ty = ty.into_struct_type().get_field_type_at_index(num).unwrap();
+                                }
+                            } else {
+                                todo!("Not implemented.")
+                            }
                         }
-                    }
-                    _ => unreachable!()
+                        self.builder.build_load(ty, pnt, "tuple_access_val").unwrap()
+                    },
+                    _ => unreachable!("Expression Leaf not implemented: {:?}", l.t),
                 }
             },
             ASTNode::Deref { e, i, .. } => {
@@ -377,6 +407,9 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     self.builder.build_in_bounds_gep(ty, var, &[ind], "get_elem_at").unwrap()
                 };
                 self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
+            },
+            ASTNode::Tuple(elems) => {
+                self.ctx.const_struct(&elems.iter().map(|e| self.compile_expr(e)).collect::<Vec<BasicValueEnum<'ctx>>>(), false).into()
             },
             ASTNode::Array(arr) => {
                 let (ty, size) = if let ExprType::Array(inner, size) = &expr.t {

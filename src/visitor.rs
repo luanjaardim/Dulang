@@ -263,6 +263,7 @@ impl Scope {
         match self {
             Scope { attrs: ScopeAttr::ModScope { name }, ..}    |
             Scope { attrs: ScopeAttr::StructScope { name }, ..} |
+            Scope { attrs: ScopeAttr::TupleScope { name, .. }, ..} |
             Scope { attrs: ScopeAttr::FuncScope { name, .. }, ..} => Some(name),
             _ => Option::None,
         }
@@ -300,7 +301,7 @@ impl Scope {
             let (cur_t, cur_elem_name) = if let Some(pos) = (&elem_name[last_pos..]).find(&[':', '.']) {
                 let cur_elem_name = &elem_name[last_pos..last_pos+pos];
                 last_pos += pos + 1;
-                (if &elem_name[pos..=pos] == "." {"field"} else {"mod"}, cur_elem_name)
+                (if &elem_name[last_pos-1..last_pos] == "." {"field"} else {"mod"}, cur_elem_name)
             } else {
                 (t, &elem_name[last_pos..])
             };
@@ -982,7 +983,7 @@ impl Visitor {
                 let mut t = vec![];
                 let tuple_type = Unknown(self.get_unknown_id());
                 let mut scp = Scope {
-                    attrs: ScopeAttr::TupleScope { name: self.last_def_name.take().unwrap(), t: tuple_type.clone() },
+                    attrs: ScopeAttr::TupleScope { name: self.last_def_name.take().unwrap_or("".to_string()), t: tuple_type.clone() },
                     elems: vec![],
                     scp_father: scope,
                 };
