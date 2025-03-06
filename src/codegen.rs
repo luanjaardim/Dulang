@@ -397,6 +397,18 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     _ => unreachable!("Expression Leaf not implemented: {:?}", l.t),
                 }
             },
+            ASTNode::Cast { e, t } => {
+                let e = self.compile_expr(e);
+                let cur_ty = e.get_type();
+                let new_ty = self.get_basic_type(t);
+                use {BasicTypeEnum::*, inkwell::values::InstructionOpcode};
+                let op = match (cur_ty, new_ty) {
+                    (IntType(t1), IntType(t2)) if t1.get_bit_width() > t2.get_bit_width() => InstructionOpcode::Trunc,
+                    (IntType(t1), IntType(t2)) if t1.get_bit_width() < t2.get_bit_width() => InstructionOpcode::ZExt,
+                    _ => todo!("Conversion between {cur_ty} and {new_ty} not implemented"),
+                };
+                self.builder.build_cast(op, e, new_ty, "cast").unwrap()
+            },
             ASTNode::Deref { e, i, .. } => {
                 let ty = self.get_basic_type(&expr.t);
                 let var = self.compile_expr(e).into_pointer_value();
