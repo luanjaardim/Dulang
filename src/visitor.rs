@@ -357,6 +357,7 @@ impl Scope {
                 if scp_ref.scp_father.is_null() {
                     break
                 } else {
+                    last_pos = 0;
                     &*scp_ref.scp_father
                 }
             };

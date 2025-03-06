@@ -3,7 +3,7 @@ use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum, FunctionType};
-use inkwell::values::{AnyValue, AnyValueEnum, BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FunctionValue, PointerValue};
+use inkwell::values::{AnyValue, AnyValueEnum, ArrayValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
 use crate::grammar::ASTNode;
 use crate::tokenizer::TokenType;
@@ -408,22 +408,21 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 };
                 self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
             },
-            ASTNode::Tuple(elems) => {
-                self.ctx.const_struct(&elems.iter().map(|e| self.compile_expr(e)).collect::<Vec<BasicValueEnum<'ctx>>>(), false).into()
-            },
+            // TODO: Make Tuple and Array with not constant values work, using insert_value method
+            ASTNode::Tuple(elems) =>
+                self.ctx.const_struct(&elems.iter().map(|e| self.compile_expr(e)).collect::<Vec<BasicValueEnum<'ctx>>>(), false).into(),
             ASTNode::Array(arr) => {
                 let (ty, size) = if let ExprType::Array(inner, size) = &expr.t {
                     (self.get_basic_type(inner), *size as u64)
                 } else { panic!("Array type is not array??") };
+                let a: ArrayValue = match ty {
+                    BasicTypeEnum::IntType(t) => t.const_array(&arr.into_iter().map(|e| self.compile_expr(e).into_int_value()).collect::<Vec<inkwell::values::IntValue<'ctx>>>()).into(),
+                    BasicTypeEnum::FloatType(t) => t.const_array(&arr.into_iter().map(|e| self.compile_expr(e).into_float_value()).collect::<Vec<inkwell::values::FloatValue<'ctx>>>()).into(),
+                    BasicTypeEnum::PointerType(t) => t.const_array(&arr.into_iter().map(|e| self.compile_expr(e).into_pointer_value()).collect::<Vec<inkwell::values::PointerValue<'ctx>>>()).into(),
+                    _ => panic!()
+                };
                 let ar_pnt = self.builder.build_array_alloca(ty, self.ctx.i64_type().const_int(size, false), "static_array").unwrap();
-
-                for (i, elem) in arr.iter().enumerate() {
-                    let val = self.compile_expr(elem);
-                    let arr_elem_pnt = unsafe {
-                        self.builder.build_in_bounds_gep(ty, ar_pnt, &[self.ctx.i64_type().const_int(i as u64, false)], "arr_elem_pnt").unwrap()
-                    };
-                    self.builder.build_store(arr_elem_pnt, val).unwrap();
-                }
+                self.builder.build_store(ar_pnt, a).unwrap();
                 ar_pnt.into()
             },
             _ => {
