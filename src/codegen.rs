@@ -2,8 +2,8 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::{BasicType, BasicTypeEnum, BasicMetadataTypeEnum, AnyTypeEnum, FunctionType};
-use inkwell::values::{AnyValue, AnyValueEnum, ArrayValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FunctionValue, PointerValue};
+use inkwell::types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, PointerType};
+use inkwell::values::{AnyValue, AnyValueEnum, ArrayValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, CallSiteValue, FunctionValue, FloatValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
 use crate::grammar::ASTNode;
 use crate::tokenizer::TokenType;
@@ -23,8 +23,6 @@ pub enum DefType<'ctx> {
     Var(PointerValue<'ctx>),
     Fn(FunctionValue<'ctx>),
     Const(BasicValueEnum<'ctx>),
-    // Contains it's constant value and the pointer to where it was allocated
-    Tuple(BasicValueEnum<'ctx>, PointerValue<'ctx>),
     Empty,
 }
 impl<'ctx> DefType<'ctx> {
@@ -44,12 +42,6 @@ impl<'ctx> DefType<'ctx> {
         match self {
             DefType::Const(constant) => constant,
             _ => panic!("Using get_const on a DefType that is not a Const")
-        }
-    }
-    fn get_tuple(&self) -> (&BasicValueEnum<'ctx>, &PointerValue<'ctx>) {
-        match self {
-            DefType::Tuple(val, pnt) => (val, pnt),
-            _ => panic!("Using get_tuple on a DefType that is not a Tuple")
         }
     }
 }
@@ -132,6 +124,64 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 self.get_basic_type(&ret_type[0]).fn_type(&_params_types, false)
             }
         } else { panic!("Not a function type") }
+    }
+    fn compound_constant_types_aux(&self, expr: &Node, ind: usize) -> (BasicValueEnum<'ctx>, Vec<(Vec<usize>, BasicValueEnum<'ctx>)>) {
+        match &*expr.v {
+            ASTNode::Array(elems) | ASTNode::Tuple(elems) => {
+                let ty = self.get_basic_type(&expr.t);
+                let mut post_initialization = vec![];
+                let values = elems.iter().enumerate().map(|(i, e)| {
+                    let (expr, post) = self.compound_constant_types_aux(e, i);
+                    if post.is_empty() {
+                        expr
+                    } else {
+                        post_initialization.extend(post.into_iter().map(|(mut inds, v)| {
+                            inds.push(ind);
+                            (inds, v)
+                        }));
+                        // Return a zero constant value and save the value to be post initialized
+                        expr.get_type().const_zero()
+                    }
+                }).collect::<Vec<BasicValueEnum<'ctx>>>();
+                if ty.is_array_type() {
+                    (match ty {
+                        BasicTypeEnum::IntType(t) => t.const_array(&values.into_iter().map(|v| v.into_int_value()).collect::<Vec<IntValue>>()).into(),
+                        BasicTypeEnum::FloatType(t) => t.const_array(&values.into_iter().map(|v| v.into_float_value()).collect::<Vec<FloatValue>>()).into(),
+                        BasicTypeEnum::PointerType(t) => t.const_array(&values.into_iter().map(|v| v.into_pointer_value()).collect::<Vec<PointerValue>>()).into(),
+                        BasicTypeEnum::ArrayType(t) => t.const_array(&values.into_iter().map(|v| v.into_array_value()).collect::<Vec<ArrayValue>>()).into(),
+                        _ => panic!(),
+                    }, post_initialization)
+                } else if ty.is_struct_type() {
+                    (ty.into_struct_type().const_named_struct(&values).into(), post_initialization)
+                } else { unreachable!() }
+            },
+            _ => {
+                let expr = self.compile_expr(expr);
+                let is_const = match expr {
+                    BasicValueEnum::IntValue(v) => v.is_const(),
+                    BasicValueEnum::FloatValue(v) => v.is_const(),
+                    BasicValueEnum::PointerValue(v) => v.is_const(),
+                    _ => unreachable!("Not implemented"),
+                };
+                (expr, if !is_const { vec![(vec![ind], expr)]  } else { vec![] })
+            }
+        }
+    }
+    fn compound_constant_types(&self, expr: &Node) -> BasicValueEnum<'ctx> {
+        let (val, post_initialization) = self.compound_constant_types_aux(expr, 0);
+        let ty = val.get_type();
+        let pnt = self.builder.build_alloca(ty, "alloc_compound_val").unwrap();
+        self.builder.build_store(pnt, val).unwrap();
+        for (loc, post_val) in post_initialization {
+            let tmp = unsafe {
+                self.builder.build_in_bounds_gep(
+                ty, pnt,
+                &loc.iter().rev().map(|i| self.ctx.i32_type().const_int(*i as u64, false)).collect::<Vec<IntValue<'ctx>>>(),
+                "access_pos_to_initialize").unwrap()
+            };
+            self.builder.build_store(tmp, post_val).unwrap();
+        }
+        pnt.into()
     }
 
     pub fn compile(&mut self, obj_file_name: &str) {
@@ -223,11 +273,6 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                             if is_var {
                                 let def = self.get_def(var_name).get_var().clone();
                                 self.builder.build_store(def, e).unwrap();
-                            } else if let Elem::Scope(Scope { attrs: ScopeAttr::TupleScope { .. }, .. }) = elem {
-                                let struct_ty = e.get_type();
-                                let struct_pnt = self.builder.build_alloca(struct_ty, "tuple").unwrap();
-                                self.builder.build_store(struct_pnt, e).unwrap();
-                                self.add_def(var_name, DefType::Tuple(e, struct_pnt));
                             } else {
                                 self.add_def(var_name, DefType::Const(e));
                             }
@@ -380,19 +425,23 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                         },
                     TokenType::StruAccess(name) => {
                         let mut words = name.split('.');
-                        let def = self.get_def(words.next().unwrap()).get_tuple();
-                        let (mut ty, mut pnt) = (def.0.get_type(), *def.1);
-                        while let Some(w) = words.next() {
-                            if let Ok(num) = w.parse::<u32>() {
-                                pnt = self.builder.build_struct_gep(ty, pnt, num, "tuple_access").unwrap();
-                                if ty.is_struct_type() {
-                                    ty = ty.into_struct_type().get_field_type_at_index(num).unwrap();
-                                }
-                            } else {
-                                todo!("Not implemented.")
-                            }
-                        }
-                        self.builder.build_load(ty, pnt, "tuple_access_val").unwrap()
+                        let name_var = words.next().unwrap();
+                        let pnt = self.get_def(name_var).get_const().into_pointer_value();
+                        let ty = if let ScopeAttr::TupleScope { t, .. } = &self.find_def(name_var).unwrap().get_scp().attrs {
+                            self.get_basic_type(t)
+                        } else { unreachable!() };
+                        let indexes = vec![self.ctx.i32_type().const_zero()] // First index is 0, to access the pointer
+                                        .into_iter()
+                                        .chain(words.into_iter().map(|w| {
+                                            if let Ok(num) = w.parse::<u32>() {
+                                                self.ctx.i32_type().const_int(num as u64, false)
+                                            } else {
+                                                todo!("Not implemented.")
+                                            }
+                        })).collect::<Vec<IntValue>>();
+                        let field_pnt = unsafe { self.builder.build_in_bounds_gep(ty, pnt, &indexes, "tuple_access").unwrap() };
+                        let field_ty = self.get_basic_type(&expr.t);
+                        self.builder.build_load(field_ty, field_pnt, "tuple_access_val").unwrap()
                     },
                     _ => unreachable!("Expression Leaf not implemented: {:?}", l.t),
                 }
@@ -420,23 +469,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 };
                 self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
             },
-            // TODO: Make Tuple and Array with not constant values work, using insert_value method
-            ASTNode::Tuple(elems) =>
-                self.ctx.const_struct(&elems.iter().map(|e| self.compile_expr(e)).collect::<Vec<BasicValueEnum<'ctx>>>(), false).into(),
-            ASTNode::Array(arr) => {
-                let (ty, size) = if let ExprType::Array(inner, size) = &expr.t {
-                    (self.get_basic_type(inner), *size as u64)
-                } else { panic!("Array type is not array??") };
-                let a: ArrayValue = match ty {
-                    BasicTypeEnum::IntType(t) => t.const_array(&arr.into_iter().map(|e| self.compile_expr(e).into_int_value()).collect::<Vec<inkwell::values::IntValue<'ctx>>>()).into(),
-                    BasicTypeEnum::FloatType(t) => t.const_array(&arr.into_iter().map(|e| self.compile_expr(e).into_float_value()).collect::<Vec<inkwell::values::FloatValue<'ctx>>>()).into(),
-                    BasicTypeEnum::PointerType(t) => t.const_array(&arr.into_iter().map(|e| self.compile_expr(e).into_pointer_value()).collect::<Vec<inkwell::values::PointerValue<'ctx>>>()).into(),
-                    _ => panic!()
-                };
-                let ar_pnt = self.builder.build_array_alloca(ty, self.ctx.i64_type().const_int(size, false), "static_array").unwrap();
-                self.builder.build_store(ar_pnt, a).unwrap();
-                ar_pnt.into()
-            },
+            ASTNode::Tuple(_) | ASTNode::Array(_) => self.compound_constant_types(expr),
             _ => {
                 unreachable!("compile_expr: Not implemented {:?}", *expr.v)
             },
@@ -509,6 +542,8 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             AnyTypeEnum::IntType(t) => t.into(),
             AnyTypeEnum::FloatType(t) => t.into(),
             AnyTypeEnum::PointerType(t) => t.into(),
+            AnyTypeEnum::StructType(t) => t.into(),
+            AnyTypeEnum::ArrayType(t) => t.into(),
             _ => panic!("The passed type is not a Basic Type")
         }
     }
@@ -522,10 +557,10 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             ExprType::Char => context.i8_type().into(),
             ExprType::Bool => context.custom_width_int_type(1).into(),
             ExprType::None => context.void_type().into(),
-            ExprType::FnType(inner_types) => {
-                context.i8_type().fn_type(&[], false).into()
-            },
-            _ => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            ExprType::TupleType(inner) => context.struct_type(&inner.iter().map(|t| self.get_basic_type(t)).collect::<Vec<BasicTypeEnum<'ctx>>>(), false).into(),
+            ExprType::Array(inner, len) => self.get_basic_type(inner).array_type(*len as u32).into(),
+            ExprType::Pnt(_) | ExprType::PntVar(_)  => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            _ => panic!("get_type: Match {t:?} not implemented"),
         }
     }
 
