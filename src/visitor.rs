@@ -224,9 +224,9 @@ impl Elem {
         }
     }
 
-    pub fn func_as_var(&self) -> Var {
+    pub fn scp_as_var(&self) -> Var {
         let scp = self.get_scp();
-        scp.func_as_var()
+        scp.scp_as_var()
     }
 }
 impl std::fmt::Debug for Elem {
@@ -276,20 +276,28 @@ impl Scope {
         }
     }
 
-    pub fn func_as_var(&self) -> Var {
-        if let Scope { attrs: ScopeAttr::FuncScope { name, args_len, ret_type, is_var, .. }, elems, .. } = self {
-            Var {
-                is_var: *is_var,
-                v: Token::new(0, 0, name),
-                t: FnType(
-                    if *args_len != 0 {
-                        (0..*args_len).map(|i| elems[i].get_var().t.clone()).chain([ret_type.clone()]).collect()
-                    } else {
-                        vec![None, ret_type.clone()]
-                    })
-            }
-        } else {
-            panic!("Passed scope is not a function");
+    pub fn scp_as_var(&self) -> Var {
+        match self {
+            Scope { attrs: ScopeAttr::FuncScope { name, args_len, ret_type, is_var, .. }, elems, .. } => {
+                Var {
+                    is_var: *is_var,
+                    v: Token::new(0, 0, name),
+                    t: FnType(
+                        if *args_len != 0 {
+                            (0..*args_len).map(|i| elems[i].get_var().t.clone()).chain([ret_type.clone()]).collect()
+                        } else {
+                            vec![None, ret_type.clone()]
+                        })
+                }
+            },
+            Scope { attrs: ScopeAttr::TupleScope { name, t }, .. } => {
+                Var {
+                    is_var: false,
+                    v: Token::new(0, 0, name),
+                    t: t.clone(),
+                }
+            },
+            _ => panic!("Passed scope cannot be reduced to a variable"),
         }
     }
 
@@ -577,7 +585,7 @@ impl Visitor {
                         inner_types.push(if let Elem::Var(v) = &scp.elems[i] {
                             v.clone()
                         } else {
-                            scp.elems[i].func_as_var()
+                            scp.elems[i].scp_as_var()
                         });
                     }
 
@@ -591,7 +599,8 @@ impl Visitor {
                 let type_name = tk.t.get_id_name().unwrap();
                 let get_var = |e: &Elem| {
                     match e {
-                        Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope {..}, ..}) => scp.func_as_var(),
+                        Elem::Scope(scp @ Scope { attrs: ScopeAttr::TupleScope {..}, ..}) |
+                        Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope {..}, ..}) => scp.scp_as_var(),
                         Elem::Var(v) => v.clone(),
                         _ => panic!("You should not define a non variable/function inside struct")
                     }
@@ -764,7 +773,7 @@ impl Visitor {
                     // only creates a FuncScope with the parent_func if var_name if Some.
                     let var_name = self.last_def_name.take();
                     let scp_fn = self.find_elem_type("func", &name, Option::None).expect(&format!("Function '{name}' is not defined")).get_scp();
-                    let fn_as_var = scp_fn.func_as_var();
+                    let fn_as_var = scp_fn.scp_as_var();
                     let fn_type = fn_as_var.t.get_inner_type();
                     let params_types = if let None = fn_type[0] { vec![] } else { fn_type[..fn_type.len()-1].to_vec() };
                     let params_vars: Vec<Elem> = scp_fn.elems[..params_types.len()].iter().map(|e| e.clone()).collect();
@@ -902,7 +911,7 @@ impl Visitor {
                         if let Some(elem) = self.find_elem_type("any", name, Option::None) {
                             let t = match elem {
                                 Elem::Var(v) => v.t.clone(),
-                                Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => scp.func_as_var().t,
+                                Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => scp.scp_as_var().t,
                                 Elem::Scope(Scope { attrs: ScopeAttr::TupleScope { t, .. }, .. }) => t.clone(),
                                 _ => panic!("Elem {elem:?} not implemented as a Leaf.")
                             };

@@ -203,7 +203,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
         match &*func.v {
             expr @ ASTNode::Func { .. } | expr @ ASTNode::FnCall { .. } => {
                 let func_scope = self.peek_def().get_scp();
-                let v = func_scope.func_as_var();
+                let v = func_scope.scp_as_var();
                 let body_cursor = (func_scope as *const Scope, 0);
                 let backup_cursor = self.backup_defs_cursor();
                 self.set_defs_cursor(body_cursor);
@@ -323,7 +323,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             ASTNode::Extern(defs) => {
                 for (_, tk, _) in defs {
                     let fn_name = tk.t.get_id_name().unwrap();
-                    let func = self.find_def(fn_name).unwrap().func_as_var();
+                    let func = self.find_def(fn_name).unwrap().scp_as_var();
                     let func_type = self.get_func_type(&func.t);
                     let function = self.module.add_function(fn_name, func_type, None);
                     self.add_def(tk.t.get_id_name().unwrap(), DefType::Fn(function));
