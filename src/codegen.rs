@@ -144,7 +144,8 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     }
                 }).collect::<Vec<BasicValueEnum<'ctx>>>();
                 if ty.is_array_type() {
-                    (match ty {
+                    let inner_ty = ty.into_array_type().get_element_type();
+                    (match inner_ty {
                         BasicTypeEnum::IntType(t) => t.const_array(&values.into_iter().map(|v| v.into_int_value()).collect::<Vec<IntValue>>()).into(),
                         BasicTypeEnum::FloatType(t) => t.const_array(&values.into_iter().map(|v| v.into_float_value()).collect::<Vec<FloatValue>>()).into(),
                         BasicTypeEnum::PointerType(t) => t.const_array(&values.into_iter().map(|v| v.into_pointer_value()).collect::<Vec<PointerValue>>()).into(),
@@ -467,7 +468,11 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 let elem_pnt = unsafe {
                     self.builder.build_in_bounds_gep(ty, var, &[ind], "get_elem_at").unwrap()
                 };
-                self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
+                if ty.is_array_type() {
+                    elem_pnt.into()
+                } else {
+                    self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
+                }
             },
             ASTNode::Tuple(_) | ASTNode::Array(_) => self.compound_constant_types(expr),
             _ => {
