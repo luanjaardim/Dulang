@@ -486,6 +486,7 @@ impl Visitor {
             UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             Alias(name) => self.find_elem_type("type", &name, Option::None).expect("Alias not defined").get_type().get_inner_if_customtype(),
+            Array(inner, len) => Array(Box::new(self.infer_type_level(&**inner, level)), *len),
             Pnt(inner) => Pnt(Box::new(self.infer_type_level(&*inner, level))),
             PntVar(inner) => PntVar(Box::new(self.infer_type_level(&*inner, level))),
             _ => t.clone()
@@ -978,7 +979,10 @@ impl Visitor {
                 for elem in &mut *elems {
                     self.visit(scope, inner_type.clone(), elem)?;
                 }
-                Ok(Array(Box::new(self.infer_type(&inner_type)), elems.len()))
+                let t = Array(Box::new(self.infer_type(&inner_type)), elems.len());
+                self.equivalent_types(&t, &expected_type)?;
+                node.t = t.clone();
+                Ok(t)
             }
             ASTNode::Tuple(elems) => {
                 let mut t = vec![];
@@ -1003,6 +1007,7 @@ impl Visitor {
                 }
                 scope.elems.push(Elem::Scope(scp));
                 self.equivalent_types(&tuple_type, &TupleType(t.clone()))?;
+                node.t = self.infer_type(&tuple_type);
                 Ok(self.infer_type(&tuple_type))
             },
             _ => Err(VisitorError::NotImplemented(*node.v.clone()))
@@ -1013,9 +1018,12 @@ impl Visitor {
         for i in 0..scp.elems.len() {
             match &mut scp.elems[i] {
                 Elem::Var(v) => v.t = self.infer_type(&v.t),
+                Elem::Scope(s @ Scope { attrs: ScopeAttr::TupleScope { .. }, .. }) |
                 Elem::Scope(s @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => {
                     if let ScopeAttr::FuncScope { ret_type, .. } = &mut s.attrs {
                         *ret_type = self.infer_type(ret_type);
+                    } else if let ScopeAttr::TupleScope { t, .. } = &mut s.attrs {
+                        *t = self.infer_type(t);
                     }
                     self.update_defs_types(s);
                 },
