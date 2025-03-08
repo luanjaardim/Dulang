@@ -188,6 +188,7 @@ pub enum ScopeAttr {
         // parent will only be used when we are creating a function from a partial application of
         // other function, so its parent will be the function which its arguments are missing
         parent: Option<String>,
+        captured_vars: Vec<Var>,
         is_var: bool,
     },
     CondScope,
@@ -197,12 +198,13 @@ pub enum ScopeAttr {
 }
 
 #[derive(Clone)]
-pub enum Elem { Var(Var), Scope(Scope), }
+pub enum Elem { Var(Var), Scope(Scope), Captured(Box<Elem>), }
 impl Elem {
     pub fn get_name(&self) -> Option<&str> {
         match self {
             Elem::Var(v) => Some(v.v.t.get_id_name().unwrap()),
             Elem::Scope(scp) => scp.get_name(),
+            Elem::Captured(e) => e.get_name(),
         }
     }
 
@@ -238,6 +240,7 @@ impl std::fmt::Debug for Elem {
             Elem::Scope(s) => {
                 write!(f, "{s:#?}")
             },
+            Elem::Captured(e) => write!(f, "(Captured: {})", e.get_name().unwrap()),
         }
     }
 }
@@ -318,6 +321,10 @@ impl Scope {
                 if end >= 0 {
                     for (i, e) in scp_ref.elems[..=end as usize].iter().enumerate().rev() {
                         match (e, cur_t) {
+                            (Elem::Captured(e), _) if e.get_name().unwrap() == cur_elem_name => {
+                                println!("Variable {:?} was captured and is no longer available", e.get_name().unwrap());
+                                return Option::None
+                            },
                             (Elem::Var( Var { v: Token { t: TokenType::Nl, .. }, t: StructInstance(struct_name), .. }), _) => {
                                 if let Some(parent_struct) = scp_ref.find_elem_type("struct", struct_name, Some(i as isize - 1)) {
                                     let tmp_scp = parent_struct.get_scp();
@@ -361,14 +368,23 @@ impl Scope {
                     }
                 }
             }
-            scp_ref = unsafe {
+            unsafe {
                 if scp_ref.scp_father.is_null() {
                     break
                 } else {
-                    last_pos = 0;
-                    &*scp_ref.scp_father
+                    let elem = (&*scp_ref.scp_father as &Scope).find_elem_type(t, elem_name, Option::None);
+                    if elem.is_none() { break }
+
+                    // WARNING: this is a unsafe cast, using it to mutate a const reference
+                    let scp = (self as *const Scope) as *mut Scope;
+                    if let ScopeAttr::FuncScope { captured_vars, .. } = &mut (*scp).attrs {
+                        if let Elem::Var(v @ Var { is_var: true, .. }) = elem.as_ref().unwrap() {
+                            captured_vars.push(v.clone());
+                        }
+                    }
+                    return elem
                 }
-            };
+            }
         }
         Option::None
     }
@@ -686,8 +702,10 @@ impl Visitor {
                         ret_type: fn_type.get_fn_return_type(),
                         args_len: args.len(),
                         parent: Option::None,
+                        captured_vars: vec![],
                         is_var: false,
                     },
+                    // TODO: Accept args that are not Var, like Tuples
                     elems: (0..args.len()).map(|i| Elem::Var(Var {
                               is_var: args[i].0,
                               v: args[i].1.clone(),
@@ -702,6 +720,12 @@ impl Visitor {
                         self.visit(func_scope_ref, None, node)?;
                     }
                 }
+                // Adding a Captured Elem for each captured Variable
+                let cap_vars = if let ScopeAttr::FuncScope { captured_vars, .. } = &scope.elems.last().unwrap().get_scp().attrs {
+                    captured_vars.iter().map(|v| Elem::Captured(Box::new(Elem::Var(v.clone())))).collect::<Vec<Elem>>()
+                } else { unreachable!() };
+                scope.elems.extend(cap_vars);
+
                 self.last_def_name = Option::None;
                 Ok(fn_type)
             },
@@ -753,6 +777,7 @@ impl Visitor {
                                 args_len: params_types.len(),
                                 ret_type: ret_type[0].clone(),
                                 parent: Option::None,
+                                captured_vars: vec![],
                                 is_var: false
                             },
                             elems: params_types.iter().map(|t| Elem::Var(Var {
@@ -809,6 +834,7 @@ impl Visitor {
                                 args_len: params_types.len()-i,
                                 ret_type: ret_type.clone(),
                                 parent: Some(name.to_string()),
+                                captured_vars: vec![],
                                 is_var: false
                             },
                             elems: params_vars[i..].to_vec(),
@@ -1026,6 +1052,7 @@ impl Visitor {
     pub fn update_defs_types(&self, scp: &mut Scope) {
         for i in 0..scp.elems.len() {
             match &mut scp.elems[i] {
+                Elem::Captured(_) => (),
                 Elem::Var(v) => v.t = self.infer_type(&v.t),
                 Elem::Scope(s @ Scope { attrs: ScopeAttr::TupleScope { .. }, .. }) |
                 Elem::Scope(s @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => {
