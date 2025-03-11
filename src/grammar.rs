@@ -402,7 +402,7 @@ impl Parser {
         if self.assert_next(&[TokenType::None]).is_ok() {
             return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })))
         }
-        let mut b = backup.clone();
+        let mut b = if last_arg.is_some() { self.get_state() } else { backup.clone() };
         let mut params = Vec::new();
         loop {
             match self.peek_tk() {
@@ -454,10 +454,10 @@ impl Parser {
                 }
             }
         }
+        if let Some(last) = last_arg { params.push(last) }
         if params.is_empty() {
             return Err(ParseError::GeneralError("Expected expressions as Function Call Parameters".to_owned()))
         }
-        if let Some(last) = last_arg { params.push(last) }
         Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params, is_sttm })))
     }
 
