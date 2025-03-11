@@ -112,15 +112,24 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
     fn next_def(&mut self) -> &Elem {
         let last = self.cur_ind.last_mut().unwrap();
         *last += 1;
-        let ret = &self.cur_scp.elems[*last-1];
+        let mut ret = &self.cur_scp.elems[*last-1];
+        while let Elem::Captured(_) = ret {
+            *self.cur_ind.last_mut().unwrap() += 1;
+            ret = &self.cur_scp.elems[*self.cur_ind.last().unwrap()];
+        }
         if let Elem::Scope(s) = ret {
             self.cur_ind.push(0);
             self.cur_scp = s;
         }
         ret
     }
-    fn peek_def(&self) -> &Elem {
-        &self.cur_scp.elems[*self.cur_ind.last().unwrap()]
+    fn peek_def(&mut self) -> &Elem {
+        let mut ret = &self.cur_scp.elems[*self.cur_ind.last().unwrap()];
+        while let Elem::Captured(_) = ret {
+            *self.cur_ind.last_mut().unwrap() += 1;
+            ret = &self.cur_scp.elems[*self.cur_ind.last().unwrap()];
+        }
+        return ret
     }
     fn find_def(&self, name: &str) -> Option<&Elem> {
         let mut scp = self.cur_scp;
@@ -605,6 +614,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             ExprType::Bool => context.custom_width_int_type(1).into(),
             ExprType::None => context.void_type().into(),
             ExprType::TupleType(inner) => context.struct_type(&inner.iter().map(|t| self.get_basic_type(t)).collect::<Vec<BasicTypeEnum<'ctx>>>(), false).into(),
+            ExprType::UnionType(inner) => context.struct_type(&inner.iter().map(|t| self.get_basic_type(t)).collect::<Vec<BasicTypeEnum<'ctx>>>(), false).into(),
             ExprType::Array(inner, len) => self.get_basic_type(inner).array_type(*len as u32).into(),
             ExprType::Pnt(_) | ExprType::PntVar(_)  => context.ptr_type(inkwell::AddressSpace::default()).into(),
             _ => panic!("get_type: Match {t:?} not implemented"),

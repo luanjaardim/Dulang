@@ -520,8 +520,8 @@ impl Visitor {
             FnType(elems) => FnType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             UnionType(elems) => UnionType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
             TupleType(elems) => TupleType(elems.into_iter().map(|e| self.infer_type_level(e, level)).collect()),
-            Alias(name) => self.find_elem_type("type", &name, Option::None).expect("Alias not defined").get_type().get_inner_if_customtype(),
             Array(inner, len) => Array(Box::new(self.infer_type_level(&**inner, level)), *len),
+            Alias(name) => self.find_elem_type("type", &name, Option::None, true).expect(&format!("Alias not defined: {name}")).get_type().get_inner_if_customtype(),
             Pnt(inner) => Pnt(Box::new(self.infer_type_level(&*inner, level))),
             PntVar(inner) => PntVar(Box::new(self.infer_type_level(&*inner, level))),
             _ => t.clone()
