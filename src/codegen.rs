@@ -12,6 +12,7 @@ use crate::{visitor::{Scope, ScopeAttr, Visitor, Elem, ExprType}, grammar::Node,
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::ffi::CStr;
 use std::io::Write;
 
 pub enum CodeGenError<'n> {
@@ -54,20 +55,32 @@ where
     module: Module<'ctx>,
     builder: Builder<'ctx>,
     cur_scp: &'vis Scope,
-    cur_ind: usize,
+    cur_ind: Vec<usize>,
     ast: &'ast Vec<Node>,
     defs: HashMap<String, Vec<DefType<'ctx>>>,
 }
 
 impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
 
-    pub fn new(ctx: &'ctx Context, ast: &'ast Vec<Node>, visitor: &'vis Visitor, module_name: &str) -> Result<Self, std::io::Error> {
+    pub fn new(ctx: &'ctx Context, ast: &'ast Vec<Node>, visitor: &'vis mut Visitor, module_name: &str) -> Result<Self, std::io::Error> {
+        // NOTE: This function was created because sometimes the scp_father access crashes the
+        // program, and so i am updating its values correctly before the use.
+        fn update_scp_father(scp: &mut Scope) {
+            let scp_ref = &*scp as *const Scope;
+            for e in scp.elems.iter_mut() {
+                if let Elem::Scope(s) = e {
+                    s.scp_father = scp_ref;
+                    update_scp_father(s)
+                }
+            }
+        }
+        update_scp_father(visitor.glob_scope.as_mut().unwrap());
         let cg = CodeGen {
             ctx,
             module: ctx.create_module(module_name),
             builder: ctx.create_builder(),
             cur_scp: visitor.glob_scope.as_ref().unwrap(),
-            cur_ind: 0,
+            cur_ind: vec![0],
             ast,
             defs: HashMap::new(),
         };
@@ -93,30 +106,42 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             // println!("{var_name}: {:?}", self.defs.get(var_name));
             self.defs.get_mut(var_name).unwrap().pop().expect("The vector was empty");
         }
-    }
-    fn backup_defs_cursor(&self) -> (*const Scope, usize) {
-        (self.cur_scp, self.cur_ind)
-    }
-    fn set_defs_cursor(&mut self, (scp, pos): (*const Scope, usize)) {
-        (self.cur_scp, self.cur_ind) = (unsafe { &*scp as &Scope }, pos);
+        self.cur_ind.pop();
+        self.cur_scp = unsafe { &*self.cur_scp.scp_father };
     }
     fn next_def(&mut self) -> &Elem {
-        self.cur_ind += 1;
-        &self.cur_scp.elems[self.cur_ind-1]
+        let last = self.cur_ind.last_mut().unwrap();
+        *last += 1;
+        let ret = &self.cur_scp.elems[*last-1];
+        if let Elem::Scope(s) = ret {
+            self.cur_ind.push(0);
+            self.cur_scp = s;
+        }
+        ret
     }
     fn peek_def(&self) -> &Elem {
-        &self.cur_scp.elems[self.cur_ind]
+        &self.cur_scp.elems[*self.cur_ind.last().unwrap()]
     }
     fn find_def(&self, name: &str) -> Option<&Elem> {
-        self.cur_scp.find_elem_type("any", name, Some(self.cur_ind as isize))
+        let mut scp = self.cur_scp;
+        for i in self.cur_ind.iter().rev() {
+            let elem = scp.find_elem_type("any", name, Some(*i as isize), false, true);
+            if elem.is_some() { return elem }
+            scp = unsafe { &*scp.scp_father };
+        }
+        Option::None
     }
-    fn get_func_type(&self, t: &ExprType) -> FunctionType<'ctx> {
+    fn get_func_type(&self, t: &ExprType, captured_vars_len: usize) -> FunctionType<'ctx> {
         if let ExprType::FnType(inner) = t {
             let (params_types, ret_type) = inner.split_at(inner.len()-1);
+            let ptr_type: BasicMetadataTypeEnum<'ctx> = self.ctx.ptr_type(inkwell::AddressSpace::default()).into();
             let _params_types = if let ExprType::None = params_types[0] {
-                vec![]
+                vec![ptr_type; captured_vars_len]
             } else {
-                params_types.iter().map(|t| self.get_basic_type_metadata(t)).collect::<Vec<BasicMetadataTypeEnum>>()
+                 vec![ptr_type; captured_vars_len].into_iter()
+                     .chain(
+                         params_types.iter().map(|t| self.get_basic_type_metadata(t)).collect::<Vec<BasicMetadataTypeEnum>>().into_iter()
+                     ).collect::<Vec<BasicMetadataTypeEnum>>()
             };
             if let ExprType::None = ret_type[0] {
                 self.ctx.void_type().fn_type(&_params_types, false)
@@ -204,18 +229,27 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
             expr @ ASTNode::Func { .. } | expr @ ASTNode::FnCall { .. } => {
                 let func_scope = self.peek_def().get_scp();
                 let v = func_scope.scp_as_var();
-                let body_cursor = (func_scope as *const Scope, 0);
-                let backup_cursor = self.backup_defs_cursor();
-                self.set_defs_cursor(body_cursor);
+                let captured_vars = if let ScopeAttr::FuncScope { captured_vars, .. } = &func_scope.attrs {
+                    captured_vars.clone()
+                } else { unreachable!() };
 
-                let function_type = self.get_func_type(&v.t);
+                let function_type = self.get_func_type(&v.t, captured_vars.len());
                 let function = self.module.add_function(name, function_type, None);
+                // NOTE: It does not matter add the function definition before setting its
+                // properties, the changes will affect it too
+                self.add_def(name, DefType::Fn(function));
 
-                for p in function.get_params() {
-                    let param = self.peek_def().get_var().clone();
-                    let param_name = param.v.t.get_id_name().unwrap();
-                    p.set_name(&param_name);
-                    self.add_def(&param_name, DefType::Const(p));
+                for (i, p) in function.get_params().iter().enumerate() {
+                    if i < captured_vars.len() {
+                        let param_name = captured_vars[i].v.t.get_id_name().unwrap();
+                        p.set_name(param_name);
+                        self.defs.get_mut(param_name).unwrap().push(DefType::Var(p.into_pointer_value()))
+                    } else {
+                        let param = self.peek_def().get_var().clone();
+                        let param_name = param.v.t.get_id_name().unwrap();
+                        p.set_name(&param_name);
+                        self.add_def(&param_name, DefType::Const(*p));
+                    }
                 }
 
                 let previous_block = self.builder.get_insert_block();
@@ -247,14 +281,10 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     _ => unreachable!()
                 }
 
-                // Cleaning the values of variables after compiling the scope
+                // Cleaning the values of variables after compiling the scope, and goes one scope up
                 self.clear_cur_scp_vars();
                 // Return build to its previous position
                 self.builder.position_at_end(previous_block.unwrap_or(entry_block));
-                // Goes one Scope back after compiling the function body
-                self.set_defs_cursor(backup_cursor);
-                self.add_def(name, DefType::Fn(function));
-
             },
             _ => unreachable!(),
         }
@@ -321,12 +351,16 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 }
             },
             ASTNode::Extern(defs) => {
+                let scp = self.cur_scp;
                 for (_, tk, _) in defs {
                     let fn_name = tk.t.get_id_name().unwrap();
                     let func = self.find_def(fn_name).unwrap().scp_as_var();
-                    let func_type = self.get_func_type(&func.t);
+                    let func_type = self.get_func_type(&func.t, 0);
                     let function = self.module.add_function(fn_name, func_type, None);
                     self.add_def(tk.t.get_id_name().unwrap(), DefType::Fn(function));
+                    // It's not a function with body, undo the added scope
+                    self.cur_ind.pop();
+                    self.cur_scp = scp;
                 }
             }
             _ => unreachable!()
@@ -534,7 +568,15 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
 
     fn compile_fn_call(&self, name: &str, params: &Vec<Node>) -> CallSiteValue<'ctx> {
         let func = self.get_def(name).get_fn();
-        let parameters = params.iter().map(|p| self.compile_expr(p).into()).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+        let func_params = func.get_params();
+        let captured_var_names = func_params.iter().take(func_params.len() - params.len()).map(|p| p.get_name()).collect::<Vec<&CStr>>();
+        let parameters = captured_var_names.into_iter().map(|n| {
+            if let DefType::Var(pnt) = self.get_def(n.to_str().unwrap()) {
+                pnt.as_basic_value_enum().into()
+            } else { unreachable!() }
+        }).chain(
+            params.iter().map(|p| self.compile_expr(p).into())
+        ).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
         self.builder.build_call(*func, &parameters, "tmpcall").unwrap()
     }
 

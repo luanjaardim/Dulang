@@ -250,7 +250,7 @@ impl std::fmt::Debug for Elem {
 pub struct Scope {
     pub attrs: ScopeAttr,
     pub elems: Vec<Elem>,
-    scp_father: *const Scope,
+    pub scp_father: *const Scope,
 }
 
 impl Scope {
@@ -304,7 +304,14 @@ impl Scope {
         }
     }
 
-    pub fn find_elem_type(&self, t: &str, elem_name: &str, mut start_ind: Option<isize>) -> Option<&Elem> {
+    pub fn find_elem_type(
+        &self,
+        t: &str,
+        elem_name: &str,
+        mut start_ind: Option<isize>,
+        should_search_parent: bool,
+        ignore_captured: bool
+    ) -> Option<&Elem> {
         let mut scp_ref = self;
         let mut last_pos = 0;
 
@@ -321,14 +328,14 @@ impl Scope {
                 if end >= 0 {
                     for (i, e) in scp_ref.elems[..=end as usize].iter().enumerate().rev() {
                         match (e, cur_t) {
-                            (Elem::Captured(e), _) if e.get_name().unwrap() == cur_elem_name => {
+                            (Elem::Captured(e), _) if !ignore_captured && e.get_name().unwrap() == cur_elem_name => {
                                 println!("Variable {:?} was captured and is no longer available", e.get_name().unwrap());
                                 return Option::None
                             },
                             (Elem::Var( Var { v: Token { t: TokenType::Nl, .. }, t: StructInstance(struct_name), .. }), _) => {
-                                if let Some(parent_struct) = scp_ref.find_elem_type("struct", struct_name, Some(i as isize - 1)) {
+                                if let Some(parent_struct) = scp_ref.find_elem_type("struct", struct_name, Some(i as isize - 1), true, ignore_captured) {
                                     let tmp_scp = parent_struct.get_scp();
-                                    if let ret @ Some(_) = tmp_scp.find_elem_type("any", cur_elem_name, Option::None) {
+                                    if let ret @ Some(_) = tmp_scp.find_elem_type("any", cur_elem_name, Option::None, should_search_parent, ignore_captured) {
                                         return ret
                                     }
                                     // If it's not an element of the parent struct, continue the search
@@ -343,7 +350,7 @@ impl Scope {
                             (Elem::Scope(Scope { attrs: ScopeAttr::FuncScope { name, .. }, .. }), "func") if name == cur_elem_name => return Some(e),
 
                             (Elem::Var(Var { t: StructInstance(name), .. }), "field") => {
-                                scp_ref = scp_ref.find_elem_type("struct", name, Option::None).unwrap().get_scp();
+                                scp_ref = scp_ref.find_elem_type("struct", name, Option::None, should_search_parent, ignore_captured).unwrap().get_scp();
                                 continue 'inf_loop;
                             },
                             (Elem::Scope(scope @ Scope { attrs: ScopeAttr::StructScope { name }, .. }), "field") |
@@ -368,18 +375,22 @@ impl Scope {
                     }
                 }
             }
+            if !should_search_parent { break }
             unsafe {
                 if scp_ref.scp_father.is_null() {
                     break
                 } else {
-                    let elem = (&*scp_ref.scp_father as &Scope).find_elem_type(t, elem_name, Option::None);
+                    let elem = (&*scp_ref.scp_father as &Scope).find_elem_type(t, elem_name, Option::None, true, ignore_captured);
                     if elem.is_none() { break }
 
                     // WARNING: this is a unsafe cast, using it to mutate a const reference
                     let scp = (self as *const Scope) as *mut Scope;
                     if let ScopeAttr::FuncScope { captured_vars, .. } = &mut (*scp).attrs {
                         if let Elem::Var(v @ Var { is_var: true, .. }) = elem.as_ref().unwrap() {
-                            captured_vars.push(v.clone());
+                            let not_captured = captured_vars.iter().all(|v2| v2.v.t.get_id_name() != v.v.t.get_id_name());
+                            if not_captured {
+                                captured_vars.push(v.clone());
+                            }
                         }
                     }
                     return elem
@@ -419,13 +430,13 @@ impl Visitor {
         self.unknown_id
     }
 
-    fn find_elem_type<'a, 'b: 'a>(&'a self, t: &str, elem_name: &str, root_scp: Option<&'b Scope>) -> Option<&'a Elem> {
+    fn find_elem_type<'a, 'b: 'a>(&'a self, t: &str, elem_name: &str, root_scp: Option<&'b Scope>, should_search_parent: bool) -> Option<&'a Elem> {
         let scp_ref = if root_scp.is_some() {
             root_scp.unwrap()
         } else {
             unsafe { &*self.cur_scope }
         };
-        scp_ref.find_elem_type(t, elem_name, Option::None)
+        scp_ref.find_elem_type(t, elem_name, Option::None, should_search_parent, false)
     }
 
     fn equivalent_types(&mut self, f: &ExprType, s: &ExprType) -> Result<(), VisitorError> {
@@ -447,7 +458,7 @@ impl Visitor {
             (StructInstance(n1), StructInstance(n2)) | (Alias(n1), Alias(n2)) if n1 == n2 => (),
             (Alias(name), t) |
             (t, Alias(name)) => {
-                let elem_type = self.find_elem_type("type", &name, Option::None)
+                let elem_type = self.find_elem_type("type", &name, Option::None, true)
                                     .expect("Alias type not defined")
                                     .get_type()
                                     .get_inner_if_customtype();
@@ -555,7 +566,7 @@ impl Visitor {
                 if self.last_def_name.is_some() {
                     // Only checks if the variable already exists and is a variable if it's assignment without 'var'
                     if !*is_var {
-                        if let Some(v) = self.find_elem_type("var", &var_name, Option::None) {
+                        if let Some(v) = self.find_elem_type("var", &var_name, Option::None, true) {
                             let def = v.get_var().clone();
                             if def.is_var {
                                 self.equivalent_types(&def.t, &expression_type)?;
@@ -621,7 +632,7 @@ impl Visitor {
                         _ => panic!("You should not define a non variable/function inside struct")
                     }
                 };
-                let defs = self.find_elem_type("struct", &type_name, Option::None)
+                let defs = self.find_elem_type("struct", &type_name, Option::None, true)
                             .expect(&format!("Struct {type_name} not defined previously."))
                             .get_scp()
                             .elems.iter()
@@ -797,7 +808,7 @@ impl Visitor {
                     // If the FnCall returns a function, partial application, this will be its name
                     // only creates a FuncScope with the parent_func if var_name if Some.
                     let var_name = self.last_def_name.take();
-                    let scp_fn = self.find_elem_type("func", &name, Option::None).expect(&format!("Function '{name}' is not defined")).get_scp();
+                    let scp_fn = self.find_elem_type("func", &name, Option::None, true).expect(&format!("Function '{name}' is not defined")).get_scp();
                     let fn_as_var = scp_fn.scp_as_var();
                     let fn_type = fn_as_var.t.get_inner_type();
                     let params_types = if let None = fn_type[0] { vec![] } else { fn_type[..fn_type.len()-1].to_vec() };
@@ -934,7 +945,7 @@ impl Visitor {
                     TokenType::StruAccess(name)|
                     TokenType::ModAccess(name) |
                     TokenType::Id(name) => {
-                        if let Some(elem) = self.find_elem_type("any", name, Option::None) {
+                        if let Some(elem) = self.find_elem_type("any", name, Option::None, true) {
                             let t = match elem {
                                 Elem::Var(v) => v.t.clone(),
                                 Elem::Scope(scp @ Scope { attrs: ScopeAttr::FuncScope { .. }, .. }) => scp.scp_as_var().t,
