@@ -161,7 +161,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
     }
     fn compound_constant_types_aux(&self, expr: &Node, ind: usize) -> (BasicValueEnum<'ctx>, Vec<(Vec<usize>, BasicValueEnum<'ctx>)>) {
         match &*expr.v {
-            ASTNode::Array(elems) | ASTNode::Tuple(elems) => {
+            ASTNode::Array(elems, _) | ASTNode::Tuple(elems, _) => {
                 let ty = self.get_basic_type(&expr.t);
                 let mut post_initialization = vec![];
                 let values = elems.iter().enumerate().map(|(i, e)| {
@@ -348,7 +348,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                 self.compile_fn_call(caller.t.get_id_name().unwrap(), params);
             },
             ASTNode::FlowChange(tk, expr) =>  {
-                match tk {
+                match &tk.t {
                     TokenType::Back => {
                         let e : Option<Box<dyn BasicValue>> = expr.as_ref().map(|e| {
                             let expr = self.compile_expr(e);
@@ -490,7 +490,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     _ => unreachable!("Expression Leaf not implemented: {:?}", l.t),
                 }
             },
-            ASTNode::Cast { e, t } => {
+            ASTNode::Cast { e, t, .. } => {
                 let e = self.compile_expr(e);
                 let cur_ty = e.get_type();
                 let new_ty = self.get_basic_type(t);
@@ -517,7 +517,7 @@ impl<'ctx, 'ast, 'vis> CodeGen<'ctx, 'ast, 'vis> {
                     self.builder.build_load(ty, elem_pnt, "get_elem_val").unwrap()
                 }
             },
-            ASTNode::Tuple(_) | ASTNode::Array(_) => self.compound_constant_types(expr),
+            ASTNode::Tuple(_, _) | ASTNode::Array(_, _) => self.compound_constant_types(expr),
             _ => {
                 unreachable!("compile_expr: Not implemented {:?}", *expr.v)
             },

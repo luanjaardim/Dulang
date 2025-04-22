@@ -94,6 +94,7 @@ impl ExprType {
     fn get_nth_inner_type(&self, nth: usize) -> Self {
         match self {
             FnType(l) | TupleType(l) => l[nth].clone(),
+            Array(inner, _) if nth == 0 => *inner.clone(),
             _ => panic!("Cannot get a inner type of a non compound type"),
         }
     }
@@ -559,7 +560,8 @@ impl Visitor {
                 // Guaranteed it's Some since the if above
                 let expected_type = t.as_ref().unwrap().t.clone();
                 let expression_type = self.visit(scope, expected_type.clone(), expr)?;
-                self.equivalent_types(&expected_type, &expression_type)?;
+                self.equivalent_types(&expected_type, &expression_type)
+                    .expect(&format!("Type of '{var_name}' was expected to be {expected_type:?}, but received a {expression_type:?}"));
                 // If it's Some it means that we still have to create the variable
                 // if not, it means that the definition already used this name
                 // TODO: Use the 'is_var' with the variables that don't enter this if
@@ -816,7 +818,8 @@ impl Visitor {
 
                     let cur_ret_type = fn_type.last().unwrap();
                     let ret_type = if *is_sttm { // A function that returns none is a statement
-                        self.equivalent_types(cur_ret_type, &None)?;
+                        self.equivalent_types(cur_ret_type, &None)
+                            .expect(&format!("Function call {caller} returns a {:?}, try assign it to something", self.infer_type(cur_ret_type)));
                         node.t = None;
                         None
                     } else { cur_ret_type.clone() };
@@ -856,7 +859,11 @@ impl Visitor {
                         FnType(fn_type[i..].to_vec())
                     };
                     node.t = t.clone();
-                    self.equivalent_types(&expected_type, &t)?;
+                    self.equivalent_types(&expected_type, &t)
+                        .expect(&format!("Function call {caller} returns {:?}, but is trying to be assigned to a {:?}",
+                                self.infer_type(&t),
+                                self.infer_type(&expected_type),
+                    ));
                     let infered_type = self.infer_type(&t);
 
                     if *is_sttm && !ExprType::expr_type_eq(&infered_type, &None, true) {
@@ -870,8 +877,8 @@ impl Visitor {
                     panic!("At the moment, the caller can only be the function name or as a StrucAccess/ModAccess")
                 }
             },
-            ASTNode::FlowChange(tk_type, ret) => {
-                match tk_type {
+            ASTNode::FlowChange(tk, ret) => {
+                match &tk.t {
                     TokenType::Back => {
                         let ret_type = if let Some(fn_scope) = scope.get_cur_func_scp() {
                             if let ScopeAttr::FuncScope { ret_type, .. } = &fn_scope.attrs {
@@ -881,7 +888,9 @@ impl Visitor {
                             return Err(VisitorError::GeneralError(String::from("Use Back outside a function")))
                         };
                         let back_type = ret.as_mut().map_or(Ok(None), |e| self.visit(scope, ret_type.clone(), e))?;
-                        self.equivalent_types(&back_type, &ret_type)?;
+                        self.equivalent_types(&back_type, &ret_type)
+                            .expect(&format!("{tk} was expected to return {:?}, but was found {:?}",
+                                    self.infer_type(&ret_type), self.infer_type(&back_type)));
                     },
                     TokenType::Stop if scope.is_inside_loop() => (),
                     TokenType::Skip if scope.is_inside_loop() => (),
@@ -891,18 +900,22 @@ impl Visitor {
                 }
                 Ok(None)
             },
-            ASTNode::Binary { op: Token { t: tk_type, .. }, l, r } => {
+            ASTNode::Binary { op: ref oper @ Token { t: ref tk_type, .. }, l, r } => {
                 use TokenType::*;
                 let branch_type = Unknown(self.get_unknown_id());
-                let (l_type, r_type) = (self.visit(scope, branch_type.clone(), l)?, self.visit(scope, branch_type, r)?);
-                self.equivalent_types(&l_type, &r_type)?;
+                let (l_type, r_type) = (
+                    self.visit(scope, branch_type.clone(), l)?,
+                    self.visit(scope, branch_type, r)
+                        .expect(&format!("Expected both operands of {oper} to have the same type"))
+                );
                 self.equivalent_types(&expected_type, &node.t)?;
                 let expr_type = match *tk_type {
                     Add | Sub | Mul | Div | Shl | Shr | Bor | Band | Bnot | Bxor => { self.infer_type(&l_type) },
                     GrE | GrT | LeE | LeT | Neq | Eq | And | Or => { ExprType::Bool },
                     _ => panic!("Unknown Binary operator."),
                 };
-                self.equivalent_types(&expected_type, &expr_type)?;
+                self.equivalent_types(&expected_type, &expr_type)
+                    .expect(&format!("{oper} returns a {expr_type:?} but was expected a {expected_type:?}"));
                 Ok(self.infer_type(&expected_type))
             },
             ASTNode::Unary { op: Token { t: tk_type, .. }, e } => {
@@ -969,10 +982,11 @@ impl Visitor {
                     _ => return Err(VisitorError::NotImplemented(*node.v.clone())),
                 };
                 self.equivalent_types(&t, &node.t)?;
-                self.equivalent_types(&t, &expected_type)?;
+                self.equivalent_types(&t, &expected_type)
+                    .expect(&format!("{tk} has type {t:?}, but was expected something of type {:?}", self.infer_type(&expected_type)));
                 Ok(t)
             },
-            ASTNode::Cast { e, t } => {
+            ASTNode::Cast { e, t, tk } => {
                 let mut e_type = Unknown(self.get_unknown_id());
                 e_type = self.visit(scope, e_type, e)?;
                 Ok(match (&e_type, &*t) {
@@ -983,7 +997,8 @@ impl Visitor {
                         return Err(VisitorError::CastError(e_type.clone(), t.clone()))
                     },
                     _ => {
-                        self.equivalent_types(&expected_type, &t)?;
+                        self.equivalent_types(&expected_type, &t)
+                            .expect(&format!("{tk} was not a valid cast"));
                         node.t = t.clone();
                         t.clone()
                     }
@@ -997,7 +1012,7 @@ impl Visitor {
                 self.equivalent_types(&node.t, &(if *var { PntVar(t) } else { Pnt(t) }))?;
                 Ok(node.t.clone())
             },
-            ASTNode::Deref { mut n, e, .. } => {
+            ASTNode::Deref { mut n, e, tk, .. } => {
                 let deref_t = Unknown(self.get_unknown_id());
                 let mut t = self.visit(scope, deref_t, e)?;
                 loop {
@@ -1013,24 +1028,27 @@ impl Visitor {
                         _ => unreachable!("Tried to deref more than possible at {:?}", e.v),
                     };
                 }
-                self.equivalent_types(&node.t, &t)?;
+                self.equivalent_types(&expected_type, &t)
+                    .expect(&format!("{tk} was expected to have type {:?}, but it's {:?}", self.infer_type(&expected_type), self.infer_type(&t)));
+                self.equivalent_types(&node.t, &t).unwrap();
                 Ok(t)
             },
             ASTNode::Empty => {
                 // NOTE: This should only happen when we are creating an alias of some type, a CustomType
                 Ok(CustomType(Box::new(node.t.clone())))
             }
-            ASTNode::Array(elems) => {
-                let inner_type = Unknown(self.get_unknown_id());
+            ASTNode::Array(elems, error_pos) => {
+                let inner_type = if let Array(..) = expected_type { expected_type.get_nth_inner_type(0) } else { Unknown(self.get_unknown_id()) };
                 for elem in &mut *elems {
                     self.visit(scope, inner_type.clone(), elem)?;
                 }
                 let t = Array(Box::new(self.infer_type(&inner_type)), elems.len());
-                self.equivalent_types(&t, &expected_type)?;
+                self.equivalent_types(&t, &expected_type)
+                    .expect(&format!("Expected an Array of type {:?} but found {:?} at {error_pos}", self.infer_type(&t), self.infer_type(&expected_type)));
                 node.t = t.clone();
                 Ok(t)
             }
-            ASTNode::Tuple(elems) => {
+            ASTNode::Tuple(elems, error_pos) => {
                 let mut t = vec![];
                 let tuple_type = Unknown(self.get_unknown_id());
                 let mut scp = Scope {
@@ -1038,8 +1056,9 @@ impl Visitor {
                     elems: vec![],
                     scp_father: scope,
                 };
+                let inner_expec_t = if let TupleType(_) = expected_type { expected_type.get_inner_type() } else { &vec![] };
                 for (i, elem) in elems.iter_mut().enumerate() {
-                    let tmp_t = Unknown(self.get_unknown_id());
+                    let tmp_t = if let Some(in_t) = inner_expec_t.get(i) { in_t.clone() } else { Unknown(self.get_unknown_id()) };
                     self.last_def_name = Some(i.to_string());
                     t.push(self.visit(&mut scp, tmp_t.clone(), elem)?);
                     if i+1 != scp.elems.len() {
@@ -1052,7 +1071,8 @@ impl Visitor {
                     }
                 }
                 scope.elems.push(Elem::Scope(scp));
-                self.equivalent_types(&tuple_type, &TupleType(t.clone()))?;
+                self.equivalent_types(&tuple_type, &expected_type).unwrap();
+                self.equivalent_types(&tuple_type, &TupleType(t.clone())).expect(&format!("Expected a Tuple type but found {:?} at {error_pos}", self.infer_type(&tuple_type)));
                 node.t = self.infer_type(&tuple_type);
                 Ok(self.infer_type(&tuple_type))
             },
@@ -1133,8 +1153,8 @@ impl Visitor {
             ASTNode::Cast { e, .. } => self.update_types_aux(e)?,
             ASTNode::Empty | ASTNode::Leaf(_) => (),
             ASTNode::Struct(vars) => self.update_types(vars)?,
-            ASTNode::Array(elems) => self.update_types(elems)?,
-            ASTNode::Tuple(elems) => self.update_types(elems)?,
+            ASTNode::Array(elems, _) => self.update_types(elems)?,
+            ASTNode::Tuple(elems, _) => self.update_types(elems)?,
             ASTNode::StructInit(_, body) => self.update_types(body)?,
             ASTNode::Mod(body) => self.update_types(body)?,
             ASTNode::Extern(_) => (), // TODO: possibly do something here

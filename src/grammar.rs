@@ -73,10 +73,11 @@ pub enum ASTNode {
     },
     Cast {
         e: Node,
-        t: ExprType
+        t: ExprType,
+        tk: Token, // Only used for error location information
     },
-    Array(Body),
-    Tuple(Body),
+    Array(Body, Token), // Token is only used for error location info
+    Tuple(Body, Token), // Token is only used for error location info
     Ref {
         var: bool,
         e: Node,
@@ -85,9 +86,10 @@ pub enum ASTNode {
         n: usize,  // number of derefs
         e: Node,
         i: Option<Node>, // when it's a Deref with syntax: e @ i
+        tk: Token, // Only used for error location information
     },
     // skip, stop or back, only back and stop can have the second element (the expr they return)
-    FlowChange(TokenType, Option<Node>),
+    FlowChange(Token, Option<Node>),
     Leaf(Token),
     Empty
 }
@@ -246,9 +248,11 @@ impl Parser {
     }
 
     fn inner_body_aux(&mut self, line_end: Option<TokenType>, first: TokenType, second: TokenType) -> Result<Body, ParseError>  {
-        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[first.clone()])?))?;
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[first.clone()])?))
+                .expect(&format!("Was expecting a {first:?} but received a {:?}", self.peek_tk()));
         let body = self.body(line_end)?;
-        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[second.clone()])?))?;
+        _ = self.parse_and_discart_nl(|s| Ok(s.assert_next(&[second.clone()])?))
+                .expect(&format!("Was expecting a {second:?} but received a {:?}", self.peek_tk()));
         Ok(body)
     }
 
@@ -299,11 +303,11 @@ impl Parser {
             Some(Token { t: TokenType::Stop, ..}) => {
                 let tk = self.assert_next(&[ TokenType::Back, TokenType::Stop ])?;
                 let e = self.expr().ok();
-                Ok(Node::new(ExprType::None, Box::new(ASTNode::FlowChange(tk.t, e))))
+                Ok(Node::new(ExprType::None, Box::new(ASTNode::FlowChange(tk, e))))
             },
             Some(Token { t: TokenType::Skip, ..}) => {
                 let tk = self.assert_next(&[TokenType::Skip])?;
-                Ok(Node::new(ExprType::None, Box::new(ASTNode::FlowChange(tk.t, None))))
+                Ok(Node::new(ExprType::None, Box::new(ASTNode::FlowChange(tk, None))))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![TokenType::Id(String::new())])),
             None => Err(ParseError::ExpectedToken)
@@ -377,14 +381,15 @@ impl Parser {
     }
 
     fn _extern_(&mut self) -> Result<Node, ParseError> {
-        _ = self.assert_next(&[TokenType::Extern])?;
-        let defs = self.parse_with_delim_and_end_line(Some(TokenType::Nl), TokenType::OpCurly, TokenType::ClCurly, |s| s.var())?;
+        let tk_extern = self.assert_next(&[TokenType::Extern])?;
+        let defs = self.parse_with_delim_and_end_line(Some(TokenType::Nl), TokenType::OpCurly, TokenType::ClCurly, |s| s.var())
+                       .expect(&format!("Could not parse Extern block: {tk_extern:?}"));
         Ok(Node::new(ExprType::None, Box::new(ASTNode::Extern(defs))))
     }
 
     fn assign(&mut self) ->  Result<Node, ParseError> {
         let var = self.var()?;
-        _ = self.assert_next(&[TokenType::Assign])?;
+        _ = self.assert_next(&[TokenType::Assign]).expect(&format!("Expected a {:?} here", TokenType::Assign));
         let expr = if let Some(tk @ Token { t: TokenType::PassDef, .. }) = self.peek_tk() {
             if var.0 == false {
                 panic!("You cannot pass a definition of a constant: {}", var.1)
@@ -400,7 +405,14 @@ impl Parser {
         let e =  self.assert_next(&[TokenType::Id(String::new()), TokenType::ModAccess(String::new()), TokenType::StruAccess(String::new())]);
         let tk = e?;
         if self.assert_next(&[TokenType::None]).is_ok() {
-            return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })))
+            if let Ok(_) = self.assert_peek(&[TokenType::PassR]) {
+                _ = self.next_tk();
+                let t = Unknown(self.get_unknown_id());
+                let cur_call = Some(Node::new(t, Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })));
+                return self.fn_call(is_sttm, cur_call);
+            } else {
+                return Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::FnCall { caller: tk, params: vec![], is_sttm })))
+            }
         }
         let mut b = if last_arg.is_some() { self.get_state() } else { backup.clone() };
         let mut params = Vec::new();
@@ -412,7 +424,7 @@ impl Parser {
                     if let Some(last) = last_arg { params.push(last) }
                     return self.fn_call(is_sttm, Some(
                             Node::new(t, Box::new(ASTNode::FnCall { caller: tk, params, is_sttm: false })
-                        )));
+                    )))
                 },
                 Some(Token { t: TokenType::PassL, .. }) => {
                     _ = self.next_tk();
@@ -465,10 +477,10 @@ impl Parser {
         let e = self.parsed_expr()?;
 
         Ok(if let Ok(_) = self.assert_peek(&[TokenType::TypeInf]) {
-            _ = self.assert_next(&[TokenType::TypeInf])?;
+            let tk = self.assert_next(&[TokenType::TypeInf])?;
 
             let t = self._type_()?;
-            Node::new(ExprType::None, Box::new(ASTNode::Cast { e, t: t.t }))
+            Node::new(ExprType::None, Box::new(ASTNode::Cast { e, t: t.t, tk }))
         } else {
             e
         })
@@ -552,6 +564,7 @@ impl Parser {
     }
 
     fn array(&mut self) -> Result<Node, ParseError> {
+        let tk = self.assert_peek(&[TokenType::OpSqrBra])?;
         Ok(Node::new(
                 Unknown(self.get_unknown_id()),
                 Box::new(ASTNode::Array(self.parse_with_delim_and_end_line(
@@ -559,7 +572,7 @@ impl Parser {
                     TokenType::OpSqrBra,
                     TokenType::ClSqrBra,
                     |s| s.expr()
-                )?))
+                ).expect(&format!("Array is not correctly constructed")), tk))
         ))
     }
 
@@ -650,11 +663,11 @@ impl Parser {
         let mut e = self.arith()?;
         loop {
              match self.assert_next(&[TokenType::Deref]) {
-                Ok(_) => {
+                Ok(tk) => {
                     let i = self.arith().ok();
                     let is_some = i.is_some();
                     e = Node::new(Unknown(self.get_unknown_id()),
-                          Box::new(ASTNode::Deref { n: 1, e, i })
+                          Box::new(ASTNode::Deref { n: 1, e, i, tk })
                     );
                     if is_some { continue } else { return Ok(e) }
                 },
@@ -703,12 +716,14 @@ impl Parser {
             },
             Some(Token { t: TokenType::Deref, .. }) => {
                 let mut n = 0;
-                while let Some(Token { t: TokenType::Deref, .. }) = self.peek_tk() {
+                let mut prev_tk = None;
+                while let Some(tk @ Token { t: TokenType::Deref, .. }) = self.peek_tk() {
+                    prev_tk = Some(tk);
                     n += 1;
                     _ = self.next_tk();
                 }
                 Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(
-                        ASTNode::Deref { n, e: self.primary()?, i: None }
+                        ASTNode::Deref { n, e: self.primary()?, i: None, tk: prev_tk.unwrap() }
                     )))
             },
             Some(tk) => Err(ParseError::TokenNotExpected(tk, vec![
@@ -729,19 +744,19 @@ impl Parser {
                 let leaf = Box::new(ASTNode::Leaf(tk));
                 Ok(Node::new(ExprType::from(&leaf), leaf))
             },
-            Some(Token { t: TokenType::OpParen, .. }) => {
+            Some(tk @ Token { t: TokenType::OpParen, .. }) => {
                 let mut in_parenthesis = self.parse_with_delim_and_end_line(
                     Some(TokenType::Comma),
                     TokenType::OpParen,
                     TokenType::ClParen,
                     |s| s.expr()
-                )?;
+                ).expect(&format!("Tuple is not correctly constructed"));
                 if in_parenthesis.len() == 1 {
                     let mut node = Node::new(ExprType::None, Box::new(ASTNode::Empty));
                     std::mem::swap(&mut node, &mut in_parenthesis[0]);
                     Ok(node)
                 } else {
-                    Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Tuple(in_parenthesis))))
+                    Ok(Node::new(Unknown(self.get_unknown_id()), Box::new(ASTNode::Tuple(in_parenthesis, tk))))
                 }
             },
             Some(Token { t: TokenType::Id(_), .. }) |
@@ -818,14 +833,16 @@ impl Parser {
                 _ =  self.assert_next(&[TokenType::Ref, TokenType::VarRef])?;
                 Ok(Box::new(ASTNode::Type { t, inner_types: vec![self.ptr_type()?] }))
             }
-            Some(Token { t: TokenType::OpSqrBra, .. }) => {
+            Some(tk @ Token { t: TokenType::OpSqrBra, .. }) => {
                 _ = self.assert_next(&[TokenType::OpSqrBra])?;
-                let inner_t = self.parse_type()?;
-                _ = self.assert_next(&[TokenType::Comma])?;
-                let len = if let Token { t: TokenType::Integer(num), .. } = self.assert_next(&[TokenType::Integer("".to_string())])? {
+                let inner_t = self.parse_type()
+                    .expect("Expect array type to be [ (type of elems), (number of elems) ], but could not parse inner type");
+                _ = self.assert_next(&[TokenType::Comma])
+                    .expect(&format!("Expect comma to separate type and the number of elements on {tk}"));
+                let len = if let Token { t: TokenType::Integer(num), .. } = self.assert_next(&[TokenType::Integer("".to_string())]).expect("Expected a valid number of elements at {tk}") {
                     num.parse::<usize>().unwrap()
                 } else { unreachable!() };
-                _ = self.assert_next(&[TokenType::ClSqrBra])?;
+                _ = self.assert_next(&[TokenType::ClSqrBra]).expect("Expected the end of array type");
                 Ok(Box::new(ASTNode::Type { t: TokenType::Arr(len), inner_types: vec![inner_t] }))
             },
             _ => {
